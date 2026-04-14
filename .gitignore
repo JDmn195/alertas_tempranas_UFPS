@@ -1,0 +1,53 @@
+# ============================================================
+#  .gitignore — Alertas Tempranas UFPS
+# ============================================================
+
+# --- Variables de entorno (NUNCA subir al repo) ---
+.env
+*.env
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# --- Entorno virtual ---
+venv/
+env/
+.venv/
+ENV/
+
+# --- Django ---
+db.sqlite3
+db.sqlite3-journal
+*.log
+/staticfiles/
+/media/
+
+# --- Distribución / empaquetado ---
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# --- IDEs y editores ---
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Node / Frontend ---
+node_modules/
+dist/
+.next/
