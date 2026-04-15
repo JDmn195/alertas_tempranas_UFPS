@@ -1,4 +1,6 @@
 from django.http import JsonResponse
+from django.core.files.storage import FileSystemStorage
+from django.views.decorators.csrf import csrf_exempt
 # from rest_framework.decorators import api_view # Descomentar si usan REST Framework
 # from rest_framework.response import Response
 
