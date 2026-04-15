@@ -94,6 +94,7 @@ class Estudiante(models.Model):
                                null=True, blank=True,
                                related_name='estudiante')
     codigo               = models.CharField(max_length=20, unique=True)
+    nombre               = models.CharField(max_length=120, null=True, blank=True)
     tipo_documento       = models.CharField(max_length=5,  choices=TIPO_DOC_CHOICES,
                                             null=True, blank=True)
     documento            = models.CharField(max_length=20,  null=True, blank=True)

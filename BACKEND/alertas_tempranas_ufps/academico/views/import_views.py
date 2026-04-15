@@ -16,29 +16,94 @@ import os
 
 from django.conf import settings
 
-from academico.models import Curso, Docente
+from academico.models import Estudiante, Curso, Docente
 
+@csrf_exempt
 def importar_estudiantes_dirplan(request):
     """
     HU-01: IMPORTAR REPORTE GENERAL DE ESTUDIANTES DESDE DIRPLAN
     
-    Responsable: [Nombre del Integrante]
     Objetivo: Consolidar la información básica de los estudiantes en el sistema.
-    
-    Campos a importar:
-    - Código del estudiante
-    - Nombre completo
-    - Año/Semestre de ingreso
-    - Promedio acumulado
-    - Semestre matriculado actualmente
-    
-    Modelo principal: Estudiante
-    Formato sugerido: Excel (.xlsx) o CSV
     """
-    # TODO: Implementar lógica de lectura de archivo
-    # TODO: Validar datos y manejar duplicados (get_or_create)
-    # TODO: Retornar resumen de la importación (ej. creados: 10, actualizados: 5)
-    return JsonResponse({"status": "template", "message": "HU-01 pendiente de implementación"})
+    if request.method == 'POST' and request.FILES.get('file'):
+        file = request.FILES['file']
+        try:
+            # Leer archivo según extensión
+            if file.name.endswith('.xlsx'):
+                df = pd.read_excel(file)
+            elif file.name.endswith('.csv'):
+                df = pd.read_csv(file)
+            else:
+                return JsonResponse({"error": "Formato no soportado. Use .xlsx o .csv"}, status=400)
+
+            # Normalizar nombres de columnas a minúsculas y sin espacios
+            df.columns = df.columns.str.strip().str.lower()
+            
+            # Mapa de posibles nombres de columnas
+            col_map = {
+                'codigo': ['codigo', 'código', 'cod', 'id'],
+                'nombre': ['nombre', 'nombre completo', 'estudiante', 'nombre_estudiante'],
+                'anio_ingreso': ['año ingreso', 'anio ingreso', 'año_ingreso', 'anio'],
+                'semestre_ingreso': ['semestre ingreso', 'sem_ingreso', 'semestre_ingreso'],
+                'promedio': ['promedio', 'promedio acumulado', 'promedio_acumulado', 'prom'],
+                'semestre_actual': ['semestre actual', 'semestre matriculado', 'semestre_actual', 'semestre']
+            }
+
+            def find_col(possible_names):
+                for name in possible_names:
+                    if name in df.columns:
+                        return name
+                return None
+
+            c_codigo = find_col(col_map['codigo'])
+            c_nombre = find_col(col_map['nombre'])
+            c_anio = find_col(col_map['anio_ingreso'])
+            c_sem_ing = find_col(col_map['semestre_ingreso'])
+            c_prom = find_col(col_map['promedio'])
+            c_sem_act = find_col(col_map['semestre_actual'])
+
+            if not c_codigo:
+                return JsonResponse({"error": "No se encontró la columna de Código en el archivo"}, status=400)
+
+            creados = 0
+            actualizados = 0
+
+            for _, row in df.iterrows():
+                codigo_val = str(row[c_codigo]).strip()
+                if not codigo_val or pd.isna(codigo_val) or codigo_val.lower() == 'nan':
+                    continue
+
+                defaults = {}
+                if c_nombre: defaults['nombre'] = str(row[c_nombre]).strip()
+                if c_anio: defaults['anio_ingreso'] = int(row[c_anio]) if not pd.isna(row[c_anio]) else None
+                if c_sem_ing: defaults['semestre_ingreso'] = int(row[c_sem_ing]) if not pd.isna(row[c_sem_ing]) else None
+                if c_prom: defaults['promedio_acumulado'] = float(row[c_prom]) if not pd.isna(row[c_prom]) else None
+                if c_sem_act: defaults['semestre_actual'] = int(row[c_sem_act]) if not pd.isna(row[c_sem_act]) else None
+
+                _, created = Estudiante.objects.update_or_create(
+                    codigo=codigo_val,
+                    defaults=defaults
+                )
+                if created:
+                    creados += 1
+                else:
+                    actualizados += 1
+
+            return JsonResponse({
+                "status": "success",
+                "message": "Importación finalizada",
+                "detalles": {
+                    "creados": creados,
+                    "actualizados": actualizados,
+                    "total_procesados": creados + actualizados
+                }
+            })
+        except Exception as e:
+            import traceback
+            print(traceback.format_exc())
+            return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+    return JsonResponse({"status": "error", "message": "Método no permitido o archivo faltante"}, status=400)
 
 
 def importar_historial_academico(request):
