@@ -43,6 +43,8 @@ export default function AdminDashboard() {
   const [dragActive, setDragActive] = useState(false);
   const [importType, setImportType] = useState('general');
   const [validationStatus, setValidationStatus] = useState<'idle' | 'validating' | 'success' | 'error'>('idle');
+  const [responseMessage, setResponseMessage] = useState<string>('');
+  const [responseErrors, setResponseErrors] = useState<any[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -114,6 +116,8 @@ export default function AdminDashboard() {
       try {
 
         setValidationStatus("validating");
+        setResponseMessage('');
+        setResponseErrors([]);
 
         console.log(
           "Endpoint usado:",
@@ -138,10 +142,18 @@ export default function AdminDashboard() {
         if (response.ok) {
 
           setValidationStatus("success");
+          setResponseMessage(
+            data.mensaje || "Importación exitosa."
+          );
+          setResponseErrors([]);
 
         } else {
 
           setValidationStatus("error");
+          setResponseMessage(
+            data.mensaje || data.error || "Error en la importación."
+          );
+          setResponseErrors(data.errores || []);
 
         }
 
@@ -150,6 +162,8 @@ export default function AdminDashboard() {
         console.error(error);
 
         setValidationStatus("error");
+        setResponseMessage("Error de conexión con el servidor.");
+        setResponseErrors([]);
 
       }
 
@@ -207,8 +221,50 @@ export default function AdminDashboard() {
           ) : validationStatus === 'success' ? (
             <div className="border border-green-200 bg-green-50 rounded-lg p-12 text-center flex flex-col items-center justify-center">
               <CheckCircle className="w-14 h-14 text-green-600 mb-4" />
-              <h3 className="text-xl font-medium text-green-900">¡Validación de Calidad Exitosa!</h3>
-              <p className="text-sm text-green-700 mt-1">Los datos superaron los controles de calidad y se han integrado correctamente en la plataforma.</p>
+              <h3 className="text-xl font-medium text-green-900">¡Importación Exitosa!</h3>
+              <p className="text-sm text-green-700 mt-1">{responseMessage}</p>
+              <button
+                onClick={() => { setValidationStatus('idle'); setResponseMessage(''); setResponseErrors([]); }}
+                className="mt-4 px-4 py-2 text-sm font-medium text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition-colors"
+              >
+                Importar otro archivo
+              </button>
+            </div>
+          ) : validationStatus === 'error' ? (
+            <div className="border border-red-200 bg-red-50 rounded-lg p-8 flex flex-col items-center justify-center">
+              <AlertCircle className="w-14 h-14 text-[#C8102E] mb-4" />
+              <h3 className="text-xl font-medium text-red-900">Error en la Importación</h3>
+              <p className="text-sm text-red-700 mt-1 mb-4">{responseMessage}</p>
+              {responseErrors.length > 0 && (
+                <div className="w-full max-h-60 overflow-y-auto border border-red-200 rounded-lg bg-white">
+                  <table className="w-full text-sm">
+                    <thead className="bg-red-100 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Fila</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Campo</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Valor</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Detalle</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-red-100">
+                      {responseErrors.map((err: any, i: number) => (
+                        <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-red-50'}>
+                          <td className="px-3 py-2 text-red-700">{err.fila}</td>
+                          <td className="px-3 py-2 text-red-700">{err.campo}</td>
+                          <td className="px-3 py-2 text-red-700 font-mono">{err.valor}</td>
+                          <td className="px-3 py-2 text-red-600">{err.mensaje}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <button
+                onClick={() => { setValidationStatus('idle'); setResponseMessage(''); setResponseErrors([]); }}
+                className="mt-4 px-4 py-2 text-sm font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition-colors"
+              >
+                Intentar de nuevo
+              </button>
             </div>
           ) : (
             <div
