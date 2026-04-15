@@ -10,6 +10,14 @@ from django.views.decorators.csrf import csrf_exempt
 # Cada función debe ser desarrollada por el integrante asignado.
 # ==============================================================================
 
+
+import pandas as pd
+import os
+
+from django.conf import settings
+
+from academico.models import Curso, Docente
+
 def importar_estudiantes_dirplan(request):
     """
     HU-01: IMPORTAR REPORTE GENERAL DE ESTUDIANTES DESDE DIRPLAN
@@ -71,19 +79,147 @@ def importar_oferta_academica(request):
     return JsonResponse({"status": "template", "message": "HU-03 pendiente de implementación"})
 
 
+@csrf_exempt
 def importar_estadisticas_carga(request):
-    """
-    HU-04: IMPORTAR REPORTES DE CANTIDAD DE ESTUDIANTES POR CURSO Y SEMESTRE
-    
-    Responsable: [Nombre del Integrante]
-    Objetivo: Conocer la carga académica detallada de cada periodo.
-    
-    Información clave:
-    - Número de estudiantes matriculados por curso.
-    - Distribución por semestre.
-    
-    Modelos involucrados: Curso, Matricula (conteo).
-    """
-    # TODO: Implementar actualización masiva de 'num_matriculados' en el modelo Curso
-    # TODO: Generar logs de discrepancias si el conteo no coincide con las matrículas registradas
-    return JsonResponse({"status": "template", "message": "HU-04 pendiente de implementación"})
+
+    if request.method == 'POST' and request.FILES.get('file'):
+
+        excel_file = request.FILES['file']
+
+        try:
+
+            # Leer Excel en memoria
+            df = pd.read_excel(excel_file)
+
+            # Limpiar nombres columnas
+            df.columns = df.columns.str.strip()
+
+            creados = 0
+            actualizados = 0
+            docentes_creados = 0
+
+            for index, row in df.iterrows():
+
+                codigo = row.get("Materia")
+                nombre = row.get("Nombre")
+                horario = row.get("Horario")
+                matriculados = row.get("# Matriculados")
+                codigo_docente = row.get("Código Docente")
+                nombre_docente = row.get("Nombre Docente")
+
+                # Ignorar filas vacías
+                if pd.isna(codigo):
+                    continue
+
+                codigo = str(codigo).strip()
+
+                # ─────────────────────────────
+                # CREAR O BUSCAR DOCENTE
+                # ─────────────────────────────
+
+                docente_obj = None
+
+                if not pd.isna(codigo_docente):
+
+                    docente_codigo = str(
+                        codigo_docente
+                    ).strip()
+
+                    docente_nombre = (
+                        str(nombre_docente).strip()
+                        if not pd.isna(nombre_docente)
+                        else "SIN NOMBRE"
+                    )
+
+                    docente_obj, docente_created = (
+                        Docente.objects.get_or_create(
+
+                            codigo=docente_codigo,
+
+                            defaults={
+
+                                "nombre": docente_nombre,
+
+                                "tipo_vinculacion":
+                                    "DOCENTE CATEDRA"
+
+                            }
+                        )
+                    )
+
+                    if docente_created:
+                        docentes_creados += 1
+
+                # ─────────────────────────────
+                # CREAR O ACTUALIZAR CURSO
+                # ─────────────────────────────
+
+                curso_obj, created = (
+                    Curso.objects.update_or_create(
+
+                        codigo=codigo,
+
+                        defaults={
+
+                            "nombre":
+                                str(nombre).strip()
+                                if not pd.isna(nombre)
+                                else "SIN NOMBRE",
+
+                            "horario":
+                                str(horario).strip()
+                                if not pd.isna(horario)
+                                else None,
+
+                            "num_matriculados":
+                                int(matriculados)
+                                if not pd.isna(matriculados)
+                                else 0,
+
+                            "docente":
+                                docente_obj
+
+                        }
+                    )
+                )
+
+                if created:
+                    creados += 1
+                else:
+                    actualizados += 1
+
+            return JsonResponse({
+
+                "message":
+                    "HU-04 procesada correctamente",
+
+                "cursos_creados":
+                    creados,
+
+                "cursos_actualizados":
+                    actualizados,
+
+                "docentes_creados":
+                    docentes_creados
+
+            })
+
+        except Exception as e:
+
+            import traceback
+
+            print("ERROR IMPORTACIÓN:")
+            traceback.print_exc()
+
+            return JsonResponse({
+
+                "error": str(e)
+
+    }, status=500)
+
+    return JsonResponse({
+
+        "error": "No se envió archivo"
+
+    }, status=400)
+

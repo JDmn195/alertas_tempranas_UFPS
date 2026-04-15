@@ -76,13 +76,85 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+
     if (e.target.files && e.target.files[0]) {
-      simulateUpload();
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+
+      const file = e.target.files[0];
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const endpointMap: Record<string, string> = {
+
+        general: "import/students/",
+
+        individual: "import/history/",
+
+        courses: "import/offering/",
+
+        quantities: "import/stats/",
+
+      };
+
+      const endpoint = endpointMap[importType];
+
+      if (!endpoint) {
+
+        console.error("Tipo de importación inválido");
+
+        setValidationStatus("error");
+
+        return;
+
       }
+
+      try {
+
+        setValidationStatus("validating");
+
+        console.log(
+          "Endpoint usado:",
+          endpoint
+        );
+
+        const response = await fetch(
+
+          `http://localhost:8000/api/academico/${endpoint}`,
+
+          {
+            method: "POST",
+            body: formData,
+          }
+
+        );
+
+        const data = await response.json();
+
+        console.log("Respuesta backend:", data);
+
+        if (response.ok) {
+
+          setValidationStatus("success");
+
+        } else {
+
+          setValidationStatus("error");
+
+        }
+
+      } catch (error) {
+
+        console.error(error);
+
+        setValidationStatus("error");
+
+      }
+
     }
+
   };
 
   return (
@@ -104,7 +176,7 @@ export default function AdminDashboard() {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             1. Seleccionar Tipo de Información
           </label>
-          <select 
+          <select
             value={importType}
             onChange={(e) => setImportType(e.target.value)}
             className="w-full border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-[#C8102E] focus:border-[#C8102E] outline-none transition-colors"
@@ -127,24 +199,23 @@ export default function AdminDashboard() {
             2. Carga y Validación Automática
           </label>
           {validationStatus === 'validating' ? (
-             <div className="border border-blue-200 bg-blue-50 rounded-lg p-12 text-center flex flex-col items-center justify-center">
-                 <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                 <h3 className="text-lg font-medium text-blue-900">Validando calidad de los datos...</h3>
-                 <p className="text-sm text-blue-700 mt-1">Verificando formatos, integridad referencial y detectando valores nulos o inconsistentes.</p>
-             </div>
+            <div className="border border-blue-200 bg-blue-50 rounded-lg p-12 text-center flex flex-col items-center justify-center">
+              <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+              <h3 className="text-lg font-medium text-blue-900">Validando calidad de los datos...</h3>
+              <p className="text-sm text-blue-700 mt-1">Verificando formatos, integridad referencial y detectando valores nulos o inconsistentes.</p>
+            </div>
           ) : validationStatus === 'success' ? (
-             <div className="border border-green-200 bg-green-50 rounded-lg p-12 text-center flex flex-col items-center justify-center">
-                 <CheckCircle className="w-14 h-14 text-green-600 mb-4" />
-                 <h3 className="text-xl font-medium text-green-900">¡Validación de Calidad Exitosa!</h3>
-                 <p className="text-sm text-green-700 mt-1">Los datos superaron los controles de calidad y se han integrado correctamente en la plataforma.</p>
-             </div>
+            <div className="border border-green-200 bg-green-50 rounded-lg p-12 text-center flex flex-col items-center justify-center">
+              <CheckCircle className="w-14 h-14 text-green-600 mb-4" />
+              <h3 className="text-xl font-medium text-green-900">¡Validación de Calidad Exitosa!</h3>
+              <p className="text-sm text-green-700 mt-1">Los datos superaron los controles de calidad y se han integrado correctamente en la plataforma.</p>
+            </div>
           ) : (
             <div
-              className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
-                dragActive
-                  ? 'border-[#C8102E] bg-red-50'
-                  : 'border-gray-300 hover:border-[#C8102E] hover:bg-gray-50'
-              }`}
+              className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${dragActive
+                ? 'border-[#C8102E] bg-red-50'
+                : 'border-gray-300 hover:border-[#C8102E] hover:bg-gray-50'
+                }`}
               onDragEnter={handleDrag}
               onDragLeave={handleDrag}
               onDragOver={handleDrag}
@@ -177,7 +248,7 @@ export default function AdminDashboard() {
             <div>
               <span className="font-semibold block mb-1">Nota sobre Validación de Calidad</span>
               <p className="text-gray-600">
-                El sistema aplicará reglas de calidad automáticas antes de consolidar la información. 
+                El sistema aplicará reglas de calidad automáticas antes de consolidar la información.
                 Cualquier inconsistencia será reportada en el historial de importación para su corrección. Tamaño máximo: 50MB.
               </p>
             </div>
