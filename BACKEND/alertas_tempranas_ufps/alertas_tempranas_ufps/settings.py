@@ -31,8 +31,14 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-om79t4&_8=o0^c--314xy
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
-# Si estamos en local o queremos permitir todo temporalmente:
+ALLOWED_HOSTS = [h for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h]
+
+# Render proporciona automáticamente el hostname externo
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+
+# Si la lista sigue vacía, permitimos todo (útil para desarrollo)
 if not ALLOWED_HOSTS:
     ALLOWED_HOSTS = ['*']
 
