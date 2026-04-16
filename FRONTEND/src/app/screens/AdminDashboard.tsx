@@ -46,6 +46,58 @@ export default function AdminDashboard() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const uploadFile = async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const endpointMap: Record<string, string> = {
+      general: "import/students/",
+      individual: "import/history/",
+      courses: "import/offering/",
+      quantities: "import/stats/",
+    };
+
+    const endpoint = endpointMap[importType];
+
+    if (!endpoint) {
+      console.error("Tipo de importación inválido");
+      setValidationStatus("error");
+      return;
+    }
+
+    try {
+      setValidationStatus("validating");
+      console.log("Subiendo archivo a:", endpoint);
+
+      const response = await fetch(
+        `http://localhost:8000/api/academico/${endpoint}`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+      console.log("Respuesta backend:", data);
+
+      if (response.ok) {
+        setValidationStatus("success");
+        // Reset status after a few seconds
+        setTimeout(() => setValidationStatus("idle"), 5000);
+      } else {
+        console.error("Error en backend:", data);
+        setValidationStatus("error");
+        alert("Error al importar: " + (data.error || data.message || "Error desconocido"));
+        setTimeout(() => setValidationStatus("idle"), 5000);
+      }
+    } catch (error) {
+      console.error("Error de conexión:", error);
+      setValidationStatus("error");
+      alert("No se pudo conectar con el servidor. Verifica que el backend esté corriendo.");
+      setTimeout(() => setValidationStatus("idle"), 5000);
+    }
+  };
+
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -56,105 +108,19 @@ export default function AdminDashboard() {
     }
   };
 
-  const simulateUpload = () => {
-    setValidationStatus('validating');
-    // Simulando validación automática de calidad de datos
-    setTimeout(() => {
-      setValidationStatus('success');
-      setTimeout(() => {
-        setValidationStatus('idle');
-      }, 4000);
-    }, 2500);
-  };
-
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      simulateUpload();
+      uploadFile(e.dataTransfer.files[0]);
     }
   };
 
-  const handleFileSelect = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-
-      const file = e.target.files[0];
-
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const endpointMap: Record<string, string> = {
-
-        general: "import/students/",
-
-        individual: "import/history/",
-
-        courses: "import/offering/",
-
-        quantities: "import/stats/",
-
-      };
-
-      const endpoint = endpointMap[importType];
-
-      if (!endpoint) {
-
-        console.error("Tipo de importación inválido");
-
-        setValidationStatus("error");
-
-        return;
-
-      }
-
-      try {
-
-        setValidationStatus("validating");
-
-        console.log(
-          "Endpoint usado:",
-          endpoint
-        );
-
-        const response = await fetch(
-
-          `http://localhost:8000/api/academico/${endpoint}`,
-
-          {
-            method: "POST",
-            body: formData,
-          }
-
-        );
-
-        const data = await response.json();
-
-        console.log("Respuesta backend:", data);
-
-        if (response.ok) {
-
-          setValidationStatus("success");
-
-        } else {
-
-          setValidationStatus("error");
-
-        }
-
-      } catch (error) {
-
-        console.error(error);
-
-        setValidationStatus("error");
-
-      }
-
+      uploadFile(e.target.files[0]);
     }
-
   };
 
   return (
