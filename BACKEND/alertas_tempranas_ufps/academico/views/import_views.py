@@ -16,7 +16,7 @@ import os
 
 from django.conf import settings
 
-from academico.models import Curso, Docente, Estudiante, Matricula, PeriodoAcademico
+from academico.models import Curso, Docente, Estudiante, Nota, Periodo
 
 @csrf_exempt
 def importar_estudiantes_dirplan(request):
@@ -57,7 +57,7 @@ def importar_historial_academico(request):
     4. Si todo es válido, crea los registros de Matrícula de forma atómica.
     5. Si algo falla, no guarda nada y retorna el detalle de errores.
 
-    Modelos involucrados: Estudiante, Matricula, Curso, PeriodoAcademico.
+    Modelos involucrados: Estudiante, Nota, Curso, Periodo.
     """
     import re
     import traceback
@@ -181,10 +181,10 @@ def importar_historial_academico(request):
         semestre = int(periodo_match.group(2))
 
         try:
-            periodo_obj = PeriodoAcademico.objects.get(
+            periodo_obj = Periodo.objects.get(
                 anio=anio, semestre=semestre
             )
-        except PeriodoAcademico.DoesNotExist:
+        except Periodo.DoesNotExist:
             errores.append({
                 "fila": fila_num,
                 "campo": "Periodo",
@@ -287,13 +287,12 @@ def importar_historial_academico(request):
 
         with transaction.atomic():
             for fila in filas_validas:
-                _obj, created = Matricula.objects.update_or_create(
+                _obj, created = Nota.objects.update_or_create(
                     estudiante=fila["estudiante"],
                     curso=fila["curso"],
                     periodo=fila["periodo"],
                     defaults={
-                        "nota": fila["nota"],
-                        "estado": fila["estado"],
+                        "definitiva": fila["nota"],
                     }
                 )
                 if created:
