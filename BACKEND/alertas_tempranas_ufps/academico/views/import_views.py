@@ -178,17 +178,31 @@ def importar_historial_academico(request):
             })
             continue
 
-        try:
-            curso_obj = Curso.objects.get(codigo=codigo_materia)
-        except Curso.DoesNotExist:
+        # Extraer base y grupo si vienen concatenados (ej: 1150114A o 1150114-A)
+        match_codigo = re.match(r'^(\d+)(.*)$', codigo_materia)
+        if match_codigo:
+            base_materia = match_codigo.group(1)
+            grupo_str = match_codigo.group(2).strip('- ').upper()
+        else:
+            base_materia = codigo_materia
+            grupo_str = ''
+
+        curso_obj = None
+        if grupo_str:
+            curso_obj = Curso.objects.filter(materia__codigo=base_materia, grupo=grupo_str).first()
+        
+        # Si no se encontró por grupo específico o no se proveyó grupo, usar el primer curso disponible
+        if not curso_obj:
+            curso_obj = Curso.objects.filter(materia__codigo=base_materia).first()
+
+        if not curso_obj:
             nombre_materia = str(row.get('Nombre Materia', '')).strip()
             errores.append({
                 "fila": fila_num,
                 "campo": "Codigo Materia",
                 "valor": codigo_materia,
-                "mensaje": f"El curso '{codigo_materia} - {nombre_materia}' "
-                           f"no existe en el sistema. Debe ser creado "
-                           f"manualmente."
+                "mensaje": f"No existe ningún curso con la materia base '{base_materia} - {nombre_materia}' "
+                           f"en el sistema. Debe ser creado manualmente."
             })
             continue
 
