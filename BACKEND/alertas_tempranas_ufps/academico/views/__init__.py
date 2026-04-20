@@ -2,5 +2,6 @@ from .import_views import (
     importar_estudiantes_dirplan,
     importar_historial_academico,
     importar_oferta_academica,
-    importar_estadisticas_carga
+    importar_estadisticas_carga,
+    importar_docentes,
 )

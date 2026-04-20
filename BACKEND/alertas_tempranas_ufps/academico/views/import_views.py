@@ -43,6 +43,21 @@ def importar_estudiantes_dirplan(request):
 
 @csrf_exempt
 def importar_historial_academico(request):
+    """
+    HU-02: IMPORTAR REPORTES INDIVIDUALES DE CADA ESTUDIANTE
+
+    Objetivo: Construir el historial académico detallado (materias y notas).
+
+    Flujo:
+    1. Recibe un archivo Excel/CSV con columnas:
+    (Periodo, Materia Base, Codigo Materia, Nombre Materia, Tipo Nota, Definitiva, Creditos)
+    2. Extrae el código del estudiante del nombre del archivo (ej: "Relacion de Notas 1152430").
+    3. Valida que el estudiante, cada curso y cada periodo existan en la BD.
+    4. Si todo es válido, crea los registros de Matrícula de forma atómica.
+    5. Si algo falla, no guarda nada y retorna el detalle de errores.
+
+    Modelos involucrados: Estudiante, Nota, Curso, Periodo.
+    """
     import re
     import traceback
     from django.db import transaction
@@ -67,7 +82,7 @@ def importar_historial_academico(request):
     if extension not in ['.xlsx', '.xls', '.csv']:
         return JsonResponse(
             {"error": f"Formato de archivo no soportado: '{extension}'. "
-                      f"Se aceptan: .xlsx, .xls, .csv"},
+                    f"Se aceptan: .xlsx, .xls, .csv"},
             status=400
         )
 
@@ -76,9 +91,9 @@ def importar_historial_academico(request):
     if not match:
         return JsonResponse(
             {"error": f"No se pudo extraer el código del estudiante del nombre "
-                      f"del archivo: '{nombre_archivo}'. "
-                      f"El nombre debe contener el código numérico "
-                      f"(ej: 'Relacion de Notas 1152430.xlsx')."},
+                    f"del archivo: '{nombre_archivo}'. "
+                    f"El nombre debe contener el código numérico "
+                    f"(ej: 'Relacion de Notas 1152430.xlsx')."},
             status=400
         )
 
@@ -90,10 +105,10 @@ def importar_historial_academico(request):
     except Estudiante.DoesNotExist:
         return JsonResponse(
             {"error": f"El estudiante con código '{codigo_estudiante}' no existe "
-                      f"en el sistema. Debe ser creado antes de importar su "
-                      f"historial académico.",
-             "codigo_estudiante": codigo_estudiante,
-             "tipo_error": "ESTUDIANTE_NO_ENCONTRADO"},
+                    f"en el sistema. Debe ser creado antes de importar su "
+                    f"historial académico.",
+            "codigo_estudiante": codigo_estudiante,
+            "tipo_error": "ESTUDIANTE_NO_ENCONTRADO"},
             status=404
         )
 
@@ -123,9 +138,9 @@ def importar_historial_academico(request):
     if columnas_faltantes:
         return JsonResponse(
             {"error": f"El archivo no contiene las columnas requeridas. "
-                      f"Faltan: {', '.join(columnas_faltantes)}",
-             "columnas_encontradas": list(df.columns),
-             "columnas_requeridas": columnas_requeridas},
+                    f"Faltan: {', '.join(columnas_faltantes)}",
+            "columnas_encontradas": list(df.columns),
+            "columnas_requeridas": columnas_requeridas},
             status=400
         )
 
@@ -146,7 +161,7 @@ def importar_historial_academico(request):
                 "campo": "Periodo",
                 "valor": periodo_raw,
                 "mensaje": f"Formato de periodo inválido: '{periodo_raw}'. "
-                           f"Se espera formato 'AAAA-S' (ej: 2024-1)."
+                        f"Se espera formato 'AAAA-S' (ej: 2024-1)."
             })
             continue
 
@@ -163,7 +178,7 @@ def importar_historial_academico(request):
                 "campo": "Periodo",
                 "valor": periodo_raw,
                 "mensaje": f"El periodo académico '{periodo_raw}' no existe "
-                           f"en el sistema. Debe ser creado manualmente."
+                        f"en el sistema. Debe ser creado manualmente."
             })
             continue
 
@@ -234,7 +249,7 @@ def importar_historial_academico(request):
                 "campo": "Definitiva",
                 "valor": str(nota),
                 "mensaje": f"La nota {nota} está fuera del rango "
-                           f"permitido (0.0 - 5.0)."
+                        f"permitido (0.0 - 5.0)."
             })
             continue
 
@@ -254,8 +269,8 @@ def importar_historial_academico(request):
         return JsonResponse({
             "status": "error",
             "mensaje": f"Se encontraron {len(errores)} error(es) en el archivo. "
-                       f"No se guardó ningún registro. Corrija los problemas "
-                       f"e intente de nuevo.",
+                    f"No se guardó ningún registro. Corrija los problemas "
+                    f"e intente de nuevo.",
             "codigo_estudiante": codigo_estudiante,
             "total_filas": len(df),
             "filas_con_error": len(errores),
@@ -285,7 +300,7 @@ def importar_historial_academico(request):
         return JsonResponse({
             "status": "success",
             "mensaje": f"Historial académico del estudiante "
-                       f"'{codigo_estudiante}' importado correctamente.",
+                    f"'{codigo_estudiante}' importado correctamente.",
             "codigo_estudiante": codigo_estudiante,
             "total_filas_procesadas": len(filas_validas),
             "matriculas_creadas": creados,
@@ -456,7 +471,7 @@ def importar_estadisticas_carga(request):
 
                 "error": str(e)
 
-    }, status=500)
+            }, status=500)
 
     return JsonResponse({
 
@@ -464,3 +479,154 @@ def importar_estadisticas_carga(request):
 
     }, status=400)
 
+
+@csrf_exempt
+def importar_docentes(request):
+    """
+    
+    """
+    from django.db import transaction
+    from usuarios.models import Usuario
+
+    # ─────────────────────────────────────────────
+    # 1. VALIDAR MÉTODO Y ARCHIVO
+    # ─────────────────────────────────────────────
+    if request.method != 'POST':
+        return JsonResponse(
+            {"error": "Método no permitido. Se espera POST."},
+            status=405
+        )
+
+    archivo = request.FILES.get('file')
+    if not archivo:
+        return JsonResponse(
+            {"error": "No se envió ningún archivo."},
+            status=400
+        )
+
+    extension = os.path.splitext(archivo.name)[1].lower()
+    if extension not in ['.xlsx', '.xls']:
+        return JsonResponse(
+            {"error": f"Formato no soportado: '{extension}'. Se aceptan .xlsx, .xls"},
+            status=400
+        )
+
+    # ─────────────────────────────────────────────
+    # 2. LEER ARCHIVO Y DETECTAR COLUMNAS
+    # ─────────────────────────────────────────────
+    try:
+        df = pd.read_excel(archivo)
+        df.columns = df.columns.str.strip()
+    except Exception as e:
+        return JsonResponse(
+            {"error": f"Error al leer el archivo: {str(e)}"},
+            status=400
+        )
+
+    # Detectar columnas dinámicamente para tolerar caracteres especiales
+    col_codigo      = next((c for c in df.columns if 'Codigo' in c and 'Docente' in c), None)
+    col_nombre      = next((c for c in df.columns if 'Nombre' in c and 'Docente' in c), None)
+    col_vinculacion = next((c for c in df.columns if 'Vinculaci' in c), None)
+    col_depto       = next((c for c in df.columns if 'Departamento' in c), None)
+    col_correo_p    = next((c for c in df.columns if 'Personal' in c), None)
+    col_correo_i    = next((c for c in df.columns if 'Institucional' in c), None)
+    col_celular     = next((c for c in df.columns if 'Celular' in c), None)
+
+    if not col_codigo or not col_nombre:
+        return JsonResponse(
+            {"error": "No se encontraron las columnas requeridas en el archivo.",
+            "columnas_encontradas": list(df.columns)},
+            status=400
+        )
+
+    # ─────────────────────────────────────────────
+    # 3. PROCESAR CADA FILA
+    # ─────────────────────────────────────────────
+    creados          = 0
+    actualizados     = 0
+    usuarios_creados = 0
+    errores          = []
+
+    for index, row in df.iterrows():
+        fila_num = index + 2
+
+        # ── Leer y limpiar código ──────────────────────────────────
+        codigo_raw = row.get(col_codigo)
+        if pd.isna(codigo_raw):
+            continue
+        codigo = str(codigo_raw).strip().lstrip("'")
+
+        # ── Leer demás campos ──────────────────────────────────────
+        nombre               = str(row.get(col_nombre, '')).strip()
+        tipo_vinculacion     = str(row.get(col_vinculacion, 'DOCENTE CATEDRA')).strip() if col_vinculacion else 'DOCENTE CATEDRA'
+        departamento_nombre  = str(row.get(col_depto, '')).strip() if col_depto else ''
+        correo_personal      = row.get(col_correo_p)  if col_correo_p  else None
+        correo_institucional = row.get(col_correo_i)  if col_correo_i  else None
+        celular              = row.get(col_celular)   if col_celular   else None 
+        # Normalizar tipo de vinculación
+        if tipo_vinculacion not in ['DOCENTE PLANTA', 'DOCENTE CATEDRA']:
+            tipo_vinculacion = 'DOCENTE CATEDRA'
+
+        # Limpiar valores nulos
+        correo_personal      = str(correo_personal).strip()      if correo_personal      is not None and not pd.isna(correo_personal)      else None
+        correo_institucional = str(correo_institucional).strip() if correo_institucional is not None and not pd.isna(correo_institucional) else None
+        celular              = str(celular).strip()              if celular              is not None and not pd.isna(celular)              else None
+        departamento_nombre  = departamento_nombre if departamento_nombre and departamento_nombre != 'nan' else None
+
+        try:
+            with transaction.atomic():
+
+                # ── 1. Crear o buscar Usuario ──────────────────────
+                # El correo institucional es el identificador principal.
+                # Si no existe, se usa el personal o se genera uno por defecto.
+                correo_usuario = correo_institucional or correo_personal or f"{codigo}@ufps.edu.co"
+
+                usuario_obj, usuario_creado = Usuario.objects.get_or_create(
+                    correo=correo_usuario,
+                    defaults={
+                        "nombre":     nombre,
+                        "rol":        "DOCENTE",
+                        "contrasena": codigo,   # contraseña inicial = código del docente
+                        "activo":     True,
+                    }
+                )
+                if usuario_creado:
+                    usuarios_creados += 1
+
+                # ── 2. Crear o actualizar Docente ──────────────────
+                _obj, creado = Docente.objects.update_or_create(
+                    codigo=codigo,
+                    defaults={
+                        "nombre":               nombre,
+                        "tipo_vinculacion":     tipo_vinculacion,
+                        "departamento":         departamento_nombre,
+                        "correo_personal":      correo_personal,
+                        "correo_institucional": correo_institucional,
+                        "celular":              celular,
+                        "usuario":              usuario_obj,
+                    }
+                )
+                if creado:
+                    creados += 1
+                else:
+                    actualizados += 1
+
+        except Exception as e:
+            errores.append({"fila": fila_num, "codigo": codigo, "error": str(e)})
+
+    # agrega aquí ↓
+    print("CREADOS:", creados)
+    print("ACTUALIZADOS:", actualizados)
+    print("USUARIOS CREADOS:", usuarios_creados)
+    print("ERRORES:", errores)
+    # ─────────────────────────────────────────────
+    # 4. RETORNAR RESUMEN
+    # ─────────────────────────────────────────────
+    return JsonResponse({
+        "status":                "success" if not errores else "parcial",
+        "mensaje":               "Importación de docentes completada.",
+        "usuarios_creados":      usuarios_creados,
+        "docentes_creados":      creados,
+        "docentes_actualizados": actualizados,
+        "errores":               errores,
+    })

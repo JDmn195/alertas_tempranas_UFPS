@@ -99,6 +99,8 @@ export default function AdminDashboard() {
 
         quantities: "import/stats/",
 
+        teachers: "import/teachers/",
+
       };
 
       const endpoint = endpointMap[importType];
@@ -199,6 +201,7 @@ export default function AdminDashboard() {
             <option value="individual">Reportes Individuales de Estudiantes</option>
             <option value="courses">Listado de Cursos y Docentes</option>
             <option value="quantities">Cantidades por Curso y Semestre</option>
+            <option value="teachers">Listado de Docentes</option>
           </select>
           <p className="text-sm text-gray-500 mt-2">
             {importType === 'general' && 'Permite consolidar la información académica básica de los estudiantes desde la fuente DIRPLAN.'}

@@ -38,6 +38,7 @@ class Docente(models.Model):
     celular = models.CharField(max_length=20, null=True, blank=True)
     usuario = models.OneToOneField('usuarios.Usuario', on_delete=models.PROTECT, related_name='docente')
 
+
     class Meta:
         db_table = 'docente'
         verbose_name = 'Docente'
