@@ -16,6 +16,7 @@ import os
 
 from django.conf import settings
 
+from django.db import transaction, reset_queries
 from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia
 
 @csrf_exempt
@@ -360,124 +361,79 @@ def importar_estadisticas_carga(request):
             actualizados = 0
             docentes_creados = 0
 
-            for index, row in df.iterrows():
+            with transaction.atomic():
+                for index, row in df.iterrows():
+                    # Limpiar memoria de queries cada 50 filas
+                    if index % 50 == 0:
+                        reset_queries()
 
-                codigo = row.get("Materia")
-                nombre = row.get("Nombre")
-                horario = row.get("Horario")
-                matriculados = row.get("# Matriculados")
-                codigo_docente = row.get("Código Docente")
-                nombre_docente = row.get("Nombre Docente")
+                    codigo = row.get("Materia")
+                    nombre = row.get("Nombre")
+                    horario = row.get("Horario")
+                    matriculados = row.get("# Matriculados")
+                    codigo_docente = row.get("Código Docente")
+                    nombre_docente = row.get("Nombre Docente")
 
-                # Ignorar filas vacías
-                if pd.isna(codigo):
-                    continue
+                    # Ignorar filas vacías
+                    if pd.isna(codigo):
+                        continue
 
-                codigo = str(codigo).strip()
+                    codigo = str(codigo).strip()
 
-                # ─────────────────────────────
-                # CREAR O BUSCAR DOCENTE
-                # ─────────────────────────────
+                    # ─────────────────────────────
+                    # CREAR O BUSCAR DOCENTE
+                    # ─────────────────────────────
+                    docente_obj = None
 
-                docente_obj = None
+                    if not pd.isna(codigo_docente):
+                        docente_codigo = str(codigo_docente).strip()
+                        docente_nombre = (
+                            str(nombre_docente).strip()
+                            if not pd.isna(nombre_docente)
+                            else "SIN NOMBRE"
+                        )
 
-                if not pd.isna(codigo_docente):
-
-                    docente_codigo = str(
-                        codigo_docente
-                    ).strip()
-
-                    docente_nombre = (
-                        str(nombre_docente).strip()
-                        if not pd.isna(nombre_docente)
-                        else "SIN NOMBRE"
-                    )
-
-                    docente_obj, docente_created = (
-                        Docente.objects.get_or_create(
-
+                        docente_obj, docente_created = Docente.objects.get_or_create(
                             codigo=docente_codigo,
-
                             defaults={
-
                                 "nombre": docente_nombre,
-
-                                "tipo_vinculacion":
-                                    "DOCENTE CATEDRA"
-
+                                "tipo_vinculacion": "DOCENTE CATEDRA"
                             }
                         )
-                    )
 
-                    if docente_created:
-                        docentes_creados += 1
+                        if docente_created:
+                            docentes_creados += 1
 
-                # ─────────────────────────────
-                # CREAR O ACTUALIZAR CURSO
-                # ─────────────────────────────
-
-                curso_obj, created = (
-                    Curso.objects.update_or_create(
-
+                    # ─────────────────────────────
+                    # CREAR O ACTUALIZAR CURSO
+                    # ─────────────────────────────
+                    curso_obj, created = Curso.objects.update_or_create(
                         codigo=codigo,
-
                         defaults={
-
-                            "nombre":
-                                str(nombre).strip()
-                                if not pd.isna(nombre)
-                                else "SIN NOMBRE",
-
-                            "horario":
-                                str(horario).strip()
-                                if not pd.isna(horario)
-                                else None,
-
-                            "num_matriculados":
-                                int(matriculados)
-                                if not pd.isna(matriculados)
-                                else 0,
-
-                            "docente":
-                                docente_obj
-
+                            "nombre": str(nombre).strip() if not pd.isna(nombre) else "SIN NOMBRE",
+                            "horario": str(horario).strip() if not pd.isna(horario) else None,
+                            "num_matriculados": int(matriculados) if not pd.isna(matriculados) else 0,
+                            "docente": docente_obj
                         }
                     )
-                )
 
-                if created:
-                    creados += 1
-                else:
-                    actualizados += 1
+                    if created:
+                        creados += 1
+                    else:
+                        actualizados += 1
 
             return JsonResponse({
-
-                "message":
-                    "HU-04 procesada correctamente",
-
-                "cursos_creados":
-                    creados,
-
-                "cursos_actualizados":
-                    actualizados,
-
-                "docentes_creados":
-                    docentes_creados
-
+                "message": "HU-04 procesada correctamente",
+                "cursos_creados": creados,
+                "cursos_actualizados": actualizados,
+                "docentes_creados": docentes_creados
             })
 
         except Exception as e:
-
             import traceback
-
             print("ERROR IMPORTACIÓN:")
             traceback.print_exc()
-
-            return JsonResponse({
-
-                "error": str(e)
-
-            }, status=500)
+            return JsonResponse({"error": str(e)}, status=500)
 
     return JsonResponse({
 
@@ -555,38 +511,40 @@ def importar_docentes(request):
     usuarios_creados = 0
     errores          = []
 
-    for index, row in df.iterrows():
-        fila_num = index + 2
+    with transaction.atomic():
+        for index, row in df.iterrows():
+            fila_num = index + 2
 
-        # ── Leer y limpiar código ──────────────────────────────────
-        codigo_raw = row.get(col_codigo)
-        if pd.isna(codigo_raw):
-            continue
-        codigo = str(codigo_raw).strip().lstrip("'")
+            # Limpiar memoria de queries cada 50 filas
+            if index % 50 == 0:
+                reset_queries()
 
-        # ── Leer demás campos ──────────────────────────────────────
-        nombre               = str(row.get(col_nombre, '')).strip()
-        tipo_vinculacion     = str(row.get(col_vinculacion, 'DOCENTE CATEDRA')).strip() if col_vinculacion else 'DOCENTE CATEDRA'
-        departamento_nombre  = str(row.get(col_depto, '')).strip() if col_depto else ''
-        correo_personal      = row.get(col_correo_p)  if col_correo_p  else None
-        correo_institucional = row.get(col_correo_i)  if col_correo_i  else None
-        celular              = row.get(col_celular)   if col_celular   else None 
-        # Normalizar tipo de vinculación
-        if tipo_vinculacion not in ['DOCENTE PLANTA', 'DOCENTE CATEDRA']:
-            tipo_vinculacion = 'DOCENTE CATEDRA'
+            # ── Leer y limpiar código ──────────────────────────────────
+            codigo_raw = row.get(col_codigo)
+            if pd.isna(codigo_raw):
+                continue
+            codigo = str(codigo_raw).strip().lstrip("'")
 
-        # Limpiar valores nulos
-        correo_personal      = str(correo_personal).strip()      if correo_personal      is not None and not pd.isna(correo_personal)      else None
-        correo_institucional = str(correo_institucional).strip() if correo_institucional is not None and not pd.isna(correo_institucional) else None
-        celular              = str(celular).strip()              if celular              is not None and not pd.isna(celular)              else None
-        departamento_nombre  = departamento_nombre if departamento_nombre and departamento_nombre != 'nan' else None
+            # ── Leer demás campos ──────────────────────────────────────
+            nombre               = str(row.get(col_nombre, '')).strip()
+            tipo_vinculacion     = str(row.get(col_vinculacion, 'DOCENTE CATEDRA')).strip() if col_vinculacion else 'DOCENTE CATEDRA'
+            departamento_nombre  = str(row.get(col_depto, '')).strip() if col_depto else ''
+            correo_personal      = row.get(col_correo_p)  if col_correo_p  else None
+            correo_institucional = row.get(col_correo_i)  if col_correo_i  else None
+            celular              = row.get(col_celular)   if col_celular   else None 
+            
+            # Normalizar tipo de vinculación
+            if tipo_vinculacion not in ['DOCENTE PLANTA', 'DOCENTE CATEDRA']:
+                tipo_vinculacion = 'DOCENTE CATEDRA'
 
-        try:
-            with transaction.atomic():
+            # Limpiar valores nulos
+            correo_personal      = str(correo_personal).strip()      if correo_personal      is not None and not pd.isna(correo_personal)      else None
+            correo_institucional = str(correo_institucional).strip() if correo_institucional is not None and not pd.isna(correo_institucional) else None
+            celular              = str(celular).strip()              if celular              is not None and not pd.isna(celular)              else None
+            departamento_nombre  = departamento_nombre if departamento_nombre and departamento_nombre != 'nan' else None
 
+            try:
                 # ── 1. Crear o buscar Usuario ──────────────────────
-                # El correo institucional es el identificador principal.
-                # Si no existe, se usa el personal o se genera uno por defecto.
                 correo_usuario = correo_institucional or correo_personal or f"{codigo}@ufps.edu.co"
 
                 usuario_obj, usuario_creado = Usuario.objects.get_or_create(
@@ -594,7 +552,7 @@ def importar_docentes(request):
                     defaults={
                         "nombre":     nombre,
                         "rol":        "DOCENTE",
-                        "contrasena": codigo,   # contraseña inicial = código del docente
+                        "contrasena": codigo,
                         "activo":     True,
                     }
                 )
@@ -619,8 +577,8 @@ def importar_docentes(request):
                 else:
                     actualizados += 1
 
-        except Exception as e:
-            errores.append({"fila": fila_num, "codigo": codigo, "error": str(e)})
+            except Exception as e:
+                errores.append({"fila": fila_num, "codigo": codigo, "error": str(e)})
 
     #Verificacion para la terminal
     print("CREADOS:", creados)
