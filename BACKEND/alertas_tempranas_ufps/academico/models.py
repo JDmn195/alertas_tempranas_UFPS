@@ -47,15 +47,14 @@ class Docente(models.Model):
     ]
 
     usuario              = models.OneToOneField(
-                               'usuarios.Usuario',
-                               on_delete=models.CASCADE,
-                               null=True, blank=True,
-                               related_name='docente')
-    codigo               = models.CharField(max_length=10, unique=True)
+                            'usuarios.Usuario',
+                            on_delete=models.CASCADE,
+                            null=True, blank=True,
+                            related_name='docente')
+    codigo               = models.CharField(max_length=20, primary_key=True)
     nombre               = models.CharField(max_length=120)
     tipo_vinculacion     = models.CharField(max_length=30, choices=VINCULACION_CHOICES)
-    departamento         = models.ForeignKey(Departamento, on_delete=models.SET_NULL,
-                                             null=True, blank=True)
+    departamento         = models.CharField(max_length=100, null=True, blank=True)
     correo_personal      = models.EmailField(max_length=150, null=True, blank=True)
     correo_institucional = models.EmailField(max_length=150, null=True, blank=True)
     celular              = models.CharField(max_length=20,  null=True, blank=True)
