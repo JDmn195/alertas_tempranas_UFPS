@@ -57,15 +57,13 @@ def importar_historial_academico(request):
     4. Si todo es válido, crea los registros de Matrícula de forma atómica.
     5. Si algo falla, no guarda nada y retorna el detalle de errores.
 
-    Modelos involucrados: Estudiante, Matricula, Curso, PeriodoAcademico.
+    Modelos involucrados: Estudiante, Nota, Curso, Periodo.
     """
     import re
     import traceback
-    from django.db import transaction
+    from django.db import transaction, reset_queries
 
-    # ─────────────────────────────────────────────
     # 1. VALIDAR MÉTODO Y PRESENCIA DE ARCHIVO
-    # ─────────────────────────────────────────────
     if request.method != 'POST':
         return JsonResponse(
             {"error": "Método no permitido. Se espera POST."},
@@ -85,43 +83,37 @@ def importar_historial_academico(request):
     if extension not in ['.xlsx', '.xls', '.csv']:
         return JsonResponse(
             {"error": f"Formato de archivo no soportado: '{extension}'. "
-                    f"Se aceptan: .xlsx, .xls, .csv"},
+                      f"Se aceptan: .xlsx, .xls, .csv"},
             status=400
         )
 
-    # ─────────────────────────────────────────────
     # 2. EXTRAER CÓDIGO DEL ESTUDIANTE DEL NOMBRE
-    # ─────────────────────────────────────────────
     match = re.search(r'(\d{5,10})', nombre_archivo)
     if not match:
         return JsonResponse(
             {"error": f"No se pudo extraer el código del estudiante del nombre "
-                    f"del archivo: '{nombre_archivo}'. "
-                    f"El nombre debe contener el código numérico "
-                    f"(ej: 'Relacion de Notas 1152430.xlsx')."},
+                      f"del archivo: '{nombre_archivo}'. "
+                      f"El nombre debe contener el código numérico "
+                      f"(ej: 'Relacion de Notas 1152430.xlsx')."},
             status=400
         )
 
     codigo_estudiante = match.group(1)
 
-    # ─────────────────────────────────────────────
     # 3. VALIDAR QUE EL ESTUDIANTE EXISTA
-    # ─────────────────────────────────────────────
     try:
         estudiante = Estudiante.objects.get(codigo=codigo_estudiante)
     except Estudiante.DoesNotExist:
         return JsonResponse(
             {"error": f"El estudiante con código '{codigo_estudiante}' no existe "
-                    f"en el sistema. Debe ser creado antes de importar su "
-                    f"historial académico.",
-            "codigo_estudiante": codigo_estudiante,
-            "tipo_error": "ESTUDIANTE_NO_ENCONTRADO"},
+                      f"en el sistema. Debe ser creado antes de importar su "
+                      f"historial académico.",
+             "codigo_estudiante": codigo_estudiante,
+             "tipo_error": "ESTUDIANTE_NO_ENCONTRADO"},
             status=404
         )
 
-    # ─────────────────────────────────────────────
     # 4. LEER EL ARCHIVO CON PANDAS
-    # ─────────────────────────────────────────────
     try:
         if extension == '.csv':
             df = pd.read_csv(archivo)
@@ -147,23 +139,24 @@ def importar_historial_academico(request):
     if columnas_faltantes:
         return JsonResponse(
             {"error": f"El archivo no contiene las columnas requeridas. "
-                    f"Faltan: {', '.join(columnas_faltantes)}",
-            "columnas_encontradas": list(df.columns),
-            "columnas_requeridas": columnas_requeridas},
+                      f"Faltan: {', '.join(columnas_faltantes)}",
+             "columnas_encontradas": list(df.columns),
+             "columnas_requeridas": columnas_requeridas},
             status=400
         )
 
-    # ─────────────────────────────────────────────
     # 5. VALIDACIÓN ESTRICTA DE EXISTENCIA
-    #    (Periodos y Cursos deben existir previamente)
-    # ─────────────────────────────────────────────
     errores = []
     filas_validas = []
 
     for index, row in df.iterrows():
-        fila_num = index + 2  # +2 porque fila 1 es el encabezado
+        fila_num = index + 2
+        
+        # Limpiar memoria de queries para evitar OOM si DEBUG=True
+        if index % 50 == 0:
+            reset_queries()
 
-        # --- Parsear Periodo (ej: "2024-1" -> anio=2024, semestre=1) ---
+        # --- Parsear Periodo ---
         periodo_raw = str(row.get('Periodo', '')).strip()
         periodo_match = re.match(r'^(\d{4})\s*[-/]\s*([12])$', periodo_raw)
 
@@ -173,7 +166,7 @@ def importar_historial_academico(request):
                 "campo": "Periodo",
                 "valor": periodo_raw,
                 "mensaje": f"Formato de periodo inválido: '{periodo_raw}'. "
-                        f"Se espera formato 'AAAA-S' (ej: 2024-1)."
+                           f"Se espera formato 'AAAA-S' (ej: 2024-1)."
             })
             continue
 
@@ -181,16 +174,16 @@ def importar_historial_academico(request):
         semestre = int(periodo_match.group(2))
 
         try:
-            periodo_obj = PeriodoAcademico.objects.get(
+            periodo_obj = Periodo.objects.get(
                 anio=anio, semestre=semestre
             )
-        except PeriodoAcademico.DoesNotExist:
+        except Periodo.DoesNotExist:
             errores.append({
                 "fila": fila_num,
                 "campo": "Periodo",
                 "valor": periodo_raw,
                 "mensaje": f"El periodo académico '{periodo_raw}' no existe "
-                        f"en el sistema. Debe ser creado manualmente."
+                           f"en el sistema. Debe ser creado manualmente."
             })
             continue
 
@@ -205,17 +198,31 @@ def importar_historial_academico(request):
             })
             continue
 
-        try:
-            curso_obj = Curso.objects.get(codigo=codigo_materia)
-        except Curso.DoesNotExist:
+        # Extraer base y grupo si vienen concatenados (ej: 1150114A o 1150114-A)
+        match_codigo = re.match(r'^(\d+)(.*)$', codigo_materia)
+        if match_codigo:
+            base_materia = match_codigo.group(1)
+            grupo_str = match_codigo.group(2).strip('- ').upper()
+        else:
+            base_materia = codigo_materia
+            grupo_str = ''
+
+        curso_obj = None
+        if grupo_str:
+            curso_obj = Curso.objects.filter(materia__codigo=base_materia, grupo=grupo_str).first()
+        
+        # Si no se encontró por grupo específico o no se proveyó grupo, usar el primer curso disponible
+        if not curso_obj:
+            curso_obj = Curso.objects.filter(materia__codigo=base_materia).first()
+
+        if not curso_obj:
             nombre_materia = str(row.get('Nombre Materia', '')).strip()
             errores.append({
                 "fila": fila_num,
                 "campo": "Codigo Materia",
                 "valor": codigo_materia,
-                "mensaje": f"El curso '{codigo_materia} - {nombre_materia}' "
-                        f"no existe en el sistema. Debe ser creado "
-                        f"manualmente."
+                "mensaje": f"No existe ningún curso con la materia base '{base_materia} - {nombre_materia}' "
+                           f"en el sistema. Debe ser creado manualmente."
             })
             continue
 
@@ -247,7 +254,7 @@ def importar_historial_academico(request):
                 "campo": "Definitiva",
                 "valor": str(nota),
                 "mensaje": f"La nota {nota} está fuera del rango "
-                        f"permitido (0.0 - 5.0)."
+                           f"permitido (0.0 - 5.0)."
             })
             continue
 
@@ -259,41 +266,35 @@ def importar_historial_academico(request):
             "estudiante": estudiante,
             "curso": curso_obj,
             "periodo": periodo_obj,
-            "nota": nota,
-            "estado": estado,
+            "definitiva": nota,
         })
 
-    # ─────────────────────────────────────────────
-    # 6. SI HAY ERRORES, ABORTAR SIN GUARDAR NADA
-    # ─────────────────────────────────────────────
+    # 6. CANCELACION POR ERRORES
     if errores:
         return JsonResponse({
             "status": "error",
             "mensaje": f"Se encontraron {len(errores)} error(es) en el archivo. "
-                    f"No se guardó ningún registro. Corrija los problemas "
-                    f"e intente de nuevo.",
+                       f"No se guardó ningún registro. Corrija los problemas "
+                       f"e intente de nuevo.",
             "codigo_estudiante": codigo_estudiante,
             "total_filas": len(df),
             "filas_con_error": len(errores),
             "errores": errores
         }, status=400)
 
-    # ─────────────────────────────────────────────
     # 7. GUARDAR DE FORMA ATÓMICA
-    # ─────────────────────────────────────────────
     try:
         creados = 0
         actualizados = 0
 
         with transaction.atomic():
             for fila in filas_validas:
-                _obj, created = Matricula.objects.update_or_create(
+                _obj, created = Nota.objects.update_or_create(
                     estudiante=fila["estudiante"],
                     curso=fila["curso"],
                     periodo=fila["periodo"],
                     defaults={
-                        "nota": fila["nota"],
-                        "estado": fila["estado"],
+                        "definitiva": fila["definitiva"],
                     }
                 )
                 if created:
@@ -304,7 +305,7 @@ def importar_historial_academico(request):
         return JsonResponse({
             "status": "success",
             "mensaje": f"Historial académico del estudiante "
-                    f"'{codigo_estudiante}' importado correctamente.",
+                       f"'{codigo_estudiante}' importado correctamente.",
             "codigo_estudiante": codigo_estudiante,
             "total_filas_procesadas": len(filas_validas),
             "matriculas_creadas": creados,
