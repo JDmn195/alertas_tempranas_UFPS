@@ -16,8 +16,9 @@ import os
 
 from django.conf import settings
 
-from academico.models import Curso, Docente, Estudiante, Nota, Periodo
+from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia
 
+@csrf_exempt
 def importar_estudiantes_dirplan(request):
     """
     HU-01: IMPORTAR REPORTE GENERAL DE ESTUDIANTES DESDE DIRPLAN
@@ -56,13 +57,15 @@ def importar_historial_academico(request):
     4. Si todo es válido, crea los registros de Matrícula de forma atómica.
     5. Si algo falla, no guarda nada y retorna el detalle de errores.
 
-    Modelos involucrados: Estudiante, Nota, Curso, Periodo.
+    Modelos involucrados: Estudiante, Matricula, Curso, PeriodoAcademico.
     """
     import re
     import traceback
     from django.db import transaction
 
+    # ─────────────────────────────────────────────
     # 1. VALIDAR MÉTODO Y PRESENCIA DE ARCHIVO
+    # ─────────────────────────────────────────────
     if request.method != 'POST':
         return JsonResponse(
             {"error": "Método no permitido. Se espera POST."},
@@ -86,7 +89,9 @@ def importar_historial_academico(request):
             status=400
         )
 
+    # ─────────────────────────────────────────────
     # 2. EXTRAER CÓDIGO DEL ESTUDIANTE DEL NOMBRE
+    # ─────────────────────────────────────────────
     match = re.search(r'(\d{5,10})', nombre_archivo)
     if not match:
         return JsonResponse(
@@ -99,7 +104,9 @@ def importar_historial_academico(request):
 
     codigo_estudiante = match.group(1)
 
+    # ─────────────────────────────────────────────
     # 3. VALIDAR QUE EL ESTUDIANTE EXISTA
+    # ─────────────────────────────────────────────
     try:
         estudiante = Estudiante.objects.get(codigo=codigo_estudiante)
     except Estudiante.DoesNotExist:
@@ -112,7 +119,9 @@ def importar_historial_academico(request):
             status=404
         )
 
+    # ─────────────────────────────────────────────
     # 4. LEER EL ARCHIVO CON PANDAS
+    # ─────────────────────────────────────────────
     try:
         if extension == '.csv':
             df = pd.read_csv(archivo)
@@ -144,14 +153,17 @@ def importar_historial_academico(request):
             status=400
         )
 
+    # ─────────────────────────────────────────────
     # 5. VALIDACIÓN ESTRICTA DE EXISTENCIA
+    #    (Periodos y Cursos deben existir previamente)
+    # ─────────────────────────────────────────────
     errores = []
     filas_validas = []
 
     for index, row in df.iterrows():
-        fila_num = index + 2
+        fila_num = index + 2  # +2 porque fila 1 es el encabezado
 
-        # --- Parsear Periodo ---
+        # --- Parsear Periodo (ej: "2024-1" -> anio=2024, semestre=1) ---
         periodo_raw = str(row.get('Periodo', '')).strip()
         periodo_match = re.match(r'^(\d{4})\s*[-/]\s*([12])$', periodo_raw)
 
@@ -169,10 +181,10 @@ def importar_historial_academico(request):
         semestre = int(periodo_match.group(2))
 
         try:
-            periodo_obj = Periodo.objects.get(
+            periodo_obj = PeriodoAcademico.objects.get(
                 anio=anio, semestre=semestre
             )
-        except Periodo.DoesNotExist:
+        except PeriodoAcademico.DoesNotExist:
             errores.append({
                 "fila": fila_num,
                 "campo": "Periodo",
@@ -193,31 +205,17 @@ def importar_historial_academico(request):
             })
             continue
 
-        # Extraer base y grupo si vienen concatenados (ej: 1150114A o 1150114-A)
-        match_codigo = re.match(r'^(\d+)(.*)$', codigo_materia)
-        if match_codigo:
-            base_materia = match_codigo.group(1)
-            grupo_str = match_codigo.group(2).strip('- ').upper()
-        else:
-            base_materia = codigo_materia
-            grupo_str = ''
-
-        curso_obj = None
-        if grupo_str:
-            curso_obj = Curso.objects.filter(materia__codigo=base_materia, grupo=grupo_str).first()
-        
-        # Si no se encontró por grupo específico o no se proveyó grupo, usar el primer curso disponible
-        if not curso_obj:
-            curso_obj = Curso.objects.filter(materia__codigo=base_materia).first()
-
-        if not curso_obj:
+        try:
+            curso_obj = Curso.objects.get(codigo=codigo_materia)
+        except Curso.DoesNotExist:
             nombre_materia = str(row.get('Nombre Materia', '')).strip()
             errores.append({
                 "fila": fila_num,
                 "campo": "Codigo Materia",
                 "valor": codigo_materia,
-                "mensaje": f"No existe ningún curso con la materia base '{base_materia} - {nombre_materia}' "
-                           f"en el sistema. Debe ser creado manualmente."
+                "mensaje": f"El curso '{codigo_materia} - {nombre_materia}' "
+                        f"no existe en el sistema. Debe ser creado "
+                        f"manualmente."
             })
             continue
 
@@ -261,10 +259,13 @@ def importar_historial_academico(request):
             "estudiante": estudiante,
             "curso": curso_obj,
             "periodo": periodo_obj,
-            "definitiva": nota,
+            "nota": nota,
+            "estado": estado,
         })
 
-    # 6. CANCELACION POR ERRORES
+    # ─────────────────────────────────────────────
+    # 6. SI HAY ERRORES, ABORTAR SIN GUARDAR NADA
+    # ─────────────────────────────────────────────
     if errores:
         return JsonResponse({
             "status": "error",
@@ -277,19 +278,22 @@ def importar_historial_academico(request):
             "errores": errores
         }, status=400)
 
+    # ─────────────────────────────────────────────
     # 7. GUARDAR DE FORMA ATÓMICA
+    # ─────────────────────────────────────────────
     try:
         creados = 0
         actualizados = 0
 
         with transaction.atomic():
             for fila in filas_validas:
-                _obj, created = Nota.objects.update_or_create(
+                _obj, created = Matricula.objects.update_or_create(
                     estudiante=fila["estudiante"],
                     curso=fila["curso"],
                     periodo=fila["periodo"],
                     defaults={
-                        "definitiva": fila["definitiva"],
+                        "nota": fila["nota"],
+                        "estado": fila["estado"],
                     }
                 )
                 if created:
@@ -316,6 +320,7 @@ def importar_historial_academico(request):
         }, status=500)
 
 
+@csrf_exempt
 def importar_oferta_academica(request):
     """
     HU-03: IMPORTAR LISTADO GENERAL DE CURSOS Y DOCENTES
@@ -524,13 +529,15 @@ def importar_docentes(request):
         )
 
     # Detectar columnas dinámicamente para tolerar caracteres especiales
-    col_codigo      = next((c for c in df.columns if 'Codigo' in c and 'Docente' in c), None)
+    col_codigo      = next((c for c in df.columns if 'Docente' in c and ('digo' in c or 'igo' in c)), None)
     col_nombre      = next((c for c in df.columns if 'Nombre' in c and 'Docente' in c), None)
     col_vinculacion = next((c for c in df.columns if 'Vinculaci' in c), None)
     col_depto       = next((c for c in df.columns if 'Departamento' in c), None)
     col_correo_p    = next((c for c in df.columns if 'Personal' in c), None)
     col_correo_i    = next((c for c in df.columns if 'Institucional' in c), None)
     col_celular     = next((c for c in df.columns if 'Celular' in c), None)
+
+    
 
     if not col_codigo or not col_nombre:
         return JsonResponse(
@@ -614,7 +621,7 @@ def importar_docentes(request):
         except Exception as e:
             errores.append({"fila": fila_num, "codigo": codigo, "error": str(e)})
 
-    # agrega aquí ↓
+    #Verificacion para la terminal
     print("CREADOS:", creados)
     print("ACTUALIZADOS:", actualizados)
     print("USUARIOS CREADOS:", usuarios_creados)
