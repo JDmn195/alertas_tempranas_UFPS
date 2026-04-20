@@ -15,7 +15,10 @@ import pandas as pd
 import os
 
 from django.conf import settings
-
+import re
+import traceback
+from django.db import transaction
+from django.http import JsonResponse
 from django.db import transaction, reset_queries
 from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia
 
@@ -323,124 +326,229 @@ def importar_historial_academico(request):
 
 
 @csrf_exempt
-def importar_oferta_academica(request):
-    """
-    HU-03: IMPORTAR LISTADO GENERAL DE CURSOS Y DOCENTES
-    
-    Responsable: [Nombre del Integrante]
-    Objetivo: Mantener la oferta académica y la asignación docente actualizada.
-    
-    Campos a importar:
-    - Nombre del curso y código
-    - Nombre del docente y código
-    - Departamento adscrito
-    
-    Modelos involucrados: Curso, Docente, Departamento.
-    """
-    # TODO: Implementar creación/actualización de docentes
-    # TODO: Vincular cursos con sus respectivos docentes
-    return JsonResponse({"status": "template", "message": "HU-03 pendiente de implementación"})
+def importar_oferta_academica(request):   
+    # 1. VALIDAR MÉTODO
+    if request.method != 'POST':
+        return JsonResponse(
+            {"error": "Método no permitido. Use POST."},
+            status=405
+        )
 
+    archivo = request.FILES.get('file')
 
-@csrf_exempt
-def importar_estadisticas_carga(request):
+    if not archivo:
+        return JsonResponse(
+            {"error": "No se envió ningún archivo."},
+            status=400
+        )
 
-    if request.method == 'POST' and request.FILES.get('file'):
+    # VALIDAR EXTENSIÓN
+    nombre_archivo = archivo.name
+    extension = os.path.splitext(nombre_archivo)[1].lower()
 
-        excel_file = request.FILES['file']
+    if extension not in ['.xlsx', '.xls', '.csv']:
+        return JsonResponse(
+            {"error": f"Formato no soportado: {extension}"},
+            status=400
+        )
+
+    # 2. LEER ARCHIVO
+    try:
+        if extension == '.csv':
+            df = pd.read_csv(
+                archivo,
+                dtype={
+                    'Materia': str,
+                    'Código Docente': str
+                }
+            )
+        else:
+            df = pd.read_excel(
+                archivo,
+                dtype={
+                    'Materia': str,
+                    'Código Docente': str
+                }
+            )
+
+    except Exception as e:
+        return JsonResponse(
+            {"error": f"Error leyendo archivo: {str(e)}"},
+            status=400
+        )
+
+    # LIMPIAR COLUMNAS
+    df.columns = df.columns.str.strip()
+
+    columnas_requeridas = [
+        'Materia',
+        'Nombre',
+        'Código Docente',
+        'Nombre Docente',
+        'Horario',
+        '# Matriculados'
+    ]
+
+    faltantes = [
+        c for c in columnas_requeridas
+        if c not in df.columns
+    ]
+
+    if faltantes:
+        return JsonResponse({
+            "error": "Faltan columnas requeridas",
+            "faltantes": faltantes,
+            "encontradas": list(df.columns)
+        }, status=400)
+
+    # ELIMINAR FILAS VACÍAS
+    df = df.dropna(subset=['Materia'])
+
+    errores = []
+    registros_validos = []
+
+    # 3. VALIDAR FILAS
+    for index, row in df.iterrows():
+
+        fila_num = index + 2
+
+        codigo_materia_grupo = str(row['Materia']).strip()
+
+        # Separar base y grupo
+        match = re.match(r'^(\d+)([A-Z]?)$', codigo_materia_grupo)
+
+        if not match:
+            errores.append({
+                "fila": fila_num,
+                "campo": "Materia",
+                "valor": codigo_materia_grupo,
+                "mensaje": "Formato inválido."
+            })
+            continue
+
+        base_materia = match.group(1)
+        grupo = match.group(2)
+
+        if grupo == '':
+            errores.append({
+                "fila": fila_num,
+                "campo": "Grupo",
+                "valor": codigo_materia_grupo,
+                "mensaje": "No se encontró grupo."
+            })
+            continue
+
+        nombre_materia = str(row['Nombre']).strip()
+
+        codigo_docente = str(
+            row['Código Docente']
+        ).strip()
+
+        nombre_docente = str(
+            row['Nombre Docente']
+        ).strip()
+
+        horario = str(row['Horario']).strip()
+
+        matriculados_raw = row['# Matriculados']
 
         try:
+            matriculados = int(matriculados_raw)
+        except:
+            matriculados = 0
 
-            # Leer Excel en memoria
-            df = pd.read_excel(excel_file)
+        # VALIDAR DOCENTE
+        try:
+            docente_obj = Docente.objects.get(
+                codigo=codigo_docente
+            )
 
-            # Limpiar nombres columnas
-            df.columns = df.columns.str.strip()
-
-            creados = 0
-            actualizados = 0
-            docentes_creados = 0
-
-            with transaction.atomic():
-                for index, row in df.iterrows():
-                    # Limpiar memoria de queries cada 50 filas
-                    if index % 50 == 0:
-                        reset_queries()
-
-                    codigo = row.get("Materia")
-                    nombre = row.get("Nombre")
-                    horario = row.get("Horario")
-                    matriculados = row.get("# Matriculados")
-                    codigo_docente = row.get("Código Docente")
-                    nombre_docente = row.get("Nombre Docente")
-
-                    # Ignorar filas vacías
-                    if pd.isna(codigo):
-                        continue
-
-                    codigo = str(codigo).strip()
-
-                    # ─────────────────────────────
-                    # CREAR O BUSCAR DOCENTE
-                    # ─────────────────────────────
-                    docente_obj = None
-
-                    if not pd.isna(codigo_docente):
-                        docente_codigo = str(codigo_docente).strip()
-                        docente_nombre = (
-                            str(nombre_docente).strip()
-                            if not pd.isna(nombre_docente)
-                            else "SIN NOMBRE"
-                        )
-
-                        docente_obj, docente_created = Docente.objects.get_or_create(
-                            codigo=docente_codigo,
-                            defaults={
-                                "nombre": docente_nombre,
-                                "tipo_vinculacion": "DOCENTE CATEDRA"
-                            }
-                        )
-
-                        if docente_created:
-                            docentes_creados += 1
-
-                    # ─────────────────────────────
-                    # CREAR O ACTUALIZAR CURSO
-                    # ─────────────────────────────
-                    curso_obj, created = Curso.objects.update_or_create(
-                        codigo=codigo,
-                        defaults={
-                            "nombre": str(nombre).strip() if not pd.isna(nombre) else "SIN NOMBRE",
-                            "horario": str(horario).strip() if not pd.isna(horario) else None,
-                            "num_matriculados": int(matriculados) if not pd.isna(matriculados) else 0,
-                            "docente": docente_obj
-                        }
-                    )
-
-                    if created:
-                        creados += 1
-                    else:
-                        actualizados += 1
-
-            return JsonResponse({
-                "message": "HU-04 procesada correctamente",
-                "cursos_creados": creados,
-                "cursos_actualizados": actualizados,
-                "docentes_creados": docentes_creados
+        except Docente.DoesNotExist:
+            errores.append({
+                "fila": fila_num,
+                "campo": "Código Docente",
+                "valor": codigo_docente,
+                "mensaje": "El docente no existe."
             })
+            continue
 
-        except Exception as e:
-            import traceback
-            print("ERROR IMPORTACIÓN:")
-            traceback.print_exc()
-            return JsonResponse({"error": str(e)}, status=500)
+        registros_validos.append({
+            "base": base_materia,
+            "grupo": grupo,
+            "nombre": nombre_materia,
+            "docente": docente_obj,
+            "horario": horario,
+            "matriculados": matriculados
+        })
 
-    return JsonResponse({
+    # CANCELAR SI HAY ERRORES
+    if errores:
+        return JsonResponse({
+            "status": "error",
+            "mensaje": "Se encontraron errores.",
+            "total_errores": len(errores),
+            "errores": errores
+        }, status=400)
 
-        "error": "No se envió archivo"
+    # 4. GUARDAR
+    try:
 
-    }, status=400)
+        materias_creadas = 0
+        cursos_creados = 0
+        cursos_actualizados = 0
 
+        with transaction.atomic():
+
+            for fila in registros_validos:
+
+                # CREAR MATERIA SI NO EXISTE
+                materia_obj, creada = Materia.objects.get_or_create(
+                    codigo=fila["base"],
+                    defaults={
+                        "nombre": fila["nombre"]
+                    }
+                )
+
+                if creada:
+                    materias_creadas += 1
+
+                # CREAR / ACTUALIZAR CURSO
+                curso_obj, created = Curso.objects.update_or_create(
+                    materia=materia_obj,
+                    grupo=fila["grupo"],
+                    defaults={
+                        "docente": fila["docente"],
+                        "horario": fila["horario"],
+                        "cantidad_matriculados":
+                            fila["matriculados"]
+                    }
+                )
+
+                if created:
+                    cursos_creados += 1
+                else:
+                    cursos_actualizados += 1
+
+        return JsonResponse({
+
+            "status": "success",
+            "mensaje": "Relación de materias importada.",
+
+            "materias_creadas": materias_creadas,
+            "cursos_creados": cursos_creados,
+            "cursos_actualizados": cursos_actualizados,
+            "total_procesado": len(registros_validos)
+
+        })
+
+    except Exception as e:
+
+        traceback.print_exc()
+
+        return JsonResponse({
+            "status": "error",
+            "mensaje": str(e)
+        }, status=500)
 
 @csrf_exempt
 def importar_docentes(request):
