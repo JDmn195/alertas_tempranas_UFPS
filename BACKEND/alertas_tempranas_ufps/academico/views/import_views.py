@@ -18,7 +18,6 @@ from django.conf import settings
 
 from academico.models import Curso, Docente, Estudiante, Nota, Periodo
 
-@csrf_exempt
 def importar_estudiantes_dirplan(request):
     """
     HU-01: IMPORTAR REPORTE GENERAL DE ESTUDIANTES DESDE DIRPLAN
@@ -44,28 +43,11 @@ def importar_estudiantes_dirplan(request):
 
 @csrf_exempt
 def importar_historial_academico(request):
-    """
-    HU-02: IMPORTAR REPORTES INDIVIDUALES DE CADA ESTUDIANTE
-
-    Objetivo: Construir el historial académico detallado (materias y notas).
-
-    Flujo:
-    1. Recibe un archivo Excel/CSV con columnas:
-       (Periodo, Materia Base, Codigo Materia, Nombre Materia, Tipo Nota, Definitiva, Creditos)
-    2. Extrae el código del estudiante del nombre del archivo (ej: "Relacion de Notas 1152430").
-    3. Valida que el estudiante, cada curso y cada periodo existan en la BD.
-    4. Si todo es válido, crea los registros de Matrícula de forma atómica.
-    5. Si algo falla, no guarda nada y retorna el detalle de errores.
-
-    Modelos involucrados: Estudiante, Nota, Curso, Periodo.
-    """
     import re
     import traceback
     from django.db import transaction
 
-    # ─────────────────────────────────────────────
     # 1. VALIDAR MÉTODO Y PRESENCIA DE ARCHIVO
-    # ─────────────────────────────────────────────
     if request.method != 'POST':
         return JsonResponse(
             {"error": "Método no permitido. Se espera POST."},
@@ -89,9 +71,7 @@ def importar_historial_academico(request):
             status=400
         )
 
-    # ─────────────────────────────────────────────
     # 2. EXTRAER CÓDIGO DEL ESTUDIANTE DEL NOMBRE
-    # ─────────────────────────────────────────────
     match = re.search(r'(\d{5,10})', nombre_archivo)
     if not match:
         return JsonResponse(
@@ -104,9 +84,7 @@ def importar_historial_academico(request):
 
     codigo_estudiante = match.group(1)
 
-    # ─────────────────────────────────────────────
     # 3. VALIDAR QUE EL ESTUDIANTE EXISTA
-    # ─────────────────────────────────────────────
     try:
         estudiante = Estudiante.objects.get(codigo=codigo_estudiante)
     except Estudiante.DoesNotExist:
@@ -119,9 +97,7 @@ def importar_historial_academico(request):
             status=404
         )
 
-    # ─────────────────────────────────────────────
     # 4. LEER EL ARCHIVO CON PANDAS
-    # ─────────────────────────────────────────────
     try:
         if extension == '.csv':
             df = pd.read_csv(archivo)
@@ -153,17 +129,14 @@ def importar_historial_academico(request):
             status=400
         )
 
-    # ─────────────────────────────────────────────
     # 5. VALIDACIÓN ESTRICTA DE EXISTENCIA
-    #    (Periodos y Cursos deben existir previamente)
-    # ─────────────────────────────────────────────
     errores = []
     filas_validas = []
 
     for index, row in df.iterrows():
-        fila_num = index + 2  # +2 porque fila 1 es el encabezado
+        fila_num = index + 2
 
-        # --- Parsear Periodo (ej: "2024-1" -> anio=2024, semestre=1) ---
+        # --- Parsear Periodo ---
         periodo_raw = str(row.get('Periodo', '')).strip()
         periodo_match = re.match(r'^(\d{4})\s*[-/]\s*([12])$', periodo_raw)
 
@@ -205,17 +178,31 @@ def importar_historial_academico(request):
             })
             continue
 
-        try:
-            curso_obj = Curso.objects.get(codigo=codigo_materia)
-        except Curso.DoesNotExist:
+        # Extraer base y grupo si vienen concatenados (ej: 1150114A o 1150114-A)
+        match_codigo = re.match(r'^(\d+)(.*)$', codigo_materia)
+        if match_codigo:
+            base_materia = match_codigo.group(1)
+            grupo_str = match_codigo.group(2).strip('- ').upper()
+        else:
+            base_materia = codigo_materia
+            grupo_str = ''
+
+        curso_obj = None
+        if grupo_str:
+            curso_obj = Curso.objects.filter(materia__codigo=base_materia, grupo=grupo_str).first()
+        
+        # Si no se encontró por grupo específico o no se proveyó grupo, usar el primer curso disponible
+        if not curso_obj:
+            curso_obj = Curso.objects.filter(materia__codigo=base_materia).first()
+
+        if not curso_obj:
             nombre_materia = str(row.get('Nombre Materia', '')).strip()
             errores.append({
                 "fila": fila_num,
                 "campo": "Codigo Materia",
                 "valor": codigo_materia,
-                "mensaje": f"El curso '{codigo_materia} - {nombre_materia}' "
-                           f"no existe en el sistema. Debe ser creado "
-                           f"manualmente."
+                "mensaje": f"No existe ningún curso con la materia base '{base_materia} - {nombre_materia}' "
+                           f"en el sistema. Debe ser creado manualmente."
             })
             continue
 
@@ -259,13 +246,10 @@ def importar_historial_academico(request):
             "estudiante": estudiante,
             "curso": curso_obj,
             "periodo": periodo_obj,
-            "nota": nota,
-            "estado": estado,
+            "definitiva": nota,
         })
 
-    # ─────────────────────────────────────────────
-    # 6. SI HAY ERRORES, ABORTAR SIN GUARDAR NADA
-    # ─────────────────────────────────────────────
+    # 6. CANCELACION POR ERRORES
     if errores:
         return JsonResponse({
             "status": "error",
@@ -278,9 +262,7 @@ def importar_historial_academico(request):
             "errores": errores
         }, status=400)
 
-    # ─────────────────────────────────────────────
     # 7. GUARDAR DE FORMA ATÓMICA
-    # ─────────────────────────────────────────────
     try:
         creados = 0
         actualizados = 0
@@ -292,7 +274,7 @@ def importar_historial_academico(request):
                     curso=fila["curso"],
                     periodo=fila["periodo"],
                     defaults={
-                        "definitiva": fila["nota"],
+                        "definitiva": fila["definitiva"],
                     }
                 )
                 if created:
@@ -319,7 +301,6 @@ def importar_historial_academico(request):
         }, status=500)
 
 
-@csrf_exempt
 def importar_oferta_academica(request):
     """
     HU-03: IMPORTAR LISTADO GENERAL DE CURSOS Y DOCENTES
