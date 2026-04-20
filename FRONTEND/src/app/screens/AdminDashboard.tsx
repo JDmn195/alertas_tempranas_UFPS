@@ -126,9 +126,9 @@ export default function AdminDashboard() {
           endpoint
         );
 
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
         const response = await fetch(
-
-          `http://localhost:8000/api/academico/${endpoint}`,
+          `${baseUrl}/api/academico/${endpoint}`,
 
           {
             method: "POST",
