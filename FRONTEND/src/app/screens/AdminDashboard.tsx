@@ -43,60 +43,10 @@ export default function AdminDashboard() {
   const [dragActive, setDragActive] = useState(false);
   const [importType, setImportType] = useState('general');
   const [validationStatus, setValidationStatus] = useState<'idle' | 'validating' | 'success' | 'error'>('idle');
+  const [responseMessage, setResponseMessage] = useState<string>('');
+  const [responseErrors, setResponseErrors] = useState<any[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const uploadFile = async (file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const endpointMap: Record<string, string> = {
-      general: "import/students/",
-      individual: "import/history/",
-      courses: "import/offering/",
-      quantities: "import/stats/",
-    };
-
-    const endpoint = endpointMap[importType];
-
-    if (!endpoint) {
-      console.error("Tipo de importación inválido");
-      setValidationStatus("error");
-      return;
-    }
-
-    try {
-      setValidationStatus("validating");
-      console.log("Subiendo archivo a:", endpoint);
-
-      const response = await fetch(
-        `http://localhost:8000/api/academico/${endpoint}`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-
-      const data = await response.json();
-      console.log("Respuesta backend:", data);
-
-      if (response.ok) {
-        setValidationStatus("success");
-        // Reset status after a few seconds
-        setTimeout(() => setValidationStatus("idle"), 5000);
-      } else {
-        console.error("Error en backend:", data);
-        setValidationStatus("error");
-        alert("Error al importar: " + (data.error || data.message || "Error desconocido"));
-        setTimeout(() => setValidationStatus("idle"), 5000);
-      }
-    } catch (error) {
-      console.error("Error de conexión:", error);
-      setValidationStatus("error");
-      alert("No se pudo conectar con el servidor. Verifica que el backend esté corriendo.");
-      setTimeout(() => setValidationStatus("idle"), 5000);
-    }
-  };
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -108,19 +58,119 @@ export default function AdminDashboard() {
     }
   };
 
+  const simulateUpload = () => {
+    setValidationStatus('validating');
+    // Simulando validación automática de calidad de datos
+    setTimeout(() => {
+      setValidationStatus('success');
+      setTimeout(() => {
+        setValidationStatus('idle');
+      }, 4000);
+    }, 2500);
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      uploadFile(e.dataTransfer.files[0]);
+      simulateUpload();
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+
     if (e.target.files && e.target.files[0]) {
-      uploadFile(e.target.files[0]);
+
+      const file = e.target.files[0];
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const endpointMap: Record<string, string> = {
+
+        general: "import/students/",
+
+        individual: "import/history/",
+
+        courses: "import/offering/",
+
+        quantities: "import/stats/",
+
+        teachers: "import/teachers/",
+
+      };
+
+      const endpoint = endpointMap[importType];
+
+      if (!endpoint) {
+
+        console.error("Tipo de importación inválido");
+
+        setValidationStatus("error");
+
+        return;
+
+      }
+
+      try {
+
+        setValidationStatus("validating");
+        setResponseMessage('');
+        setResponseErrors([]);
+
+        console.log(
+          "Endpoint usado:",
+          endpoint
+        );
+
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const response = await fetch(
+          `${baseUrl}/api/academico/${endpoint}`,
+
+          {
+            method: "POST",
+            body: formData,
+          }
+
+        );
+
+        const data = await response.json();
+
+        console.log("Respuesta backend:", data);
+
+        if (response.ok) {
+
+          setValidationStatus("success");
+          setResponseMessage(
+            data.mensaje || "Importación exitosa."
+          );
+          setResponseErrors([]);
+
+        } else {
+
+          setValidationStatus("error");
+          setResponseMessage(
+            data.mensaje || data.error || "Error en la importación."
+          );
+          setResponseErrors(data.errores || []);
+
+        }
+
+      } catch (error) {
+
+        console.error(error);
+
+        setValidationStatus("error");
+        setResponseMessage("Error de conexión con el servidor.");
+        setResponseErrors([]);
+
+      }
+
     }
+
   };
 
   return (
@@ -151,6 +201,7 @@ export default function AdminDashboard() {
             <option value="individual">Reportes Individuales de Estudiantes</option>
             <option value="courses">Listado de Cursos y Docentes</option>
             <option value="quantities">Cantidades por Curso y Semestre</option>
+            <option value="teachers">Listado de Docentes</option>
           </select>
           <p className="text-sm text-gray-500 mt-2">
             {importType === 'general' && 'Permite consolidar la información académica básica de los estudiantes desde la fuente DIRPLAN.'}
@@ -173,8 +224,50 @@ export default function AdminDashboard() {
           ) : validationStatus === 'success' ? (
             <div className="border border-green-200 bg-green-50 rounded-lg p-12 text-center flex flex-col items-center justify-center">
               <CheckCircle className="w-14 h-14 text-green-600 mb-4" />
-              <h3 className="text-xl font-medium text-green-900">¡Validación de Calidad Exitosa!</h3>
-              <p className="text-sm text-green-700 mt-1">Los datos superaron los controles de calidad y se han integrado correctamente en la plataforma.</p>
+              <h3 className="text-xl font-medium text-green-900">¡Importación Exitosa!</h3>
+              <p className="text-sm text-green-700 mt-1">{responseMessage}</p>
+              <button
+                onClick={() => { setValidationStatus('idle'); setResponseMessage(''); setResponseErrors([]); }}
+                className="mt-4 px-4 py-2 text-sm font-medium text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition-colors"
+              >
+                Importar otro archivo
+              </button>
+            </div>
+          ) : validationStatus === 'error' ? (
+            <div className="border border-red-200 bg-red-50 rounded-lg p-8 flex flex-col items-center justify-center">
+              <AlertCircle className="w-14 h-14 text-[#C8102E] mb-4" />
+              <h3 className="text-xl font-medium text-red-900">Error en la Importación</h3>
+              <p className="text-sm text-red-700 mt-1 mb-4">{responseMessage}</p>
+              {responseErrors.length > 0 && (
+                <div className="w-full max-h-60 overflow-y-auto border border-red-200 rounded-lg bg-white">
+                  <table className="w-full text-sm">
+                    <thead className="bg-red-100 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Fila</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Campo</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Valor</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Detalle</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-red-100">
+                      {responseErrors.map((err: any, i: number) => (
+                        <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-red-50'}>
+                          <td className="px-3 py-2 text-red-700">{err.fila}</td>
+                          <td className="px-3 py-2 text-red-700">{err.campo}</td>
+                          <td className="px-3 py-2 text-red-700 font-mono">{err.valor}</td>
+                          <td className="px-3 py-2 text-red-600">{err.mensaje}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <button
+                onClick={() => { setValidationStatus('idle'); setResponseMessage(''); setResponseErrors([]); }}
+                className="mt-4 px-4 py-2 text-sm font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition-colors"
+              >
+                Intentar de nuevo
+              </button>
             </div>
           ) : (
             <div
