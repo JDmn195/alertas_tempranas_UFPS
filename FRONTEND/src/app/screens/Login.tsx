@@ -6,10 +6,41 @@ export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate('/dashboard/admin/import');
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${baseUrl}/api/usuarios/login/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Guardar sesión en localStorage
+        localStorage.setItem('user', JSON.stringify(data));
+        
+        // Redirigir según el rol (de momento todos al mismo)
+        navigate('/dashboard/admin/import');
+      } else {
+        setError(data.error || 'Error al iniciar sesión.');
+      }
+    } catch (err) {
+      console.error('Error de login:', err);
+      setError('Error de conexión con el servidor.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -38,6 +69,11 @@ export default function Login() {
             <h2 className="text-xl font-semibold text-gray-900 mb-6">Iniciar sesión en tu cuenta</h2>
 
             <form onSubmit={handleSubmit} className="space-y-5">
+              {error && (
+                <div className="p-3 bg-red-100 border border-red-200 text-red-700 text-sm rounded-lg">
+                  {error}
+                </div>
+              )}
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                   Correo electrónico
@@ -48,7 +84,8 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
+                  disabled={isLoading}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent disabled:opacity-50"
                   placeholder="usuario@ufps.edu.co"
                 />
               </div>
@@ -63,7 +100,8 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
+                  disabled={isLoading}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent disabled:opacity-50"
                   placeholder="••••••••"
                 />
               </div>
@@ -81,8 +119,8 @@ export default function Login() {
                 </a>
               </div>
 
-              <Button type="submit" fullWidth size="lg">
-                Iniciar sesión
+              <Button type="submit" fullWidth size="lg" disabled={isLoading}>
+                {isLoading ? 'Iniciando sesión...' : 'Iniciar sesión'}
               </Button>
             </form>
           </div>
