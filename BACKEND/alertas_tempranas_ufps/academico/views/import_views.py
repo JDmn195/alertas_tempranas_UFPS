@@ -419,8 +419,9 @@ def importar_oferta_academica(request):
 
         codigo_materia_grupo = str(row['Materia']).strip()
 
-        # Separar base y grupo
-        match = re.match(r'^(\d+)([A-Z]?)$', codigo_materia_grupo)
+        # Separar base y grupo (ej: 1150114A)
+        # Identificamos la parte numérica inicial como 'base' y el resto como 'grupo'
+        match = re.match(r'^(\d+)(.*)$', codigo_materia_grupo)
 
         if not match:
             errores.append({
@@ -499,6 +500,7 @@ def importar_oferta_academica(request):
     try:
 
         materias_creadas = 0
+        materias_actualizadas = 0
         cursos_creados = 0
         cursos_actualizados = 0
 
@@ -506,8 +508,8 @@ def importar_oferta_academica(request):
 
             for fila in registros_validos:
 
-                # CREAR MATERIA SI NO EXISTE
-                materia_obj, creada = Materia.objects.get_or_create(
+                # CREAR / ACTUALIZAR MATERIA
+                materia_obj, creada = Materia.objects.update_or_create(
                     codigo=fila["base"],
                     defaults={
                         "nombre": fila["nombre"]
@@ -516,6 +518,8 @@ def importar_oferta_academica(request):
 
                 if creada:
                     materias_creadas += 1
+                else:
+                    materias_actualizadas += 1
 
                 # CREAR / ACTUALIZAR CURSO
                 curso_obj, created = Curso.objects.update_or_create(
@@ -537,9 +541,10 @@ def importar_oferta_academica(request):
         return JsonResponse({
 
             "status": "success",
-            "mensaje": "Relación de materias importada.",
+            "mensaje": "Relación de materias/oferta académica procesada correctamente.",
 
             "materias_creadas": materias_creadas,
+            "materias_actualizadas": materias_actualizadas,
             "cursos_creados": cursos_creados,
             "cursos_actualizados": cursos_actualizados,
             "total_procesado": len(registros_validos)
