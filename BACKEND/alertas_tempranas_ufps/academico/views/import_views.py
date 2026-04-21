@@ -59,7 +59,7 @@ def importar_estudiantes_dirplan(request):
                 'tipo_doc': ['tipo doc', 'tipo documento', 'tipo_doc'],
                 'documento': ['documento', 'cedula', 'identificacion', 'documento_identidad', 'numero_documento'],
                 'ingreso': ['ingreso', 'año ingreso', 'anio ingreso', 'periodo ingreso'],
-                'promedio': ['promedio', 'promedio acumulado', 'promedio_acumulado', 'prom'],
+                'promedio': ['promedio', 'promedio acumulado', 'promedio_accumulado', 'prom'],
                 'semestre': ['semestre', 'semestre actual', 'semestre matriculado'],
                 'pensum': ['pensum', 'pensum_estudiante'],
                 'estado_matricula': ['estado matricula', 'estado', 'estado_matricula'],
@@ -340,175 +340,394 @@ def importar_historial_academico(request):
 
 
 @csrf_exempt
-def importar_estadisticas_carga(request):
-    if request.method == 'POST' and request.FILES.get('file'):
-        excel_file = request.FILES['file']
-        try:
-            df = pd.read_excel(excel_file)
-            df.columns = df.columns.str.strip()
-            creados = 0
-            with transaction.atomic():
-                for index, row in df.iterrows():
-                    cod_materia = str(row.get("Materia")).strip()
-                    if pd.isna(cod_materia): continue
-                    
-                    materia_obj, _ = Materia.objects.get_or_create(
-                        codigo=cod_materia,
-                        defaults={"nombre": str(row.get("Nombre", "SIN NOMBRE")).strip()}
-                    )
-                    
-                    docente_obj = None
-                    if not pd.isna(row.get("Código Docente")):
-                        docente_obj, _ = Docente.objects.get_or_create(
-                            codigo=str(row.get("Código Docente")).strip(),
-                            defaults={"nombre": str(row.get("Nombre Docente", "SIN NOMBRE")).strip(), "usuario_id": 1} # Mock
-                        )
+def importar_oferta_academica(request):   
+    # 1. VALIDAR MÉTODO
+    if request.method != 'POST':
+        return JsonResponse(
+            {"error": "Método no permitido. Use POST."},
+            status=405
+        )
 
-                    Curso.objects.update_or_create(
-                        materia=materia_obj,
-                        grupo=str(row.get("Grupo", "A")).strip()[:2],
-                        defaults={
-                            "docente": docente_obj,
-                            "horario": str(row.get("Horario")).strip(),
-                            "cantidad_matriculados": int(row.get("# Matriculados", 0))
-                        }
-                    )
-                    creados += 1
-            return JsonResponse({"message": "OK", "creados": creados})
-        except Exception as e:
-            return JsonResponse({"error": str(e)}, status=500)
-    return JsonResponse({"error": "No file"}, status=400)
-
-
-@csrf_exempt
-def importar_docentes(request):
-    if request.method != 'POST' or not request.FILES.get('file'):
-        return JsonResponse({"error": "Bad request"}, status=400)
-    
-    try:
-        df = pd.read_excel(request.FILES['file'])
-        df.columns = df.columns.str.strip()
-        
-        col_codigo = next((c for c in df.columns if 'Docente' in c and ('digo' in c or 'igo' in c)), None)
-        col_nombre = next((c for c in df.columns if 'Nombre' in c and 'Docente' in c), None)
-        col_vinculacion = next((c for c in df.columns if 'Vinculaci' in c), None)
-        col_depto = next((c for c in df.columns if 'Departamento' in c), None)
-        col_correo_p = next((c for c in df.columns if 'Personal' in c), None)
-        col_correo_i = next((c for c in df.columns if 'Institucional' in c), None)
-        col_celular = next((c for c in df.columns if 'Celular' in c), None)
-
-        if not col_codigo or not col_nombre:
-            return JsonResponse({"status": "error", "mensaje": "Columnas Código o Nombre no encontradas."}, status=400)
-
-        creados = 0
-        actualizados = 0
-        usuarios_creados = 0
-        errores = []
-
-        with transaction.atomic():
-            for index, row in df.iterrows():
-                fila_num = index + 2
-                if index % 50 == 0: reset_queries()
-                
-                codigo_raw = row.get(col_codigo)
-                if pd.isna(codigo_raw): continue
-                codigo = str(codigo_raw).strip().lstrip("'")
-
-                nombre = str(row.get(col_nombre, '')).strip()
-                tipo_vinculacion = str(row.get(col_vinculacion, 'DOCENTE CATEDRA')).strip() if col_vinculacion else 'DOCENTE CATEDRA'
-                if tipo_vinculacion not in ['DOCENTE PLANTA', 'DOCENTE CATEDRA']: tipo_vinculacion = 'DOCENTE CATEDRA'
-                
-                depto = str(row.get(col_depto, '')).strip() if col_depto else ''
-                correo_p = str(row.get(col_correo_p, '')).strip() if not pd.isna(row.get(col_correo_p)) else None
-                correo_i = str(row.get(col_correo_i, '')).strip() if not pd.isna(row.get(col_correo_i)) else None
-                celular = str(row.get(col_celular, '')).strip() if not pd.isna(row.get(col_celular)) else None
-
-                try:
-                    correo_u = correo_i or correo_p or f"{codigo}@ufps.edu.co"
-                    usuario_obj, u_creado = Usuario.objects.get_or_create(
-                        correo=correo_u,
-                        defaults={"nombre": nombre, "rol": "DOCENTE", "contrasena": codigo, "activo": True}
-                    )
-                    if u_creado: usuarios_creados += 1
-
-                    _, creado = Docente.objects.update_or_create(
-                        codigo=codigo,
-                        defaults={
-                            "nombre": nombre, "tipo_vinculacion": tipo_vinculacion, "departamento": depto,
-                            "correo_personal": correo_p, "correo_institucional": correo_i, "celular": celular,
-                            "usuario": usuario_obj,
-                        }
-                    )
-                    if creado: creados += 1
-                    else: actualizados += 1
-                except Exception as e:
-                    errores.append({"fila": fila_num, "codigo": codigo, "error": str(e)})
-
-        return JsonResponse({
-            "status": "success" if not errores else "parcial",
-            "mensaje": "Importación de docentes completada.",
-            "usuarios_creados": usuarios_creados,
-            "docentes_creados": creados,
-            "docentes_actualizados": actualizados,
-            "errores": errores,
-        })
-    except Exception as e:
-        traceback.print_exc()
-        return JsonResponse({"status": "error", "message": str(e)}, status=500)
-
-
-@csrf_exempt
-def importar_oferta_academica(request):
-    if request.method != 'POST': return JsonResponse({"error": "Use POST"}, status=405)
     archivo = request.FILES.get('file')
-    if not archivo: return JsonResponse({"error": "No file"}, status=400)
-    
-    try:
-        extension = os.path.splitext(archivo.name)[1].lower()
-        df = pd.read_csv(archivo, dtype={'Materia': str, 'Código Docente': str}) if extension == '.csv' else pd.read_excel(archivo, dtype={'Materia': str, 'Código Docente': str})
-        df.columns = df.columns.str.strip()
-        
-        columnas_requeridas = ['Materia', 'Nombre', 'Código Docente', 'Nombre Docente', 'Horario', '# Matriculados']
-        faltantes = [c for c in columnas_requeridas if c not in df.columns]
-        if faltantes: return JsonResponse({"status": "error", "mensaje": "Faltan columnas.", "faltantes": faltantes}, status=400)
 
-        df = df.dropna(subset=['Materia'])
+    if not archivo:
+        return JsonResponse(
+            {"error": "No se envió ningún archivo."},
+            status=400
+        )
+
+    # VALIDAR EXTENSIÓN
+    nombre_archivo = archivo.name
+    extension = os.path.splitext(nombre_archivo)[1].lower()
+
+    if extension not in ['.xlsx', '.xls', '.csv']:
+        return JsonResponse(
+            {"error": f"Formato no soportado: {extension}"},
+            status=400
+        )
+
+    # 2. LEER ARCHIVO
+    try:
+        if extension == '.csv':
+            df = pd.read_csv(
+                archivo,
+                dtype={
+                    'Materia': str,
+                    'Código Docente': str
+                }
+            )
+        else:
+            df = pd.read_excel(
+                archivo,
+                dtype={
+                    'Materia': str,
+                    'Código Docente': str
+                }
+            )
+
+    except Exception as e:
+        return JsonResponse(
+            {"error": f"Error leyendo archivo: {str(e)}"},
+            status=400
+        )
+
+    # LIMPIAR COLUMNAS
+    df.columns = df.columns.str.strip()
+
+    columnas_requeridas = [
+        'Materia',
+        'Nombre',
+        'Código Docente',
+        'Nombre Docente',
+        'Horario',
+        '# Matriculados'
+    ]
+
+    faltantes = [
+        c for c in columnas_requeridas
+        if c not in df.columns
+    ]
+
+    if faltantes:
+        return JsonResponse({
+            "status": "error",
+            "mensaje": "El archivo no tiene el formato de Oferta Académica esperado.",
+            "error": "Faltan columnas requeridas.",
+            "columnas_faltantes": faltantes,
+            "columnas_encontradas": list(df.columns)
+        }, status=400)
+
+    # ELIMINAR FILAS VACÍAS
+    df = df.dropna(subset=['Materia'])
+
+    errores = []
+    registros_validos = []
+
+    # 3. VALIDAR FILAS
+    for index, row in df.iterrows():
+
+        fila_num = index + 2
+
+        codigo_materia_grupo = str(row['Materia']).strip()
+
+        # Separar base y grupo (ej: 1150114A)
+        # Identificamos la parte numérica inicial como 'base' y el resto como 'grupo'
+        match = re.match(r'^(\d+)(.*)$', codigo_materia_grupo)
+
+        if not match:
+            errores.append({
+                "fila": fila_num,
+                "campo": "Materia",
+                "valor": codigo_materia_grupo,
+                "mensaje": "Formato inválido."
+            })
+            continue
+
+        base_materia = match.group(1)
+        grupo = match.group(2)
+
+        if grupo == '':
+            errores.append({
+                "fila": fila_num,
+                "campo": "Grupo",
+                "valor": codigo_materia_grupo,
+                "mensaje": "No se encontró grupo."
+            })
+            continue
+
+        nombre_materia = str(row['Nombre']).strip()
+
+        codigo_docente = str(
+            row['Código Docente']
+        ).strip()
+
+        nombre_docente = str(
+            row['Nombre Docente']
+        ).strip()
+
+        horario = str(row['Horario']).strip()
+
+        matriculados_raw = row['# Matriculados']
+
+        try:
+            matriculados = int(matriculados_raw)
+        except:
+            matriculados = 0
+
+        # VALIDAR DOCENTE
+        try:
+            docente_obj = Docente.objects.get(
+                codigo=codigo_docente
+            )
+
+        except Docente.DoesNotExist:
+            errores.append({
+                "fila": fila_num,
+                "campo": "Código Docente",
+                "valor": codigo_docente,
+                "mensaje": "El docente no existe."
+            })
+            continue
+
+        registros_validos.append({
+            "base": base_materia,
+            "grupo": grupo,
+            "nombre": nombre_materia,
+            "docente": docente_obj,
+            "horario": horario,
+            "matriculados": matriculados
+        })
+
+    # CANCELAR SI HAY ERRORES
+    if errores:
+        return JsonResponse({
+            "status": "error",
+            "mensaje": "Se encontraron errores.",
+            "total_errores": len(errores),
+            "errores": errores
+        }, status=400)
+
+    # 4. GUARDAR
+    try:
+
         materias_creadas = 0
+        materias_actualizadas = 0
         cursos_creados = 0
         cursos_actualizados = 0
 
         with transaction.atomic():
-            for index, row in df.iterrows():
-                codigo_raw = str(row['Materia']).strip()
-                match = re.match(r'^(\d+)([A-Z]?)$', codigo_raw)
-                if not match: continue
-                
-                base = match.group(1)
-                grupo = match.group(2)
-                if not grupo: continue
 
-                docente_cod = str(row['Código Docente']).strip()
-                try:
-                    docente_obj = Docente.objects.get(codigo=docente_cod)
-                except Docente.DoesNotExist: continue
+            for fila in registros_validos:
 
-                materia_obj, creada = Materia.objects.get_or_create(codigo=base, defaults={"nombre": str(row['Nombre']).strip()})
-                if creada: materias_creadas += 1
-
-                curso_obj, created = Curso.objects.update_or_create(
-                    materia=materia_obj, grupo=grupo,
+                # CREAR / ACTUALIZAR MATERIA
+                materia_obj, creada = Materia.objects.update_or_create(
+                    codigo=fila["base"],
                     defaults={
-                        "docente": docente_obj, "horario": str(row['Horario']).strip(),
-                        "cantidad_matriculados": int(row.get('# Matriculados', 0))
+                        "nombre": fila["nombre"]
                     }
                 )
-                if created: cursos_creados += 1
-                else: cursos_actualizados += 1
+
+                if creada:
+                    materias_creadas += 1
+                else:
+                    materias_actualizadas += 1
+
+                # CREAR / ACTUALIZAR CURSO
+                curso_obj, created = Curso.objects.update_or_create(
+                    materia=materia_obj,
+                    grupo=fila["grupo"],
+                    defaults={
+                        "docente": fila["docente"],
+                        "horario": fila["horario"],
+                        "cantidad_matriculados":
+                            fila["matriculados"]
+                    }
+                )
+
+                if created:
+                    cursos_creados += 1
+                else:
+                    cursos_actualizados += 1
 
         return JsonResponse({
-            "status": "success", "materias_creadas": materias_creadas,
-            "cursos_creados": cursos_creados, "cursos_actualizados": cursos_actualizados
+
+            "status": "success",
+            "mensaje": "Relación de materias/oferta académica procesada correctamente.",
+
+            "materias_creadas": materias_creadas,
+            "materias_actualizadas": materias_actualizadas,
+            "cursos_creados": cursos_creados,
+            "cursos_actualizados": cursos_actualizados,
+            "total_procesado": len(registros_validos)
+
         })
+
     except Exception as e:
+
         traceback.print_exc()
-        return JsonResponse({"status": "error", "mensaje": str(e)}, status=500)
+
+        return JsonResponse({
+            "status": "error",
+            "mensaje": str(e)
+        }, status=500)
+
+
+@csrf_exempt
+def importar_docentes(request):
+    """
+    
+    """
+    from django.db import transaction
+    from usuarios.models import Usuario
+
+    # ─────────────────────────────────────────────
+    # 1. VALIDAR MÉTODO Y ARCHIVO
+    # ─────────────────────────────────────────────
+    if request.method != 'POST':
+        return JsonResponse(
+            {"error": "Método no permitido. Se espera POST."},
+            status=405
+        )
+
+    archivo = request.FILES.get('file')
+    if not archivo:
+        return JsonResponse(
+            {"error": "No se envió ningún archivo."},
+            status=400
+        )
+
+    extension = os.path.splitext(archivo.name)[1].lower()
+    if extension not in ['.xlsx', '.xls']:
+        return JsonResponse(
+            {"error": f"Formato no soportado: '{extension}'. Se aceptan .xlsx, .xls"},
+            status=400
+        )
+
+    # ─────────────────────────────────────────────
+    # 2. LEER ARCHIVO Y VALIDAR FORMATO
+    # ────────────────────────────────────────────
+    try:
+        df = pd.read_excel(archivo)
+        df.columns = df.columns.str.strip()
+    except Exception as e:
+        return JsonResponse(
+            {"error": f"Error al leer el archivo: {str(e)}"},
+            status=400
+        )
+
+    # 1. Detectar columnas dinámicamente para tolerar caracteres especiales
+    col_codigo      = next((c for c in df.columns if 'Docente' in c and ('digo' in c or 'igo' in c)), None)
+    col_nombre      = next((c for c in df.columns if 'Nombre' in c and 'Docente' in c), None)
+    col_vinculacion = next((c for c in df.columns if 'Vinculaci' in c), None)
+    col_depto       = next((c for c in df.columns if 'Departamento' in c), None)
+    col_correo_p    = next((c for c in df.columns if 'Personal' in c), None)
+    col_correo_i    = next((c for c in df.columns if 'Institucional' in c), None)
+    col_celular     = next((c for c in df.columns if 'Celular' in c), None)
+
+    # 2. VALIDACIÓN DE FIRMA (Evitar confusión con Cursos o Historial)
+    # Si tiene la columna 'Materia', probablemente es un archivo de Cursos u Oferta Académica
+    es_otro_archivo = any(c for c in df.columns if 'Materia' in c or 'Horario' in c)
+
+    if es_otro_archivo:
+        return JsonResponse({
+            "status": "error",
+            "mensaje": "El archivo parece ser un reporte de Cursos u Oferta Académica.",
+            "error": "Se detectó la columna 'Materia' o 'Horario', las cuales no pertenecen al formato de Docentes."
+        }, status=400)
+
+    # 3. VERIFICAR COLUMNAS MÍNIMAS
+    if not col_codigo or not col_nombre:
+        return JsonResponse({
+            "status": "error",
+            "mensaje": "No se encontraron las columnas de Código o Nombre del docente.",
+            "encontradas": list(df.columns)
+        }, status=400)
+
+    # ─────────────────────────────────────────────
+    # 3. PROCESAR CADA FILA
+    # ─────────────────────────────────────────────
+    creados          = 0
+    actualizados     = 0
+    usuarios_creados = 0
+    errores          = []
+
+    with transaction.atomic():
+        for index, row in df.iterrows():
+            fila_num = index + 2
+
+            # Limpiar memoria de queries cada 50 filas
+            if index % 50 == 0:
+                reset_queries()
+
+            # ── Leer y limpiar código ──────────────────────────────────
+            codigo_raw = row.get(col_codigo)
+            if pd.isna(codigo_raw):
+                continue
+            codigo = str(codigo_raw).strip().lstrip("'")
+
+            # ── Leer demás campos ──────────────────────────────────────
+            nombre               = str(row.get(col_nombre, '')).strip()
+            tipo_vinculacion     = str(row.get(col_vinculacion, 'DOCENTE CATEDRA')).strip() if col_vinculacion else 'DOCENTE CATEDRA'
+            departamento_nombre  = str(row.get(col_depto, '')).strip() if col_depto else ''
+            correo_personal      = row.get(col_correo_p)  if col_correo_p  else None
+            correo_institucional = row.get(col_correo_i)  if col_correo_i  else None
+            celular              = row.get(col_celular)   if col_celular   else None 
+            
+            # Normalizar tipo de vinculación
+            if tipo_vinculacion not in ['DOCENTE PLANTA', 'DOCENTE CATEDRA']:
+                tipo_vinculacion = 'DOCENTE CATEDRA'
+
+            # Limpiar valores nulos
+            correo_personal      = str(correo_personal).strip()      if correo_personal      is not None and not pd.isna(correo_personal)      else None
+            correo_institucional = str(correo_institucional).strip() if correo_institucional is not None and not pd.isna(correo_institucional) else None
+            celular              = str(celular).strip()              if celular              is not None and not pd.isna(celular)              else None
+            departamento_nombre  = departamento_nombre if departamento_nombre and departamento_nombre != 'nan' else None
+
+            try:
+                # ── 1. Crear o buscar Usuario ──────────────────────
+                correo_usuario = correo_institucional or correo_personal or f"{codigo}@ufps.edu.co"
+
+                usuario_obj, usuario_creado = Usuario.objects.get_or_create(
+                    correo=correo_usuario,
+                    defaults={
+                        "nombre":     nombre,
+                        "rol":        "DOCENTE",
+                        "contrasena": codigo,
+                        "activo":     True,
+                    }
+                )
+                if usuario_creado:
+                    usuarios_creados += 1
+
+                # ── 2. Crear o actualizar Docente ──────────────────
+                _obj, creado = Docente.objects.update_or_create(
+                    codigo=codigo,
+                    defaults={
+                        "nombre":               nombre,
+                        "tipo_vinculacion":     tipo_vinculacion,
+                        "departamento":         departamento_nombre,
+                        "correo_personal":      correo_personal,
+                        "correo_institucional": correo_institucional,
+                        "celular":              celular,
+                        "usuario":              usuario_obj,
+                    }
+                )
+                if creado:
+                    creados += 1
+                else:
+                    actualizados += 1
+
+            except Exception as e:
+                errores.append({"fila": fila_num, "codigo": codigo, "error": str(e)})
+
+    # ─────────────────────────────────────────────
+    # 4. RETORNAR RESUMEN
+    # ─────────────────────────────────────────────
+    return JsonResponse({
+        "status":                "success" if not errores else "parcial",
+        "mensaje":               "Importación de docentes completada.",
+        "usuarios_creados":      usuarios_creados,
+        "docentes_creados":      creados,
+        "docentes_actualizados": actualizados,
+        "errores":               errores,
+    })
