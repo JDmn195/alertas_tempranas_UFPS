@@ -58,15 +58,59 @@ export default function AdminDashboard() {
     }
   };
 
-  const simulateUpload = () => {
-    setValidationStatus('validating');
-    // Simulando validación automática de calidad de datos
-    setTimeout(() => {
-      setValidationStatus('success');
-      setTimeout(() => {
-        setValidationStatus('idle');
-      }, 4000);
-    }, 2500);
+  const uploadFile = async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const endpointMap: Record<string, string> = {
+      general: "import/students/",
+      individual: "import/history/",
+      courses: "import/offering/",
+      teachers: "import/teachers/",
+    };
+
+    const endpoint = endpointMap[importType];
+
+    if (!endpoint) {
+      console.error("Tipo de importación inválido");
+      setValidationStatus("error");
+      return;
+    }
+
+    try {
+      setValidationStatus("validating");
+      setResponseMessage('');
+      setResponseErrors([]);
+
+      console.log("Endpoint usado:", endpoint);
+
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(
+        `${baseUrl}/api/academico/${endpoint}`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+      console.log("Respuesta backend:", data);
+
+      if (response.ok && (data.status === 'success' || data.status === 'parcial')) {
+        setValidationStatus("success");
+        setResponseMessage(data.mensaje || "Importación exitosa.");
+        setResponseErrors([]);
+      } else {
+        setValidationStatus("error");
+        setResponseMessage(data.mensaje || data.error || "La operación no se pudo completar o está pendiente.");
+        setResponseErrors(data.errores || []);
+      }
+    } catch (error) {
+      console.error(error);
+      setValidationStatus("error");
+      setResponseMessage("Error de conexión con el servidor.");
+      setResponseErrors([]);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -74,103 +118,16 @@ export default function AdminDashboard() {
     e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      simulateUpload();
+      uploadFile(e.dataTransfer.files[0]);
     }
   };
 
   const handleFileSelect = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-
     if (e.target.files && e.target.files[0]) {
-
-      const file = e.target.files[0];
-
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const endpointMap: Record<string, string> = {
-
-        general: "import/students/",
-
-        individual: "import/history/",
-
-        courses: "import/offering/",
-
-        quantities: "import/stats/",
-
-        teachers: "import/teachers/",
-
-      };
-
-      const endpoint = endpointMap[importType];
-
-      if (!endpoint) {
-
-        console.error("Tipo de importación inválido");
-
-        setValidationStatus("error");
-
-        return;
-
-      }
-
-      try {
-
-        setValidationStatus("validating");
-        setResponseMessage('');
-        setResponseErrors([]);
-
-        console.log(
-          "Endpoint usado:",
-          endpoint
-        );
-
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        const response = await fetch(
-          `${baseUrl}/api/academico/${endpoint}`,
-
-          {
-            method: "POST",
-            body: formData,
-          }
-
-        );
-
-        const data = await response.json();
-
-        console.log("Respuesta backend:", data);
-
-        if (response.ok) {
-
-          setValidationStatus("success");
-          setResponseMessage(
-            data.mensaje || "Importación exitosa."
-          );
-          setResponseErrors([]);
-
-        } else {
-
-          setValidationStatus("error");
-          setResponseMessage(
-            data.mensaje || data.error || "Error en la importación."
-          );
-          setResponseErrors(data.errores || []);
-
-        }
-
-      } catch (error) {
-
-        console.error(error);
-
-        setValidationStatus("error");
-        setResponseMessage("Error de conexión con el servidor.");
-        setResponseErrors([]);
-
-      }
-
+      uploadFile(e.target.files[0]);
     }
-
   };
 
   return (
@@ -199,15 +156,14 @@ export default function AdminDashboard() {
           >
             <option value="general">Reporte General de Estudiantes (DIRPLAN)</option>
             <option value="individual">Reportes Individuales de Estudiantes</option>
-            <option value="courses">Listado de Cursos y Docentes</option>
-            <option value="quantities">Cantidades por Curso y Semestre</option>
+            <option value="courses">Listado de Cursos</option>
             <option value="teachers">Listado de Docentes</option>
           </select>
           <p className="text-sm text-gray-500 mt-2">
             {importType === 'general' && 'Permite consolidar la información académica básica de los estudiantes desde la fuente DIRPLAN.'}
             {importType === 'individual' && 'Construye de manera detallada el historial académico completo de cada estudiante.'}
             {importType === 'courses' && 'Suministra la información requerida (cursos, asignaturas y docentes) para el análisis académico.'}
-            {importType === 'quantities' && 'Proporciona los datos para analizar la distribución académica y la densidad de cada curso.'}
+            {importType === 'teachers' && 'Profesores.'}
           </p>
         </div>
 

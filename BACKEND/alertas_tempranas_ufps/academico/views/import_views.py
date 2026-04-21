@@ -6,6 +6,7 @@ import pandas as pd
 import os
 import re
 import unicodedata
+import traceback
 from datetime import date
 from django.conf import settings
 from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia
@@ -225,30 +226,116 @@ def importar_historial_academico(request):
         df = pd.read_excel(archivo) if extension != '.csv' else pd.read_csv(archivo)
         df.columns = df.columns.str.strip()
 
+        # Validar que el archivo tenga las columnas esperadas
+        columnas_requeridas = [
+            'Periodo', 'Materia Base', 'Codigo Materia',
+            'Nombre Materia', 'Tipo Nota', 'Definitiva', 'Creditos'
+        ]
+        columnas_faltantes = [
+            col for col in columnas_requeridas if col not in df.columns
+        ]
+        if columnas_faltantes:
+            return JsonResponse({
+                "status": "error",
+                "mensaje": "El archivo no tiene el formato de Historial Académico esperado.",
+                "error": "Faltan columnas requeridas.",
+                "columnas_faltantes": columnas_faltantes,
+                "columnas_encontradas": list(df.columns)
+            }, status=400)
+
+        errores = []
+        filas_validas = []
+
+        for index, row in df.iterrows():
+            fila_num = index + 2
+            
+            if index % 50 == 0:
+                reset_queries()
+
+            # --- Parsear Periodo ---
+            periodo_raw = str(row.get('Periodo', '')).strip()
+            periodo_match = re.match(r'^(\d{4})\s*[-/]\s*([12])$', periodo_raw)
+
+            if not periodo_match:
+                errores.append({
+                    "fila": fila_num, "campo": "Periodo", "valor": periodo_raw,
+                    "mensaje": f"Formato de periodo inválido: '{periodo_raw}'. Se espera 'AAAA-S'."
+                })
+                continue
+
+            anio = int(periodo_match.group(1))
+            semestre = int(periodo_match.group(2))
+
+            try:
+                periodo_obj = Periodo.objects.get(anio=anio, semestre=semestre)
+            except Periodo.DoesNotExist:
+                errores.append({
+                    "fila": fila_num, "campo": "Periodo", "valor": periodo_raw,
+                    "mensaje": f"El periodo '{periodo_raw}' no existe en el sistema."
+                })
+                continue
+
+            # --- Validar Curso ---
+            codigo_materia = str(row.get('Codigo Materia', '')).strip()
+            if pd.isna(row.get('Codigo Materia')) or codigo_materia == '':
+                errores.append({"fila": fila_num, "campo": "Codigo Materia", "mensaje": "Código vacío."})
+                continue
+
+            match_codigo = re.match(r'^(\d+)(.*)$', codigo_materia)
+            if match_codigo:
+                base_materia = match_codigo.group(1)
+                grupo_str = match_codigo.group(2).strip('- ').upper()
+            else:
+                base_materia = codigo_materia
+                grupo_str = ''
+
+            curso_obj = None
+            if grupo_str:
+                curso_obj = Curso.objects.filter(materia__codigo=base_materia, grupo=grupo_str).first()
+            if not curso_obj:
+                curso_obj = Curso.objects.filter(materia__codigo=base_materia).first()
+
+            if not curso_obj:
+                nombre_materia = str(row.get('Nombre Materia', '')).strip()
+                errores.append({
+                    "fila": fila_num, "campo": "Codigo Materia",
+                    "mensaje": f"No existe curso con materia base '{base_materia} - {nombre_materia}'."
+                })
+                continue
+
+            # --- Validar Nota ---
+            nota_raw = row.get('Definitiva')
+            try:
+                nota = float(nota_raw)
+                if not (0.0 <= nota <= 5.0): raise ValueError
+            except:
+                errores.append({"fila": fila_num, "campo": "Definitiva", "mensaje": f"Nota '{nota_raw}' inválida."})
+                continue
+
+            filas_validas.append({
+                "estudiante": estudiante, "curso": curso_obj, "periodo": periodo_obj, "definitiva": nota,
+            })
+
+        if errores:
+            return JsonResponse({
+                "status": "error", "mensaje": "Errores encontrados en el archivo.",
+                "errores": errores
+            }, status=400)
+
         creados = 0
         with transaction.atomic():
-            for index, row in df.iterrows():
-                # Lógica simplificada para ejemplo
-                periodo_raw = str(row.get('Periodo', '')).strip()
-                match_p = re.match(r'^(\d{4})\s*[-/]\s*([12])$', periodo_raw)
-                if match_p:
-                    periodo_obj, _ = Periodo.objects.get_or_create(
-                        anio=int(match_p.group(1)),
-                        semestre=int(match_p.group(2))
-                    )
-                    base_materia = str(row.get('Codigo Materia', '')).strip()[:7]
-                    curso = Curso.objects.filter(materia__codigo=base_materia).first()
-                    if curso:
-                        Nota.objects.update_or_create(
-                            estudiante=estudiante,
-                            curso=curso,
-                            periodo=periodo_obj,
-                            defaults={"definitiva": float(row.get('Definitiva', 0))}
-                        )
-                        creados += 1
+            for fila in filas_validas:
+                Nota.objects.update_or_create(
+                    estudiante=fila["estudiante"],
+                    curso=fila["curso"],
+                    periodo=fila["periodo"],
+                    defaults={"definitiva": fila["definitiva"]}
+                )
+                creados += 1
 
         return JsonResponse({"status": "success", "creados": creados})
     except Exception as e:
+        traceback.print_exc()
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 
@@ -265,7 +352,6 @@ def importar_estadisticas_carga(request):
                     cod_materia = str(row.get("Materia")).strip()
                     if pd.isna(cod_materia): continue
                     
-                    # Asegurar que la materia exista
                     materia_obj, _ = Materia.objects.get_or_create(
                         codigo=cod_materia,
                         defaults={"nombre": str(row.get("Nombre", "SIN NOMBRE")).strip()}
@@ -275,7 +361,7 @@ def importar_estadisticas_carga(request):
                     if not pd.isna(row.get("Código Docente")):
                         docente_obj, _ = Docente.objects.get_or_create(
                             codigo=str(row.get("Código Docente")).strip(),
-                            defaults={"nombre": str(row.get("Nombre Docente", "SIN NOMBRE")).strip(), "usuario_id": 1} # Mock usuario
+                            defaults={"nombre": str(row.get("Nombre Docente", "SIN NOMBRE")).strip(), "usuario_id": 1} # Mock
                         )
 
                     Curso.objects.update_or_create(
@@ -302,35 +388,127 @@ def importar_docentes(request):
     try:
         df = pd.read_excel(request.FILES['file'])
         df.columns = df.columns.str.strip()
+        
+        col_codigo = next((c for c in df.columns if 'Docente' in c and ('digo' in c or 'igo' in c)), None)
+        col_nombre = next((c for c in df.columns if 'Nombre' in c and 'Docente' in c), None)
+        col_vinculacion = next((c for c in df.columns if 'Vinculaci' in c), None)
+        col_depto = next((c for c in df.columns if 'Departamento' in c), None)
+        col_correo_p = next((c for c in df.columns if 'Personal' in c), None)
+        col_correo_i = next((c for c in df.columns if 'Institucional' in c), None)
+        col_celular = next((c for c in df.columns if 'Celular' in c), None)
+
+        if not col_codigo or not col_nombre:
+            return JsonResponse({"status": "error", "mensaje": "Columnas Código o Nombre no encontradas."}, status=400)
+
         creados = 0
+        actualizados = 0
+        usuarios_creados = 0
+        errores = []
+
         with transaction.atomic():
             for index, row in df.iterrows():
-                codigo = str(row.get('Código Docente', row.get('Docente', ''))).strip()
-                if not codigo: continue
+                fila_num = index + 2
+                if index % 50 == 0: reset_queries()
                 
-                # Gestión de Usuario corregida para Docente
-                correo = row.get('Correo Institucional', f"{codigo}@ufps.edu.co")
-                usuario, _ = Usuario.objects.get_or_create(
-                    correo=correo,
-                    defaults={"nombre": str(row.get('Nombre Docente', '')), "rol": "DOCENTE", "contrasena": codigo}
-                )
+                codigo_raw = row.get(col_codigo)
+                if pd.isna(codigo_raw): continue
+                codigo = str(codigo_raw).strip().lstrip("'")
+
+                nombre = str(row.get(col_nombre, '')).strip()
+                tipo_vinculacion = str(row.get(col_vinculacion, 'DOCENTE CATEDRA')).strip() if col_vinculacion else 'DOCENTE CATEDRA'
+                if tipo_vinculacion not in ['DOCENTE PLANTA', 'DOCENTE CATEDRA']: tipo_vinculacion = 'DOCENTE CATEDRA'
                 
-                Docente.objects.update_or_create(
-                    codigo=codigo,
-                    defaults={
-                        "nombre": str(row.get('Nombre Docente', '')),
-                        "tipo_vinculacion": "DOCENTE CATEDRA",
-                        "usuario": usuario
-                    }
-                )
-                creados += 1
-        return JsonResponse({"status": "success", "creados": creados})
+                depto = str(row.get(col_depto, '')).strip() if col_depto else ''
+                correo_p = str(row.get(col_correo_p, '')).strip() if not pd.isna(row.get(col_correo_p)) else None
+                correo_i = str(row.get(col_correo_i, '')).strip() if not pd.isna(row.get(col_correo_i)) else None
+                celular = str(row.get(col_celular, '')).strip() if not pd.isna(row.get(col_celular)) else None
+
+                try:
+                    correo_u = correo_i or correo_p or f"{codigo}@ufps.edu.co"
+                    usuario_obj, u_creado = Usuario.objects.get_or_create(
+                        correo=correo_u,
+                        defaults={"nombre": nombre, "rol": "DOCENTE", "contrasena": codigo, "activo": True}
+                    )
+                    if u_creado: usuarios_creados += 1
+
+                    _, creado = Docente.objects.update_or_create(
+                        codigo=codigo,
+                        defaults={
+                            "nombre": nombre, "tipo_vinculacion": tipo_vinculacion, "departamento": depto,
+                            "correo_personal": correo_p, "correo_institucional": correo_i, "celular": celular,
+                            "usuario": usuario_obj,
+                        }
+                    )
+                    if creado: creados += 1
+                    else: actualizados += 1
+                except Exception as e:
+                    errores.append({"fila": fila_num, "codigo": codigo, "error": str(e)})
+
+        return JsonResponse({
+            "status": "success" if not errores else "parcial",
+            "mensaje": "Importación de docentes completada.",
+            "usuarios_creados": usuarios_creados,
+            "docentes_creados": creados,
+            "docentes_actualizados": actualizados,
+            "errores": errores,
+        })
     except Exception as e:
+        traceback.print_exc()
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
 
 @csrf_exempt
 def importar_oferta_academica(request):
-    """
-    HU-03: IMPORTAR LISTADO GENERAL DE CURSOS Y DOCENTES
-    """
-    return JsonResponse({"status": "template", "message": "HU-03 pendiente de implementación"})
+    if request.method != 'POST': return JsonResponse({"error": "Use POST"}, status=405)
+    archivo = request.FILES.get('file')
+    if not archivo: return JsonResponse({"error": "No file"}, status=400)
+    
+    try:
+        extension = os.path.splitext(archivo.name)[1].lower()
+        df = pd.read_csv(archivo, dtype={'Materia': str, 'Código Docente': str}) if extension == '.csv' else pd.read_excel(archivo, dtype={'Materia': str, 'Código Docente': str})
+        df.columns = df.columns.str.strip()
+        
+        columnas_requeridas = ['Materia', 'Nombre', 'Código Docente', 'Nombre Docente', 'Horario', '# Matriculados']
+        faltantes = [c for c in columnas_requeridas if c not in df.columns]
+        if faltantes: return JsonResponse({"status": "error", "mensaje": "Faltan columnas.", "faltantes": faltantes}, status=400)
+
+        df = df.dropna(subset=['Materia'])
+        materias_creadas = 0
+        cursos_creados = 0
+        cursos_actualizados = 0
+
+        with transaction.atomic():
+            for index, row in df.iterrows():
+                codigo_raw = str(row['Materia']).strip()
+                match = re.match(r'^(\d+)([A-Z]?)$', codigo_raw)
+                if not match: continue
+                
+                base = match.group(1)
+                grupo = match.group(2)
+                if not grupo: continue
+
+                docente_cod = str(row['Código Docente']).strip()
+                try:
+                    docente_obj = Docente.objects.get(codigo=docente_cod)
+                except Docente.DoesNotExist: continue
+
+                materia_obj, creada = Materia.objects.get_or_create(codigo=base, defaults={"nombre": str(row['Nombre']).strip()})
+                if creada: materias_creadas += 1
+
+                curso_obj, created = Curso.objects.update_or_create(
+                    materia=materia_obj, grupo=grupo,
+                    defaults={
+                        "docente": docente_obj, "horario": str(row['Horario']).strip(),
+                        "cantidad_matriculados": int(row.get('# Matriculados', 0))
+                    }
+                )
+                if created: cursos_creados += 1
+                else: cursos_actualizados += 1
+
+        return JsonResponse({
+            "status": "success", "materias_creadas": materias_creadas,
+            "cursos_creados": cursos_creados, "cursos_actualizados": cursos_actualizados
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return JsonResponse({"status": "error", "mensaje": str(e)}, status=500)
