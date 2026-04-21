@@ -97,13 +97,27 @@ WSGI_APPLICATION = 'alertas_tempranas_ufps.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL'),
-        conn_max_age=600,
-        ssl_require=True
-    )
-}
+if os.environ.get('DATABASE_URL'):
+    DATABASES = {
+        'default': dj_database_url.config(
+            conn_max_age=600,
+            ssl_require=True
+        )
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME':     os.environ.get('DB_NAME'),
+            'USER':     os.environ.get('DB_USER'),
+            'PASSWORD': os.environ.get('DB_PASSWORD'),
+            'HOST':     os.environ.get('DB_HOST'),
+            'PORT':     os.environ.get('DB_PORT', '5432'),
+            'OPTIONS': {
+                'sslmode': 'require',
+            },
+        }
+    }
 
 # Usar SQLite para las pruebas automatizadas (evita problemas de permisos y es más rápido)
 import sys

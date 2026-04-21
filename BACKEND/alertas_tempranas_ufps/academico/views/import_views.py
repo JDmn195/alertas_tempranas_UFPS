@@ -20,8 +20,8 @@ def importar_estudiantes_dirplan(request):
     """
     HU-01: IMPORTAR REPORTE GENERAL DE ESTUDIANTES DESDE DIRPLAN
     
-    Objetivo: Consolidar la información básica de los estudiantes en el sistema.
-    Adaptado al nuevo esquema de base de datos (PRIMARY KEY codigo, Sin Usuario).
+    Optimizado: Utiliza bulk_create con update_conflicts para realizar 
+    inserciones/actualizaciones masivas en una sola operación.
     """
     if request.method == 'POST' and request.FILES.get('file'):
         file = request.FILES['file']
@@ -41,7 +41,7 @@ def importar_estudiantes_dirplan(request):
             else:
                 return JsonResponse({"error": "Formato no soportado. Use .xlsx o .csv"}, status=400)
 
-            # Normalizar nombres de columnas: minúsculas, sin espacios y SIN TILDES
+            # Normalizar nombres de columnas
             def normalize_str(s):
                 if not isinstance(s, str): return s
                 s = s.strip().lower()
@@ -108,73 +108,87 @@ def importar_estudiantes_dirplan(request):
                 except:
                     return None
 
-            creados = 0
-            actualizados = 0
+            estudiantes_objs = []
             omitidos = 0
 
-            with transaction.atomic():
-                for i, row in df.iterrows():
-                    if i % 100 == 0: reset_queries()
+            # Los campos que se actualizarán si ya existe el registro
+            update_fields = [
+                'nombre', 'tipo_documento', 'numero_documento', 'pensum', 
+                'estado_matricula', 'celular', 'email_personal', 'email_institucional',
+                'colegio_egresado', 'municipio_nacimiento', 'semestre', 'promedio', 'ingreso'
+            ]
 
-                    codigo_val = str(row[c_codigo]).strip()
-                    if not codigo_val or pd.isna(codigo_val) or codigo_val.lower() == 'nan':
-                        omitidos += 1
-                        continue
+            for i, row in df.iterrows():
+                codigo_val = str(row[c_codigo]).strip()
+                if not codigo_val or pd.isna(codigo_val) or codigo_val.lower() == 'nan':
+                    omitidos += 1
+                    continue
 
-                    defaults = {}
-                    if c_nombre: defaults['nombre'] = str(row[c_nombre]).strip()
-                    if c_tipo_doc: defaults['tipo_documento'] = str(row[c_tipo_doc]).strip()
-                    if c_doc: defaults['numero_documento'] = str(row[c_doc]).strip()
-                    if c_pensum: defaults['pensum'] = str(row[c_pensum]).strip()
-                    if c_estado_mat: defaults['estado_matricula'] = str(row[c_estado_mat]).strip()
-                    if c_cel: defaults['celular'] = str(row[c_cel]).strip()
-                    if c_email_p: defaults['email_personal'] = str(row[c_email_p]).strip()
-                    if c_email_i: defaults['email_institucional'] = str(row[c_email_i]).strip()
-                    if c_colegio: defaults['colegio_egresado'] = str(row[c_colegio]).strip()
-                    if c_municipio: defaults['municipio_nacimiento'] = str(row[c_municipio]).strip()
-                    if c_sem: defaults['semestre'] = safe_int(row[c_sem]) or 1
+                est_data = {
+                    'codigo': codigo_val,
+                    'nombre': str(row[c_nombre]).strip() if c_nombre else '',
+                    'tipo_documento': str(row[c_tipo_doc]).strip() if c_tipo_doc else '',
+                    'numero_documento': str(row[c_doc]).strip() if c_doc else '',
+                    'pensum': str(row[c_pensum]).strip() if c_pensum else '',
+                    'estado_matricula': str(row[c_estado_mat]).strip() if c_estado_mat else '',
+                    'celular': str(row[c_cel]).strip() if c_cel else '',
+                    'email_personal': str(row[c_email_p]).strip() if c_email_p else '',
+                    'email_institucional': str(row[c_email_i]).strip() if c_email_i else '',
+                    'colegio_egresado': str(row[c_colegio]).strip() if c_colegio else '',
+                    'municipio_nacimiento': str(row[c_municipio]).strip() if c_municipio else '',
+                    'semestre': safe_int(row[c_sem]) or 1,
+                }
 
-                    # Lógica de Promedio (DecimalField)
-                    if c_prom:
-                        try:
-                            val_prom = str(row[c_prom]).replace(',', '.')
-                            defaults['promedio'] = float(val_prom) if not pd.isna(row[c_prom]) else None
-                        except:
-                            defaults['promedio'] = None
-
-                    # Lógica de Ingreso (DateField)
-                    if c_ingreso:
-                        ingreso_val = str(row[c_ingreso]).strip()
-                        if '-' in ingreso_val:
-                            try:
-                                partes = ingreso_val.split('-')
-                                anio = safe_int(partes[0])
-                                sem = safe_int(partes[1])
-                                if anio and sem:
-                                    mes = 2 if sem == 1 else 8
-                                    defaults['ingreso'] = date(anio, mes, 1)
-                            except: pass
-
+                # Lógica de Promedio
+                if c_prom:
                     try:
-                        _, created = Estudiante.objects.update_or_create(
-                            codigo=codigo_val,
-                            defaults=defaults
-                        )
-                        if created: creados += 1
-                        else: actualizados += 1
-                    except Exception as row_error:
-                        print(f"Error en fila {i} (Código {codigo_val}): {str(row_error)}")
+                        val_prom = str(row[c_prom]).replace(',', '.')
+                        est_data['promedio'] = float(val_prom) if not pd.isna(row[c_prom]) else None
+                    except:
+                        est_data['promedio'] = None
+                else:
+                    est_data['promedio'] = None
+
+                # Lógica de Ingreso
+                est_data['ingreso'] = None
+                if c_ingreso:
+                    ingreso_val = str(row[c_ingreso]).strip()
+                    if '-' in ingreso_val:
+                        try:
+                            partes = ingreso_val.split('-')
+                            anio = safe_int(partes[0])
+                            sem = safe_int(partes[1])
+                            if anio and sem:
+                                mes = 2 if sem == 1 else 8
+                                est_data['ingreso'] = date(anio, mes, 1)
+                        except: pass
+
+                estudiantes_objs.append(Estudiante(**est_data))
+
+            # Ejecutar bulk_create con lógica de actualización en conflictos (ON CONFLICT DO UPDATE)
+            # Esto realiza una única consulta masiva a a base de datos.
+            processed_count = 0
+            if estudiantes_objs:
+                with transaction.atomic():
+                    # Dividimos en lotes de 500 para mayor seguridad con el driver
+                    Estudiante.objects.bulk_create(
+                        estudiantes_objs,
+                        batch_size=500,
+                        update_conflicts=True,
+                        unique_fields=['codigo'],
+                        update_fields=update_fields
+                    )
+                    processed_count = len(estudiantes_objs)
 
             return JsonResponse({
                 "status": "success",
-                "message": "Importación finalizada correctamente",
+                "message": "Importación masiva finalizada correctamente",
                 "detalles": {
-                    "creados": creados,
-                    "actualizados": actualizados,
-                    "omitidos": omitidos,
-                    "total_procesados": creados + actualizados
+                    "total_procesados": processed_count,
+                    "omitidos": omitidos
                 }
             })
+
         except Exception as e:
             import traceback
             print(traceback.format_exc())
@@ -313,3 +327,10 @@ def importar_docentes(request):
         return JsonResponse({"status": "success", "creados": creados})
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+@csrf_exempt
+def importar_oferta_academica(request):
+    """
+    HU-03: IMPORTAR LISTADO GENERAL DE CURSOS Y DOCENTES
+    """
+    return JsonResponse({"status": "template", "message": "HU-03 pendiente de implementación"})
