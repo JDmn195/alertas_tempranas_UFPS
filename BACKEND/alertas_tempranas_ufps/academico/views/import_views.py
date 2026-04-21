@@ -43,7 +43,10 @@ def importar_estudiantes_dirplan(request):
     # TODO: Implementar lógica de lectura de archivo
     # TODO: Validar datos y manejar duplicados (get_or_create)
     # TODO: Retornar resumen de la importación (ej. creados: 10, actualizados: 5)
-    return JsonResponse({"status": "template", "message": "HU-01 pendiente de implementación"})
+    return JsonResponse(
+        {"status": "template", "message": "HU-01 pendiente de implementación"},
+        status=501
+    )
 
 
 @csrf_exempt
@@ -141,13 +144,13 @@ def importar_historial_academico(request):
         col for col in columnas_requeridas if col not in df.columns
     ]
     if columnas_faltantes:
-        return JsonResponse(
-            {"error": f"El archivo no contiene las columnas requeridas. "
-                      f"Faltan: {', '.join(columnas_faltantes)}",
-             "columnas_encontradas": list(df.columns),
-             "columnas_requeridas": columnas_requeridas},
-            status=400
-        )
+        return JsonResponse({
+            "status": "error",
+            "mensaje": "El archivo no tiene el formato de Historial Académico esperado.",
+            "error": "Faltan columnas requeridas.",
+            "columnas_faltantes": columnas_faltantes,
+            "columnas_encontradas": list(df.columns)
+        }, status=400)
 
     # 5. VALIDACIÓN ESTRICTA DE EXISTENCIA
     errores = []
@@ -396,9 +399,11 @@ def importar_oferta_academica(request):
 
     if faltantes:
         return JsonResponse({
-            "error": "Faltan columnas requeridas",
-            "faltantes": faltantes,
-            "encontradas": list(df.columns)
+            "status": "error",
+            "mensaje": "El archivo no tiene el formato de Oferta Académica esperado.",
+            "error": "Faltan columnas requeridas.",
+            "columnas_faltantes": faltantes,
+            "columnas_encontradas": list(df.columns)
         }, status=400)
 
     # ELIMINAR FILAS VACÍAS
@@ -582,7 +587,7 @@ def importar_docentes(request):
         )
 
     # ─────────────────────────────────────────────
-    # 2. LEER ARCHIVO Y DETECTAR COLUMNAS
+    # 2. LEER ARCHIVO Y VALIDAR FORMATO
     # ─────────────────────────────────────────────
     try:
         df = pd.read_excel(archivo)
@@ -593,7 +598,7 @@ def importar_docentes(request):
             status=400
         )
 
-    # Detectar columnas dinámicamente para tolerar caracteres especiales
+    # 1. Detectar columnas dinámicamente para tolerar caracteres especiales
     col_codigo      = next((c for c in df.columns if 'Docente' in c and ('digo' in c or 'igo' in c)), None)
     col_nombre      = next((c for c in df.columns if 'Nombre' in c and 'Docente' in c), None)
     col_vinculacion = next((c for c in df.columns if 'Vinculaci' in c), None)
@@ -602,14 +607,24 @@ def importar_docentes(request):
     col_correo_i    = next((c for c in df.columns if 'Institucional' in c), None)
     col_celular     = next((c for c in df.columns if 'Celular' in c), None)
 
-    
+    # 2. VALIDACIÓN DE FIRMA (Evitar confusión con Cursos o Historial)
+    # Si tiene la columna 'Materia', probablemente es un archivo de Cursos u Oferta Académica
+    es_otro_archivo = any(c for c in df.columns if 'Materia' in c or 'Horario' in c)
 
+    if es_otro_archivo:
+        return JsonResponse({
+            "status": "error",
+            "mensaje": "El archivo parece ser un reporte de Cursos u Oferta Académica.",
+            "error": "Se detectó la columna 'Materia' o 'Horario', las cuales no pertenecen al formato de Docentes."
+        }, status=400)
+
+    # 3. VERIFICAR COLUMNAS MÍNIMAS
     if not col_codigo or not col_nombre:
-        return JsonResponse(
-            {"error": "No se encontraron las columnas requeridas en el archivo.",
-            "columnas_encontradas": list(df.columns)},
-            status=400
-        )
+        return JsonResponse({
+            "status": "error",
+            "mensaje": "No se encontraron las columnas de Código o Nombre del docente.",
+            "encontradas": list(df.columns)
+        }, status=400)
 
     # ─────────────────────────────────────────────
     # 3. PROCESAR CADA FILA
