@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, Link } from 'react-router';
 import { Button } from '../components/ui/Button';
 
 export default function Login() {
@@ -27,6 +27,13 @@ export default function Login() {
       const data = await response.json();
 
       if (response.ok) {
+        if (data.cambio_obligatorio) {
+          // Guardar temporalmente para la pantalla de cambio
+          localStorage.setItem('temp_forced_change', JSON.stringify({ id: data.id }));
+          navigate('/reset-password');
+          return;
+        }
+
         // Guardar sesión en localStorage
         localStorage.setItem('user', JSON.stringify(data));
         
@@ -114,9 +121,9 @@ export default function Login() {
                   />
                   <span className="ml-2 text-sm text-gray-600">Recordarme</span>
                 </label>
-                <a href="#" className="text-sm text-[#C8102E] hover:underline">
+                <Link to="/forgot-password" size="sm" className="text-sm text-[#C8102E] hover:underline">
                   ¿Olvidaste tu contraseña?
-                </a>
+                </Link>
               </div>
 
               <Button type="submit" fullWidth size="lg" disabled={isLoading}>

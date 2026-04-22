@@ -1,6 +1,8 @@
 import { createBrowserRouter } from "react-router";
 import { MainLayout } from "./components/layouts/MainLayout";
 import Login from "./screens/Login";
+import ForgotPassword from "./screens/ForgotPassword";
+import ResetPassword from "./screens/ResetPassword";
 import AdminDashboard from "./screens/AdminDashboard";
 import ImportLog from "./screens/ImportLog";
 import StudentProfile from "./screens/StudentProfile";
@@ -20,6 +22,14 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     Component: Login,
+  },
+  {
+    path: "/forgot-password",
+    Component: ForgotPassword,
+  },
+  {
+    path: "/reset-password/:token?",
+    Component: ResetPassword,
   },
   {
     path: "/dashboard",
