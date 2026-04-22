@@ -1,5 +1,6 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Navigate } from "react-router";
 import { MainLayout } from "./components/layouts/MainLayout";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 import Login from "./screens/Login";
 import ForgotPassword from "./screens/ForgotPassword";
 import ResetPassword from "./screens/ResetPassword";
@@ -33,19 +34,53 @@ export const router = createBrowserRouter([
   },
   {
     path: "/dashboard",
-    Component: MainLayout,
+    element: (
+      <ProtectedRoute>
+        <MainLayout />
+      </ProtectedRoute>
+    ),
     children: [
-      { index: true, Component: AdminDashboard },
-      { path: "admin/import", Component: AdminDashboard },
-      { path: "admin/import-log/:id", Component: ImportLog },
-      { path: "admin/risk-rules", Component: RiskRules },
-      { path: "admin/users", Component: UserManagement },
-      { path: "students", Component: StudentList },
-      { path: "students/:id", Component: StudentProfile },
-      { path: "alerts", Component: AlertManagement },
-      { path: "teacher", Component: TeacherDashboard },
-      { path: "director", Component: DirectorDashboard },
-      { path: "reports", Component: ExportReports },
+      { index: true, element: <Navigate to="students" replace /> },
+      { 
+        path: "admin/import", 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR']}><AdminDashboard /></ProtectedRoute> 
+      },
+      { 
+        path: "admin/import-log/:id", 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR']}><ImportLog /></ProtectedRoute> 
+      },
+      { 
+        path: "admin/risk-rules", 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR']}><RiskRules /></ProtectedRoute> 
+      },
+      { 
+        path: "admin/users", 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR']}><UserManagement /></ProtectedRoute> 
+      },
+      { 
+        path: "students", 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR']}><StudentList /></ProtectedRoute> 
+      },
+      { 
+        path: "students/:id", 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR']}><StudentProfile /></ProtectedRoute> 
+      },
+      { 
+        path: "alerts", 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR']}><AlertManagement /></ProtectedRoute> 
+      },
+      { 
+        path: "teacher", 
+        element: <ProtectedRoute allowedRoles={['DOCENTE']}><TeacherDashboard /></ProtectedRoute> 
+      },
+      { 
+        path: "director", 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR']}><DirectorDashboard /></ProtectedRoute> 
+      },
+      { 
+        path: "reports", 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'BIENESTAR']}><ExportReports /></ProtectedRoute> 
+      },
     ],
   },
 ]);

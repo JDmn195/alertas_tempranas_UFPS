@@ -1,8 +1,14 @@
-import { Outlet } from 'react-router';
+import { Outlet, Navigate } from 'react-router';
 import { Sidebar } from './Sidebar';
 import { TopNav } from './TopNav';
 
 export function MainLayout() {
+  const userJson = localStorage.getItem('user');
+
+  if (!userJson) {
+    return <Navigate to="/login" replace />;
+  }
+
   return (
     <div className="flex h-screen bg-[#F5F5F5]">
       <Sidebar />

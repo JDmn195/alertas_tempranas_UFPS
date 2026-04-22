@@ -37,8 +37,14 @@ export default function Login() {
         // Guardar sesión en localStorage
         localStorage.setItem('user', JSON.stringify(data));
         
-        // Redirigir según el rol (de momento todos al mismo)
-        navigate('/dashboard/admin/import');
+        // Redirigir según el rol
+        if (data.rol === 'ADMINISTRADOR') {
+          navigate('/dashboard/admin/import');
+        } else if (data.rol === 'DOCENTE') {
+          navigate('/dashboard/teacher');
+        } else {
+          navigate('/dashboard/students');
+        }
       } else {
         setError(data.error || 'Error al iniciar sesión.');
       }
