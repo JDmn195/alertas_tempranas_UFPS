@@ -4,3 +4,4 @@ from .import_views import (
     importar_oferta_academica,
     importar_docentes,
 )
+from .student_views import listar_estudiantes
