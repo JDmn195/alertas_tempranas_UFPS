@@ -4,9 +4,12 @@ from .views import (
     importar_historial_academico,
     importar_oferta_academica,
     importar_docentes,
+    listar_estudiantes,
 )
 
 urlpatterns = [
+    # Lista de estudiantes con filtros
+    path('students/',         listar_estudiantes,             name='list-students'),
     # Rutas para las Historias de Usuario de Importación
     path('import/students/',  importar_estudiantes_dirplan,   name='import-students-dirplan'),
     path('import/history/',   importar_historial_academico,  name='import-history-individual'),
