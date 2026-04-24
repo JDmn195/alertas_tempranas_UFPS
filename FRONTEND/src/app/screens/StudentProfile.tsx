@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
 import {
   ArrowLeft,
@@ -13,11 +14,28 @@ import {
   Layers,
   Clock,
   TrendingDown,
+  TrendingUp,
   AlertTriangle,
   CheckCircle2,
   Activity,
   FileText,
+  ChevronDown,
+  ChevronUp,
+  History,
+  TrendingUp as TrendingUpIcon,
 } from 'lucide-react';
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  Area,
+  AreaChart,
+  ReferenceLine
+} from 'recharts';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 
@@ -107,44 +125,89 @@ function FichaAcademica() {
   );
 }
 
-// ─── Sección 2: Indicadores (placeholder) ────────────────────────────────────
-function IndicadoresSection() {
+interface Intento {
+  periodo: string;
+  nota: number;
+  estado: string;
+}
+
+interface MateriaRepetida {
+  nombre: string;
+  veces: number;
+  intentos: Intento[];
+}
+
+interface EvolucionData {
+  periodo: string;
+  pps: number;
+  ppa: number;
+}
+
+interface TendenciaData {
+  valor: number;
+  porcentaje: number;
+  direccion: 'up' | 'down' | 'stable';
+}
+
+interface IndicadoresData {
+  aprobadas: number;
+  reprobadas: number;
+  creditos_cursados: number;
+  porcentaje_progreso: number;
+  materias_repetidas: MateriaRepetida[];
+  promedio_acumulado: number;
+  tendencia: TendenciaData;
+  evolucion: EvolucionData[];
+}
+
+function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; loading: boolean }) {
   const indicadores = [
     {
       icon: BarChart2,
       label: 'Promedio Acumulado',
       sublabel: 'Sobre escala de 0 a 5',
       color: 'blue',
+      value: data?.promedio_acumulado ? data.promedio_acumulado.toFixed(2) : null,
     },
     {
-      icon: TrendingDown,
+      icon: data?.tendencia?.direccion === 'down' ? TrendingDown : TrendingUp,
       label: 'Tendencia del Promedio',
       sublabel: 'Últimos 3 semestres',
-      color: 'purple',
+      color: data?.tendencia?.direccion === 'down' ? 'red' : 'green',
+      value: data?.tendencia ? (
+        <div className="flex items-center gap-1">
+          {data.tendencia.direccion === 'up' ? '+' : data.tendencia.direccion === 'down' ? '-' : ''}
+          {data.tendencia.porcentaje}%
+        </div>
+      ) : null,
     },
     {
       icon: AlertTriangle,
       label: 'Alertas Activas',
       sublabel: 'Alertas sin resolver',
       color: 'red',
+      value: null,
     },
     {
       icon: CheckCircle2,
       label: 'Materias Aprobadas',
       sublabel: 'Total acumulado',
       color: 'green',
+      value: data?.aprobadas,
     },
     {
       icon: Activity,
       label: 'Materias Reprobadas',
       sublabel: 'Total acumulado',
       color: 'orange',
+      value: data?.reprobadas,
     },
     {
       icon: Clock,
       label: 'Créditos Cursados',
       sublabel: 'Sobre total del pensum',
       color: 'teal',
+      value: data ? `${data.creditos_cursados} créditos | ${data.porcentaje_progreso}%` : null,
     },
   ];
 
@@ -168,17 +231,19 @@ function IndicadoresSection() {
           <h2 className="text-base font-semibold text-white">Indicadores de Desempeño</h2>
           <p className="text-xs text-gray-400">Métricas clave del rendimiento académico</p>
         </div>
-        <div className="ml-auto">
-          <span className="text-xs bg-white/10 text-gray-300 px-2 py-1 rounded-full">
-            Próximamente
-          </span>
-        </div>
+        {!loading && (
+          <div className="ml-auto">
+            <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full border border-green-500/30">
+              Datos Actualizados
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Grid de indicadores */}
       <div className="p-6">
         <div className="grid grid-cols-3 gap-4">
-          {indicadores.map(({ icon: Icon, label, sublabel, color }) => (
+          {indicadores.map(({ icon: Icon, label, sublabel, color, value }) => (
             <div
               key={label}
               className={`rounded-xl border ${colorMap[color].split(' ').slice(0,2).join(' ')} p-4 flex flex-col items-center text-center gap-2`}
@@ -186,8 +251,16 @@ function IndicadoresSection() {
               <div className={`w-10 h-10 rounded-full ${colorMap[color].split(' ').slice(0,2).join(' ')} flex items-center justify-center`}>
                 <Icon className={`w-5 h-5 ${colorMap[color].split(' ').slice(2).join(' ')}`} />
               </div>
-              {/* Valor placeholder */}
-              <div className="w-12 h-8 rounded bg-gray-100 animate-pulse" />
+              
+              {/* Valor Real o Placeholder */}
+              {loading || (value === null && label !== 'Promedio Acumulado' && label !== 'Tendencia del Promedio' && label !== 'Alertas Activas') ? (
+                <div className="w-12 h-8 rounded bg-gray-100 animate-pulse" />
+              ) : (
+                <div className="text-lg font-bold text-gray-800">
+                  {value ?? '—'}
+                </div>
+              )}
+
               <div>
                 <p className="text-xs font-semibold text-gray-600">{label}</p>
                 <p className="text-xs text-gray-400">{sublabel}</p>
@@ -196,29 +269,156 @@ function IndicadoresSection() {
           ))}
         </div>
 
-        {/* Gráfico de evolución placeholder */}
-        <div className="mt-6 rounded-xl border border-dashed border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-600">Evolución del Promedio por Semestre</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Gráfico de línea temporal — disponible próximamente</p>
+        {/* ─── Sub-sección: Materias Repetidas (Acordeón) ─────────────────── */}
+        {data && data.materias_repetidas.length > 0 && (
+          <div className="mt-8 space-y-4">
+            <div className="flex items-center gap-2 px-2 pb-2 border-b border-gray-100">
+              <History className="w-4 h-4 text-gray-400" />
+              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-tight">
+                Historial de Materias Repetidas
+              </h3>
+              <span className="ml-auto text-[10px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-bold">
+                {data.materias_repetidas.length} MATERIAS
+              </span>
             </div>
-            <Activity className="w-5 h-5 text-gray-300" />
+
+            <div className="grid grid-cols-2 gap-4">
+              {data.materias_repetidas.map((materia) => (
+                <MateriaRepetidaCard key={materia.nombre} materia={materia} />
+              ))}
+            </div>
           </div>
-          {/* Fake chart bars */}
-          <div className="flex items-end gap-3 h-24">
-            {[60, 45, 70, 55, 80, 50, 65].map((h, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div
-                  className="w-full bg-gray-100 rounded-t-sm"
-                  style={{ height: `${h}%` }}
-                />
-                <p className="text-xs text-gray-300">S{i + 1}</p>
+        )}
+
+        {/* Gráfico de evolución */}
+        <div className="mt-6 rounded-xl border border-gray-100 bg-gray-50/30 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-sm font-bold text-gray-700">Evolución del Promedio Acumulado</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Historial del PPA periodo a periodo</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-[#C8102E]" />
+                <span className="text-[10px] font-bold text-gray-500 uppercase">Promedio Acumulado</span>
               </div>
-            ))}
+            </div>
+          </div>
+          
+          <div className="h-64 w-full">
+            {loading ? (
+              <div className="w-full h-full bg-gray-100 animate-pulse rounded-lg" />
+            ) : data && data.evolucion.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data.evolucion} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorPpa" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#C8102E" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#C8102E" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                  <XAxis 
+                    dataKey="periodo" 
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
+                    dy={10}
+                  />
+                  <YAxis 
+                    domain={[2, 5]} 
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      borderRadius: '12px', 
+                      border: 'none', 
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                      fontSize: '12px'
+                    }}
+                  />
+                  <Area 
+                    type="linear" 
+                    dataKey="ppa" 
+                    stroke="#C8102E" 
+                    strokeWidth={3}
+                    fillOpacity={1} 
+                    fill="url(#colorPpa)"
+                    name="Acumulado"
+                    dot={{ r: 4, fill: '#C8102E', strokeWidth: 2, stroke: '#fff' }}
+                    activeDot={{ r: 6, strokeWidth: 0 }}
+                  />
+                  <ReferenceLine y={3} stroke="#fee2e2" strokeDasharray="3 3" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-100 rounded-xl">
+                <Activity className="w-8 h-8 mb-2 opacity-20" />
+                <p className="text-xs font-medium">No hay datos históricos suficientes</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MateriaRepetidaCard({ materia }: { materia: MateriaRepetida }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="border border-gray-100 rounded-xl overflow-hidden transition-all duration-200 hover:shadow-md">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between p-4 bg-gray-50/50 hover:bg-gray-50 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-500 shadow-sm">
+            {materia.veces}
+          </div>
+          <div className="text-left">
+            <p className="text-sm font-semibold text-gray-700">{materia.nombre}</p>
+            <p className="text-[10px] text-gray-400 font-medium">Cursada {materia.veces} veces en total</p>
+          </div>
+        </div>
+        {isOpen ? (
+          <ChevronUp className="w-4 h-4 text-gray-400" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-gray-400" />
+        )}
+      </button>
+
+      {isOpen && (
+        <div className="p-4 bg-white divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2">
+          {materia.intentos.map((intento, idx) => (
+            <div key={idx} className="py-2.5 flex items-center justify-between first:pt-0 last:pb-0">
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-gray-600">{intento.periodo}</span>
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                  intento.estado === 'Aprobado' ? 'text-green-500' : 'text-red-500'
+                }`}>
+                  {intento.estado}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-400 font-medium">Definitiva</span>
+                <div className={`px-3 py-1 rounded-lg font-mono text-sm font-bold ${
+                  intento.nota < 3.0 
+                    ? 'bg-red-50 text-red-700 border border-red-100'
+                    : intento.nota < 4.0
+                    ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                    : 'bg-green-50 text-green-700 border border-green-100'
+                }`}>
+                  {intento.nota.toFixed(1)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -315,6 +515,26 @@ function HistorialAcademico() {
 // ─── Página principal StudentProfile ─────────────────────────────────────────
 export default function StudentProfile() {
   const { id } = useParams();
+  const [indicadores, setIndicadores] = useState<IndicadoresData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchIndicadores = async () => {
+      try {
+        const response = await fetch(`http://localhost:8000/api/academico/students/${id}/indicators/`);
+        if (response.ok) {
+          const data = await response.json();
+          setIndicadores(data.indicadores);
+        }
+      } catch (error) {
+        console.error('Error fetching indicadores:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchIndicadores();
+  }, [id]);
 
   return (
     <div className="space-y-6">
@@ -359,7 +579,7 @@ export default function StudentProfile() {
       <FichaAcademica />
 
       {/* ── Bloque 2: Indicadores ────────────────────────────────────────── */}
-      <IndicadoresSection />
+      <IndicadoresSection data={indicadores} loading={loading} />
 
       {/* ── Bloque 3: Historial Académico ────────────────────────────────── */}
       <HistorialAcademico />

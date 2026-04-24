@@ -5,11 +5,14 @@ from .views import (
     importar_oferta_academica,
     importar_docentes,
     listar_estudiantes,
+    obtener_indicadores_estudiante,
 )
 
 urlpatterns = [
     # Lista de estudiantes con filtros
     path('students/',         listar_estudiantes,             name='list-students'),
+    # Indicadores académicos por estudiante
+    path('students/<str:codigo>/indicators/', obtener_indicadores_estudiante, name='student-indicators'),
     # Rutas para las Historias de Usuario de Importación
     path('import/students/',  importar_estudiantes_dirplan,   name='import-students-dirplan'),
     path('import/history/',   importar_historial_academico,  name='import-history-individual'),
