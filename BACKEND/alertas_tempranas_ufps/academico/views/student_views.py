@@ -185,8 +185,8 @@ def listar_estudiantes(request):
 def obtener_indicadores_estudiante(request, codigo):
     """
     Calcula los indicadores académicos para un estudiante específico:
-    - Materias aprobadas (histórico)
-    - Materias reprobadas (histórico - Opción A)
+    - Materias aprobadas
+    - Materias reprobadas
     - Créditos cursados (aprobados)
     - Porcentaje de progreso basado en el total de créditos del sistema
     """
