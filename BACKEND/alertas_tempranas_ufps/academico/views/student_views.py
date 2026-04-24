@@ -109,3 +109,41 @@ def listar_estudiantes(request):
         'pages':     max(1, -(-total // page_size)),  # ceil division
         'results':   page_results,
     })
+
+
+@csrf_exempt
+@require_GET
+def obtener_detalle_estudiante(request, codigo):
+    """
+    GET /api/academico/students/<codigo>/
+    Devuelve la información completa de un estudiante específico.
+    """
+    try:
+        e = Estudiante.objects.get(codigo=codigo)
+        
+        # Anotar conteo de alertas activas
+        total_alertas = Alerta.objects.filter(estudiante=e, estado='activa').count()
+        nivel = calcular_nivel_riesgo(e.promedio)
+
+        return JsonResponse({
+            'codigo':              e.codigo,
+            'nombre':              e.nombre,
+            'tipo_documento':      e.tipo_documento,
+            'numero_documento':    e.numero_documento,
+            'semestre':            e.semestre,
+            'pensum':              e.pensum,
+            'ingreso':             e.ingreso.isoformat() if e.ingreso else None,
+            'promedio':            float(e.promedio) if e.promedio is not None else None,
+            'estado_matricula':    e.estado_matricula,
+            'celular':             e.celular,
+            'email_personal':      e.email_personal,
+            'email_institucional': e.email_institucional,
+            'colegio_egresado':    e.colegio_egresado,
+            'municipio_nacimiento': e.municipio_nacimiento,
+            'nivel_riesgo':        nivel,
+            'alertas_activas':     total_alertas,
+        })
+    except Estudiante.DoesNotExist:
+        return JsonResponse({'error': f'Estudiante con código {codigo} no encontrado'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
