@@ -1,9 +1,10 @@
 from django.http import JsonResponse
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
+from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import csrf_exempt
 
-from academico.models import Estudiante
+from academico.models import Estudiante, Nota, Materia
 from alertas.models import Alerta
 
 
@@ -23,6 +24,75 @@ def calcular_nivel_riesgo(promedio):
     elif p < 3.5:
         return 'medium'
     return 'low'
+
+
+def _calcular_historial_promedios(estudiante):
+    """
+    Calcula el PPS (Semestral) y PPA (Acumulado) periodo a periodo.
+    """
+    notas = Nota.objects.filter(estudiante=estudiante).select_related(
+        'periodo', 'curso__materia'
+    ).order_by('periodo__anio', 'periodo__semestre')
+    
+    # Agrupar por periodo preservando el orden cronológico
+    periodos_dict = {}
+    for n in notas:
+        key = f"{n.periodo.anio}-{n.periodo.semestre}"
+        if key not in periodos_dict:
+            periodos_dict[key] = []
+        periodos_dict[key].append(n)
+        
+    evolucion = []
+    puntos_acumulados = 0
+    creditos_acumulados = 0
+    
+    for periodo_key, notas_periodo in periodos_dict.items():
+        puntos_semestre = 0
+        creditos_semestre = 0
+        
+        for n in notas_periodo:
+            creditos = n.curso.materia.creditos or 0
+            definitiva = float(n.definitiva or 0)
+            puntos_semestre += definitiva * creditos
+            creditos_semestre += creditos
+            
+        pps = round(puntos_semestre / creditos_semestre, 2) if creditos_semestre > 0 else 0
+        
+        puntos_acumulados += puntos_semestre
+        creditos_acumulados += creditos_semestre
+        
+        ppa = round(puntos_acumulados / creditos_acumulados, 2) if creditos_acumulados > 0 else 0
+        
+        evolucion.append({
+            'periodo': periodo_key,
+            'pps': pps,
+            'ppa': ppa
+        })
+        
+    # Tendencia: comparativa del último PPA contra el anterior
+    promedio_actual = evolucion[-1]['ppa'] if evolucion else 0
+    tendencia = { 'valor': 0, 'porcentaje': 0, 'direccion': 'stable' }
+    
+    if len(evolucion) >= 2:
+        prev_ppa = evolucion[-2]['ppa']
+        if prev_ppa > 0:
+            diff = promedio_actual - prev_ppa
+            porcentaje = (diff / prev_ppa) * 100
+            
+            tendencia['valor'] = round(diff, 2)
+            tendencia['porcentaje'] = round(abs(porcentaje), 1)
+            if diff > 0.01:
+                tendencia['direccion'] = 'up'
+            elif diff < -0.01:
+                tendencia['direccion'] = 'down'
+            else:
+                tendencia['direccion'] = 'stable'
+                
+    return {
+        'promedio_acumulado': promedio_actual,
+        'tendencia': tendencia,
+        'evolucion': evolucion
+    }
 
 
 @csrf_exempt
@@ -147,3 +217,75 @@ def obtener_detalle_estudiante(request, codigo):
         return JsonResponse({'error': f'Estudiante con código {codigo} no encontrado'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_GET
+def obtener_indicadores_estudiante(request, codigo):
+    """
+    Calcula los indicadores académicos para un estudiante específico:
+    - Materias aprobadas
+    - Materias reprobadas
+    - Créditos cursados (aprobados)
+    - Porcentaje de progreso basado en el total de créditos del sistema
+    """
+    estudiante = get_object_or_404(Estudiante, codigo=codigo)
+    
+    # 1. Total de créditos disponibles en el sistema
+    total_creditos_sistema = Materia.objects.aggregate(total=Sum('creditos'))['total'] or 0
+    
+    # 2. Obtener todas las notas del estudiante
+    notas_qs = Nota.objects.filter(estudiante=estudiante)
+    
+    # 3. Conteo de materias (histórico)
+    aprobadas_count = notas_qs.filter(definitiva__gte=3.0).count()
+    reprobadas_count = notas_qs.filter(definitiva__lt=3.0).count()
+    
+    # 4. Créditos cursados (solo de materias aprobadas)
+    creditos_aprobados = notas_qs.filter(definitiva__gte=3.0).aggregate(
+        total=Sum('curso__materia__creditos')
+    )['total'] or 0
+    
+    # 5. Calcular porcentaje
+    porcentaje = 0
+    if total_creditos_sistema > 0:
+        porcentaje = round((creditos_aprobados / total_creditos_sistema) * 100, 1)
+
+    # 6. Identificar materias repetidas
+    materias_dict = {}
+    for nota in notas_qs.select_related('curso__materia', 'periodo').order_by('periodo__anio', 'periodo__semestre'):
+        nombre_mat = nota.curso.materia.nombre
+        if nombre_mat not in materias_dict:
+            materias_dict[nombre_mat] = []
+        
+        materias_dict[nombre_mat].append({
+            'periodo': f"{nota.periodo.anio}-{nota.periodo.semestre}",
+            'nota': float(nota.definitiva) if nota.definitiva else 0,
+            'estado': 'Aprobado' if nota.definitiva >= 3.0 else 'Reprobado'
+        })
+    
+    materias_repetidas = []
+    for nombre, intentos in materias_dict.items():
+        if len(intentos) > 1:
+            materias_repetidas.append({
+                'nombre': nombre,
+                'veces': len(intentos),
+                'intentos': intentos
+            })
+        
+    # 7. Promedios y Evolución
+    datos_promedio = _calcular_historial_promedios(estudiante)
+        
+    return JsonResponse({
+        'codigo': codigo,
+        'indicadores': {
+            'aprobadas': aprobadas_count,
+            'reprobadas': reprobadas_count,
+            'creditos_cursados': creditos_aprobados,
+            'porcentaje_progreso': porcentaje,
+            'total_sistema': total_creditos_sistema,
+            'materias_repetidas': materias_repetidas,
+            'promedio_acumulado': datos_promedio['promedio_acumulado'],
+            'tendencia': datos_promedio['tendencia'],
+            'evolucion': datos_promedio['evolucion']
+        }
+    })
