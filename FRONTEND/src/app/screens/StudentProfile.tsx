@@ -14,6 +14,7 @@ import {
   Layers,
   Clock,
   TrendingDown,
+  TrendingUp,
   AlertTriangle,
   CheckCircle2,
   Activity,
@@ -21,7 +22,20 @@ import {
   ChevronDown,
   ChevronUp,
   History,
+  TrendingUp as TrendingUpIcon,
 } from 'lucide-react';
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  Area,
+  AreaChart,
+  ReferenceLine
+} from 'recharts';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 
@@ -123,12 +137,27 @@ interface MateriaRepetida {
   intentos: Intento[];
 }
 
+interface EvolucionData {
+  periodo: string;
+  pps: number;
+  ppa: number;
+}
+
+interface TendenciaData {
+  valor: number;
+  porcentaje: number;
+  direccion: 'up' | 'down' | 'stable';
+}
+
 interface IndicadoresData {
   aprobadas: number;
   reprobadas: number;
   creditos_cursados: number;
   porcentaje_progreso: number;
   materias_repetidas: MateriaRepetida[];
+  promedio_acumulado: number;
+  tendencia: TendenciaData;
+  evolucion: EvolucionData[];
 }
 
 function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; loading: boolean }) {
@@ -138,14 +167,19 @@ function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; l
       label: 'Promedio Acumulado',
       sublabel: 'Sobre escala de 0 a 5',
       color: 'blue',
-      value: null, // Se puede implementar después
+      value: data?.promedio_acumulado ? data.promedio_acumulado.toFixed(2) : null,
     },
     {
-      icon: TrendingDown,
+      icon: data?.tendencia?.direccion === 'down' ? TrendingDown : TrendingUp,
       label: 'Tendencia del Promedio',
       sublabel: 'Últimos 3 semestres',
-      color: 'purple',
-      value: null,
+      color: data?.tendencia?.direccion === 'down' ? 'red' : 'green',
+      value: data?.tendencia ? (
+        <div className="flex items-center gap-1">
+          {data.tendencia.direccion === 'up' ? '+' : data.tendencia.direccion === 'down' ? '-' : ''}
+          {data.tendencia.porcentaje}%
+        </div>
+      ) : null,
     },
     {
       icon: AlertTriangle,
@@ -256,26 +290,75 @@ function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; l
           </div>
         )}
 
-        {/* Gráfico de evolución placeholder */}
-        <div className="mt-6 rounded-xl border border-dashed border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
+        {/* Gráfico de evolución */}
+        <div className="mt-6 rounded-xl border border-gray-100 bg-gray-50/30 p-6">
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-sm font-semibold text-gray-600">Evolución del Promedio por Semestre</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Gráfico de línea temporal — disponible próximamente</p>
+              <h3 className="text-sm font-bold text-gray-700">Evolución del Promedio Acumulado</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Historial del PPA periodo a periodo</p>
             </div>
-            <Activity className="w-5 h-5 text-gray-300" />
-          </div>
-          {/* Fake chart bars */}
-          <div className="flex items-end gap-3 h-24">
-            {[60, 45, 70, 55, 80, 50, 65].map((h, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div
-                  className="w-full bg-gray-100 rounded-t-sm"
-                  style={{ height: `${h}%` }}
-                />
-                <p className="text-xs text-gray-300">S{i + 1}</p>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-[#C8102E]" />
+                <span className="text-[10px] font-bold text-gray-500 uppercase">Promedio Acumulado</span>
               </div>
-            ))}
+            </div>
+          </div>
+          
+          <div className="h-64 w-full">
+            {loading ? (
+              <div className="w-full h-full bg-gray-100 animate-pulse rounded-lg" />
+            ) : data && data.evolucion.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data.evolucion} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorPpa" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#C8102E" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#C8102E" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                  <XAxis 
+                    dataKey="periodo" 
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
+                    dy={10}
+                  />
+                  <YAxis 
+                    domain={[2, 5]} 
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      borderRadius: '12px', 
+                      border: 'none', 
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                      fontSize: '12px'
+                    }}
+                  />
+                  <Area 
+                    type="linear" 
+                    dataKey="ppa" 
+                    stroke="#C8102E" 
+                    strokeWidth={3}
+                    fillOpacity={1} 
+                    fill="url(#colorPpa)"
+                    name="Acumulado"
+                    dot={{ r: 4, fill: '#C8102E', strokeWidth: 2, stroke: '#fff' }}
+                    activeDot={{ r: 6, strokeWidth: 0 }}
+                  />
+                  <ReferenceLine y={3} stroke="#fee2e2" strokeDasharray="3 3" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-100 rounded-xl">
+                <Activity className="w-8 h-8 mb-2 opacity-20" />
+                <p className="text-xs font-medium">No hay datos históricos suficientes</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

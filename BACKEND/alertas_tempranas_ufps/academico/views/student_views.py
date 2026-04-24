@@ -26,6 +26,75 @@ def calcular_nivel_riesgo(promedio):
     return 'low'
 
 
+def _calcular_historial_promedios(estudiante):
+    """
+    Calcula el PPS (Semestral) y PPA (Acumulado) periodo a periodo.
+    """
+    notas = Nota.objects.filter(estudiante=estudiante).select_related(
+        'periodo', 'curso__materia'
+    ).order_by('periodo__anio', 'periodo__semestre')
+    
+    # Agrupar por periodo preservando el orden cronológico
+    periodos_dict = {}
+    for n in notas:
+        key = f"{n.periodo.anio}-{n.periodo.semestre}"
+        if key not in periodos_dict:
+            periodos_dict[key] = []
+        periodos_dict[key].append(n)
+        
+    evolucion = []
+    puntos_acumulados = 0
+    creditos_acumulados = 0
+    
+    for periodo_key, notas_periodo in periodos_dict.items():
+        puntos_semestre = 0
+        creditos_semestre = 0
+        
+        for n in notas_periodo:
+            creditos = n.curso.materia.creditos or 0
+            definitiva = float(n.definitiva or 0)
+            puntos_semestre += definitiva * creditos
+            creditos_semestre += creditos
+            
+        pps = round(puntos_semestre / creditos_semestre, 2) if creditos_semestre > 0 else 0
+        
+        puntos_acumulados += puntos_semestre
+        creditos_acumulados += creditos_semestre
+        
+        ppa = round(puntos_acumulados / creditos_acumulados, 2) if creditos_acumulados > 0 else 0
+        
+        evolucion.append({
+            'periodo': periodo_key,
+            'pps': pps,
+            'ppa': ppa
+        })
+        
+    # Tendencia: comparativa del último PPA contra el anterior
+    promedio_actual = evolucion[-1]['ppa'] if evolucion else 0
+    tendencia = { 'valor': 0, 'porcentaje': 0, 'direccion': 'stable' }
+    
+    if len(evolucion) >= 2:
+        prev_ppa = evolucion[-2]['ppa']
+        if prev_ppa > 0:
+            diff = promedio_actual - prev_ppa
+            porcentaje = (diff / prev_ppa) * 100
+            
+            tendencia['valor'] = round(diff, 2)
+            tendencia['porcentaje'] = round(abs(porcentaje), 1)
+            if diff > 0.01:
+                tendencia['direccion'] = 'up'
+            elif diff < -0.01:
+                tendencia['direccion'] = 'down'
+            else:
+                tendencia['direccion'] = 'stable'
+                
+    return {
+        'promedio_acumulado': promedio_actual,
+        'tendencia': tendencia,
+        'evolucion': evolucion
+    }
+
+
 @csrf_exempt
 @require_GET
 def listar_estudiantes(request):
@@ -165,6 +234,9 @@ def obtener_indicadores_estudiante(request, codigo):
                 'intentos': intentos
             })
         
+    # 7. Promedios y Evolución
+    datos_promedio = _calcular_historial_promedios(estudiante)
+        
     return JsonResponse({
         'codigo': codigo,
         'indicadores': {
@@ -173,6 +245,9 @@ def obtener_indicadores_estudiante(request, codigo):
             'creditos_cursados': creditos_aprobados,
             'porcentaje_progreso': porcentaje,
             'total_sistema': total_creditos_sistema,
-            'materias_repetidas': materias_repetidas
+            'materias_repetidas': materias_repetidas,
+            'promedio_acumulado': datos_promedio['promedio_acumulado'],
+            'tendencia': datos_promedio['tendencia'],
+            'evolucion': datos_promedio['evolucion']
         }
     })
