@@ -1,9 +1,10 @@
 from django.http import JsonResponse
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
+from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import csrf_exempt
 
-from academico.models import Estudiante
+from academico.models import Estudiante, Nota, Materia
 from alertas.models import Alerta
 
 
@@ -108,4 +109,70 @@ def listar_estudiantes(request):
         'page_size': page_size,
         'pages':     max(1, -(-total // page_size)),  # ceil division
         'results':   page_results,
+    })
+
+
+@require_GET
+def obtener_indicadores_estudiante(request, codigo):
+    """
+    Calcula los indicadores académicos para un estudiante específico:
+    - Materias aprobadas (histórico)
+    - Materias reprobadas (histórico - Opción A)
+    - Créditos cursados (aprobados)
+    - Porcentaje de progreso basado en el total de créditos del sistema
+    """
+    estudiante = get_object_or_404(Estudiante, codigo=codigo)
+    
+    # 1. Total de créditos disponibles en el sistema
+    total_creditos_sistema = Materia.objects.aggregate(total=Sum('creditos'))['total'] or 0
+    
+    # 2. Obtener todas las notas del estudiante
+    notas_qs = Nota.objects.filter(estudiante=estudiante)
+    
+    # 3. Conteo de materias (histórico)
+    aprobadas_count = notas_qs.filter(definitiva__gte=3.0).count()
+    reprobadas_count = notas_qs.filter(definitiva__lt=3.0).count()
+    
+    # 4. Créditos cursados (solo de materias aprobadas)
+    creditos_aprobados = notas_qs.filter(definitiva__gte=3.0).aggregate(
+        total=Sum('curso__materia__creditos')
+    )['total'] or 0
+    
+    # 5. Calcular porcentaje
+    porcentaje = 0
+    if total_creditos_sistema > 0:
+        porcentaje = round((creditos_aprobados / total_creditos_sistema) * 100, 1)
+
+    # 6. Identificar materias repetidas
+    materias_dict = {}
+    for nota in notas_qs.select_related('curso__materia', 'periodo').order_by('periodo__anio', 'periodo__semestre'):
+        nombre_mat = nota.curso.materia.nombre
+        if nombre_mat not in materias_dict:
+            materias_dict[nombre_mat] = []
+        
+        materias_dict[nombre_mat].append({
+            'periodo': f"{nota.periodo.anio}-{nota.periodo.semestre}",
+            'nota': float(nota.definitiva) if nota.definitiva else 0,
+            'estado': 'Aprobado' if nota.definitiva >= 3.0 else 'Reprobado'
+        })
+    
+    materias_repetidas = []
+    for nombre, intentos in materias_dict.items():
+        if len(intentos) > 1:
+            materias_repetidas.append({
+                'nombre': nombre,
+                'veces': len(intentos),
+                'intentos': intentos
+            })
+        
+    return JsonResponse({
+        'codigo': codigo,
+        'indicadores': {
+            'aprobadas': aprobadas_count,
+            'reprobadas': reprobadas_count,
+            'creditos_cursados': creditos_aprobados,
+            'porcentaje_progreso': porcentaje,
+            'total_sistema': total_creditos_sistema,
+            'materias_repetidas': materias_repetidas
+        }
     })
