@@ -274,6 +274,9 @@ def obtener_indicadores_estudiante(request, codigo):
         
     # 7. Promedios y Evolución
     datos_promedio = _calcular_historial_promedios(estudiante)
+    
+    # 8. Alertas Activas
+    alertas_activas = Alerta.objects.filter(estudiante=estudiante, estado='activa').count()
         
     return JsonResponse({
         'codigo': codigo,
@@ -286,6 +289,7 @@ def obtener_indicadores_estudiante(request, codigo):
             'materias_repetidas': materias_repetidas,
             'promedio_acumulado': datos_promedio['promedio_acumulado'],
             'tendencia': datos_promedio['tendencia'],
-            'evolucion': datos_promedio['evolucion']
+            'evolucion': datos_promedio['evolucion'],
+            'alertas_activas': alertas_activas
         }
     })
