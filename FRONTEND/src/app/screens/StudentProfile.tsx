@@ -195,6 +195,7 @@ interface IndicadoresData {
   promedio_acumulado: number;
   tendencia: TendenciaData;
   evolucion: EvolucionData[];
+  alertas_activas: number;
 }
 
 function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; loading: boolean }) {
@@ -223,7 +224,7 @@ function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; l
       label: 'Alertas Activas',
       sublabel: 'Alertas sin resolver',
       color: 'red',
-      value: null,
+      value: data?.alertas_activas ?? 0,
     },
     {
       icon: CheckCircle2,
