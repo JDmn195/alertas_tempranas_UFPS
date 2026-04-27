@@ -24,7 +24,7 @@ interface ApiResponse {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const API_BASE = 'http://localhost:8000/api/academico';
+const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/academico`;
 const PAGE_SIZE = 15;
 
 const RISK_LABEL: Record<string, string> = {
