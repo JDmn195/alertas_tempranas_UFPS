@@ -8,6 +8,7 @@ from .views import (
     obtener_detalle_estudiante,
     obtener_indicadores_estudiante,
 )
+from .views.bitacora_views import listar_bitacoras, detalle_bitacora
 
 urlpatterns = [
     # Lista de estudiantes con filtros
@@ -21,4 +22,8 @@ urlpatterns = [
     path('import/history/',   importar_historial_academico,  name='import-history-individual'),
     path('import/offering/',  importar_oferta_academica,     name='import-academic-offering'),
     path('import/teachers/',  importar_docentes,             name='import-teachers'),
+    
+    # Rutas para la bitácora de importación (HU-06)
+    path('bitacora/',         listar_bitacoras,              name='list-bitacoras'),
+    path('bitacora/<int:id>/', detalle_bitacora,             name='detail-bitacora'),
 ]
