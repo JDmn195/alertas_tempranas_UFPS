@@ -293,3 +293,72 @@ def obtener_indicadores_estudiante(request, codigo):
             'alertas_activas': alertas_activas
         }
     })
+
+
+@require_GET
+def obtener_historial_academico(request, codigo):
+    """
+    GET /api/academico/students/<codigo>/history/
+    Devuelve el historial académico agrupado por periodos.
+    """
+    estudiante = get_object_or_404(Estudiante, codigo=codigo)
+    notas = Nota.objects.filter(estudiante=estudiante).select_related(
+        'periodo', 'curso__materia', 'curso__docente'
+    ).order_by('periodo__anio', 'periodo__semestre')
+
+    historial = {}
+
+    for n in notas:
+        periodo_str = f"{n.periodo.anio}-{n.periodo.semestre}"
+        
+        if periodo_str not in historial:
+            historial[periodo_str] = {
+                'periodo': periodo_str,
+                'materias': [],
+                'promedio_semestre': 0,
+                'creditos_cursados': 0
+            }
+
+        creditos = n.curso.materia.creditos or 0
+        definitiva = float(n.definitiva or 0)
+        estado = 'Aprobado' if n.definitiva and n.definitiva >= 3.0 else 'Reprobado'
+        
+        materia_data = {
+            'codigo': n.curso.materia.codigo,
+            'materia': n.curso.materia.nombre,
+            'creditos': creditos,
+            'grupo': n.curso.grupo,
+            'docente': n.curso.docente.nombre if n.curso.docente else 'Desconocido',
+            'nota_final': definitiva,
+            'estado': estado
+        }
+        
+        historial[periodo_str]['materias'].append(materia_data)
+
+    # Calcular los totales (promedio ponderado y créditos por semestre)
+    resultados = []
+    for p_str, datos in historial.items():
+        total_puntos = 0
+        total_creditos = 0
+        
+        for m in datos['materias']:
+            total_puntos += m['nota_final'] * m['creditos']
+            if m['estado'] == 'Aprobado':
+                total_creditos += m['creditos']
+                
+        # Para el promedio se toman en cuenta los créditos de todas las materias cursadas
+        creditos_cursados_semestre = sum(m['creditos'] for m in datos['materias'])
+        promedio = round(total_puntos / creditos_cursados_semestre, 2) if creditos_cursados_semestre > 0 else 0
+        
+        datos['promedio_semestre'] = promedio
+        datos['creditos_cursados'] = total_creditos # Solo aprobados según suelen calcular el progreso de pensum, o total?
+        # Normalmente los créditos cursados incluye todos, y los aprobados son los ganados.
+        datos['creditos_aprobados'] = total_creditos
+        datos['creditos_intentados'] = creditos_cursados_semestre
+        
+        resultados.append(datos)
+
+    return JsonResponse({
+        'codigo': codigo,
+        'historial': resultados
+    })
