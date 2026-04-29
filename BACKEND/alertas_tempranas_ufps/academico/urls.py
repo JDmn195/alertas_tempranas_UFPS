@@ -7,6 +7,7 @@ from .views import (
     listar_estudiantes,
     obtener_detalle_estudiante,
     obtener_indicadores_estudiante,
+    obtener_historial_academico,
 )
 
 urlpatterns = [
@@ -16,6 +17,8 @@ urlpatterns = [
     path('students/<str:codigo>/', obtener_detalle_estudiante,     name='detail-student'),
     # Indicadores académicos por estudiante
     path('students/<str:codigo>/indicators/', obtener_indicadores_estudiante, name='student-indicators'),
+    # Historial académico del estudiante
+    path('students/<str:codigo>/history/', obtener_historial_academico, name='student-history'),
     # Rutas para las Historias de Usuario de Importación
     path('import/students/',  importar_estudiantes_dirplan,   name='import-students-dirplan'),
     path('import/history/',   importar_historial_academico,  name='import-history-individual'),

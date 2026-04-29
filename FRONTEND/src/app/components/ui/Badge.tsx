@@ -2,9 +2,10 @@ type BadgeProps = {
   variant: 'low' | 'medium' | 'high' | 'success' | 'error' | 'gray';
   children: React.ReactNode;
   size?: 'sm' | 'md';
+  className?: string;
 };
 
-export function Badge({ variant, children, size = 'md' }: BadgeProps) {
+export function Badge({ variant, children, size = 'md', className = '' }: BadgeProps) {
   const variants = {
     low: 'bg-gray-100 text-gray-700 border-gray-300',
     medium: 'bg-amber-100 text-amber-700 border-amber-300',
@@ -21,7 +22,7 @@ export function Badge({ variant, children, size = 'md' }: BadgeProps) {
 
   return (
     <span
-      className={`inline-flex items-center rounded-full border ${variants[variant]} ${sizes[size]} font-medium`}
+      className={`inline-flex items-center rounded-full border ${variants[variant]} ${sizes[size]} font-medium ${className}`}
     >
       {children}
     </span>

@@ -461,9 +461,37 @@ function MateriaRepetidaCard({ materia }: { materia: MateriaRepetida }) {
   );
 }
 
-// ─── Sección 3: Historial Académico (placeholder) ─────────────────────────────
-function HistorialAcademico() {
-  const placeholderRows = Array.from({ length: 6 }, (_, i) => i);
+// ─── Sección 3: Historial Académico ──────────────────────────────────────────
+
+export interface MateriaCursada {
+  codigo: string;
+  materia: string;
+  creditos: number;
+  grupo: string;
+  docente: string;
+  nota_final: number;
+  estado: string;
+}
+
+export interface HistorialPeriodo {
+  periodo: string;
+  materias: MateriaCursada[];
+  promedio_semestre: number;
+  creditos_cursados: number;
+  creditos_aprobados: number;
+  creditos_intentados: number;
+}
+
+function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null, loading: boolean }) {
+  const [activeTab, setActiveTab] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (data && data.length > 0 && !activeTab) {
+      setActiveTab(data[data.length - 1].periodo); // Select the most recent by default
+    }
+  }, [data, activeTab]);
+
+  const activePeriodData = data?.find(p => p.periodo === activeTab);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
@@ -477,29 +505,41 @@ function HistorialAcademico() {
           <p className="text-xs text-gray-400">Notas y materias cursadas por semestre</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs bg-white/10 text-gray-300 px-2 py-1 rounded-full">
-            Próximamente
-          </span>
+          {!loading && data && (
+            <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full border border-green-500/30">
+              {data.length} Periodos
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Tabs de semestres placeholder */}
+      {/* Tabs de semestres */}
       <div className="border-b border-gray-100 px-6 pt-4 flex gap-2 overflow-x-auto">
-        {['2024-1', '2024-2', '2025-1', '2025-2', '2026-1'].map((sem, i) => (
-          <button
-            key={sem}
-            className={`px-4 py-2 text-xs font-medium rounded-t-lg border-b-2 whitespace-nowrap transition-colors ${
-              i === 4
-                ? 'border-[#C8102E] text-[#C8102E] bg-red-50'
-                : 'border-transparent text-gray-400 hover:text-gray-600'
-            }`}
-          >
-            {sem}
-          </button>
-        ))}
+        {loading ? (
+          <div className="flex gap-2">
+            <div className="w-20 h-8 bg-gray-100 rounded-t-lg animate-pulse" />
+            <div className="w-20 h-8 bg-gray-100 rounded-t-lg animate-pulse" />
+          </div>
+        ) : data && data.length > 0 ? (
+          data.map((sem) => (
+            <button
+              key={sem.periodo}
+              onClick={() => setActiveTab(sem.periodo)}
+              className={`px-4 py-2 text-xs font-medium rounded-t-lg border-b-2 whitespace-nowrap transition-colors ${
+                activeTab === sem.periodo
+                  ? 'border-[#C8102E] text-[#C8102E] bg-red-50'
+                  : 'border-transparent text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {sem.periodo}
+            </button>
+          ))
+        ) : (
+          <div className="py-2 text-xs text-gray-400">No hay periodos registrados</div>
+        )}
       </div>
 
-      {/* Tabla placeholder */}
+      {/* Tabla */}
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-100">
@@ -512,39 +552,75 @@ function HistorialAcademico() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {placeholderRows.map((_, i) => (
-              <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                <td className="px-5 py-3.5">
-                  <div className="h-3.5 bg-gray-100 rounded w-16 animate-pulse" />
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="h-3.5 bg-gray-100 rounded w-40 animate-pulse" />
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="h-3.5 bg-gray-100 rounded w-8 animate-pulse" />
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="h-3.5 bg-gray-100 rounded w-8 animate-pulse" />
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="h-3.5 bg-gray-100 rounded w-32 animate-pulse" />
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="h-3.5 bg-gray-100 rounded w-10 animate-pulse" />
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="h-5 bg-gray-100 rounded-full w-16 animate-pulse" />
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                  <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-16 animate-pulse" /></td>
+                  <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-40 animate-pulse" /></td>
+                  <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-8 animate-pulse" /></td>
+                  <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-8 animate-pulse" /></td>
+                  <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-32 animate-pulse" /></td>
+                  <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-10 animate-pulse" /></td>
+                  <td className="px-5 py-3.5"><div className="h-5 bg-gray-100 rounded-full w-16 animate-pulse" /></td>
+                </tr>
+              ))
+            ) : activePeriodData ? (
+              activePeriodData.materias.map((mat, i) => (
+                <tr key={mat.codigo} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50 hover:bg-gray-50 transition-colors'}>
+                  <td className="px-5 py-3.5 text-xs font-mono text-gray-500">{mat.codigo}</td>
+                  <td className="px-5 py-3.5 text-sm font-medium text-gray-900">{mat.materia}</td>
+                  <td className="px-5 py-3.5 text-sm text-gray-500 text-center">{mat.creditos}</td>
+                  <td className="px-5 py-3.5 text-sm text-gray-500 text-center">{mat.grupo}</td>
+                  <td className="px-5 py-3.5 text-sm text-gray-500 truncate max-w-[200px]" title={mat.docente}>{mat.docente}</td>
+                  <td className="px-5 py-3.5">
+                    <span className={`font-mono text-sm font-bold px-2 py-1 rounded ${
+                      mat.nota_final < 3.0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
+                    }`}>
+                      {mat.nota_final.toFixed(1)}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                      mat.estado === 'Aprobado' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      {mat.estado}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-400">
+                  No hay materias para mostrar en este periodo.
                 </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* Footer placeholder */}
-      <div className="border-t border-gray-100 px-6 py-3 flex items-center justify-between">
-        <p className="text-xs text-gray-400">Promedio del semestre: —</p>
-        <p className="text-xs text-gray-400">Créditos cursados: —</p>
+      {/* Footer estadístico del periodo */}
+      <div className="border-t border-gray-100 px-6 py-4 flex items-center justify-between bg-gray-50">
+        <div className="flex items-center gap-6">
+          <div>
+            <p className="text-[10px] uppercase font-bold text-gray-400">Promedio del Semestre</p>
+            <p className="text-lg font-black text-gray-800">
+              {loading ? <span className="text-gray-300 animate-pulse">--</span> : activePeriodData?.promedio_semestre.toFixed(2) || '0.00'}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase font-bold text-gray-400">Créditos Cursados</p>
+            <p className="text-lg font-black text-gray-800">
+              {loading ? <span className="text-gray-300 animate-pulse">--</span> : activePeriodData?.creditos_intentados || 0}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase font-bold text-gray-400">Créditos Aprobados</p>
+            <p className="text-lg font-black text-green-600">
+              {loading ? <span className="text-gray-300 animate-pulse">--</span> : activePeriodData?.creditos_aprobados || 0}
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -555,6 +631,7 @@ export default function StudentProfile() {
   const { id } = useParams();
   const [student, setStudent] = useState<StudentDetail | null>(null);
   const [indicadores, setIndicadores] = useState<IndicadoresData | null>(null);
+  const [historial, setHistorial] = useState<HistorialPeriodo[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -565,10 +642,11 @@ export default function StudentProfile() {
       try {
         const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
         
-        // Cargar datos del perfil y indicadores en paralelo
-        const [studentRes, indicatorsRes] = await Promise.all([
+        // Cargar datos del perfil, indicadores e historial en paralelo
+        const [studentRes, indicatorsRes, historialRes] = await Promise.all([
           fetch(`${baseUrl}/api/academico/students/${id}/`),
-          fetch(`${baseUrl}/api/academico/students/${id}/indicators/`)
+          fetch(`${baseUrl}/api/academico/students/${id}/indicators/`),
+          fetch(`${baseUrl}/api/academico/students/${id}/history/`)
         ]);
 
         if (!studentRes.ok) {
@@ -582,6 +660,11 @@ export default function StudentProfile() {
         if (indicatorsRes.ok) {
           const indicatorsData = await indicatorsRes.json();
           setIndicadores(indicatorsData.indicadores);
+        }
+
+        if (historialRes.ok) {
+          const historialData = await historialRes.json();
+          setHistorial(historialData.historial);
         }
       } catch (err: any) {
         setError(err.message);
@@ -678,7 +761,7 @@ export default function StudentProfile() {
       <IndicadoresSection data={indicadores} loading={loading} />
 
       {/* ── Bloque 3: Historial Académico ────────────────────────────────── */}
-      <HistorialAcademico />
+      <HistorialAcademico data={historial} loading={loading} />
     </div>
   );
 }
