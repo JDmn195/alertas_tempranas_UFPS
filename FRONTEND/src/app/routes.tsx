@@ -14,6 +14,7 @@ import TeacherDashboard from "./screens/TeacherDashboard";
 import DirectorDashboard from "./screens/DirectorDashboard";
 import ExportReports from "./screens/ExportReports";
 import UserManagement from "./screens/UserManagement";
+import CourseList from './screens/CourseList'
 
 export const router = createBrowserRouter([
   {
@@ -81,6 +82,8 @@ export const router = createBrowserRouter([
         path: "reports", 
         element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'BIENESTAR']}><ExportReports /></ProtectedRoute> 
       },
+      { path: 'courses', element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DIRECTOR', 'DOCENTE']}><CourseList /></ProtectedRoute> 
+}
     ],
   },
 ]);

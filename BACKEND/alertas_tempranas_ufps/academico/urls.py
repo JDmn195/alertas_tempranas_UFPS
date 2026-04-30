@@ -8,6 +8,7 @@ from .views import (
     obtener_detalle_estudiante,
     obtener_indicadores_estudiante,
     obtener_historial_academico,
+    listar_indicadores_cursos,
 )
 
 urlpatterns = [
@@ -24,4 +25,5 @@ urlpatterns = [
     path('import/history/',   importar_historial_academico,  name='import-history-individual'),
     path('import/offering/',  importar_oferta_academica,     name='import-academic-offering'),
     path('import/teachers/',  importar_docentes,             name='import-teachers'),
+    path('courses/indicators/', listar_indicadores_cursos, name='course-indicators'),
 ]

@@ -47,7 +47,7 @@ def importar_estudiantes_dirplan(request):
                 if not isinstance(s, str): return s
                 s = s.strip().lower()
                 s = ''.join(c for c in unicodedata.normalize('NFD', s)
-                           if unicodedata.category(c) != 'Mn')
+                        if unicodedata.category(c) != 'Mn')
                 return s
 
             df.columns = [normalize_str(col) for col in df.columns]

@@ -5,3 +5,4 @@ from .import_views import (
     importar_docentes,
 )
 from .student_views import listar_estudiantes, obtener_detalle_estudiante, obtener_indicadores_estudiante, obtener_historial_academico
+from .indicator_views import listar_indicadores_cursos  # HU-11
