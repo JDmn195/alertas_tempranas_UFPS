@@ -103,3 +103,22 @@ class Nota(models.Model):
 
     def __str__(self):
         return f"{self.estudiante.codigo} | {self.curso} | {self.definitiva}"
+
+
+class BitacoraImportacion(models.Model):
+    usuario = models.ForeignKey('usuarios.Usuario', on_delete=models.SET_NULL, null=True, blank=True)
+    fecha = models.DateTimeField(auto_now_add=True)
+    archivo_nombre = models.CharField(max_length=255)
+    tipo = models.CharField(max_length=50)
+    total_procesados = models.IntegerField(default=0)
+    total_errores = models.IntegerField(default=0)
+    detalles_errores = models.JSONField(default=list, blank=True)
+    exitoso = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'bitacora_importacion'
+        verbose_name = 'Bitácora de Importación'
+        verbose_name_plural = 'Bitácoras de Importación'
+
+    def __str__(self):
+        return f"{self.tipo} - {self.fecha} - {self.archivo_nombre}"

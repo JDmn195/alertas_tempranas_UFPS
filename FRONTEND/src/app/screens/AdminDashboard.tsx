@@ -1,43 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router';
 import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 
-const importHistory = [
-  {
-    id: '1',
-    date: '2026-04-07 14:30',
-    reportType: 'Registros Académicos - Semestre 2026-1',
-    totalRecords: 1250,
-    errors: 0,
-    status: 'success',
-  },
-  {
-    id: '2',
-    date: '2026-04-05 09:15',
-    reportType: 'Datos de Matrícula de Estudiantes',
-    totalRecords: 2890,
-    errors: 15,
-    status: 'error',
-  },
-  {
-    id: '3',
-    date: '2026-04-03 16:45',
-    reportType: 'Reporte de Terminación de Cursos',
-    totalRecords: 580,
-    errors: 0,
-    status: 'success',
-  },
-  {
-    id: '4',
-    date: '2026-04-01 11:20',
-    reportType: 'Actualización Promedio - Todos los Programas',
-    totalRecords: 3200,
-    errors: 3,
-    status: 'error',
-  },
-];
 
 export default function AdminDashboard() {
   const [dragActive, setDragActive] = useState(false);
@@ -45,6 +11,24 @@ export default function AdminDashboard() {
   const [validationStatus, setValidationStatus] = useState<'idle' | 'validating' | 'success' | 'error'>('idle');
   const [responseMessage, setResponseMessage] = useState<string>('');
   const [responseErrors, setResponseErrors] = useState<any[]>([]);
+  const [importHistory, setImportHistory] = useState<any[]>([]);
+
+  const fetchHistory = async () => {
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${baseUrl}/api/academico/bitacora/`);
+      const result = await response.json();
+      if (result.status === 'success') {
+        setImportHistory(result.data);
+      }
+    } catch (error) {
+      console.error("Error fetching history:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -61,6 +45,19 @@ export default function AdminDashboard() {
   const uploadFile = async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
+    
+    // Adjuntar ID de usuario desde localStorage
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        if (user && user.id) {
+          formData.append("usuario_id", user.id);
+        }
+      } catch (e) {
+        console.error("Error parsing user from localStorage", e);
+      }
+    }
 
     const endpointMap: Record<string, string> = {
       general: "import/students/",
@@ -100,10 +97,12 @@ export default function AdminDashboard() {
         setValidationStatus("success");
         setResponseMessage(data.mensaje || "Importación exitosa.");
         setResponseErrors([]);
+        fetchHistory(); // Recargar el historial tras éxito
       } else {
         setValidationStatus("error");
         setResponseMessage(data.mensaje || data.error || "La operación no se pudo completar o está pendiente.");
         setResponseErrors(data.errores || []);
+        fetchHistory(); // Recargar el historial incluso si hay errores
       }
     } catch (error) {
       console.error(error);
@@ -285,10 +284,13 @@ export default function AdminDashboard() {
                   Fecha y Hora
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                  Tipo de Reporte
+                  Archivo
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                  Total Registros
+                  Tipo
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                  Registros
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                   Errores
@@ -308,17 +310,22 @@ export default function AdminDashboard() {
                   className={index % 2 === 0 ? 'bg-white' : 'bg-[#F5F5F5]'}
                 >
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {record.date}
+                    {record.fecha}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{record.reportType}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {record.totalRecords.toLocaleString()}
+                  <td className="px-6 py-4 text-sm text-gray-900 truncate max-w-[200px]" title={record.archivo_nombre}>
+                    {record.archivo_nombre}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900">
+                    <Badge variant="outline" size="sm">{record.tipo}</Badge>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {record.errors}
+                    {record.total_procesados.toLocaleString()}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {record.total_errores}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {record.status === 'success' ? (
+                    {record.exitoso ? (
                       <Badge variant="success" size="sm">
                         <CheckCircle className="w-3 h-3 mr-1" />
                         Éxito

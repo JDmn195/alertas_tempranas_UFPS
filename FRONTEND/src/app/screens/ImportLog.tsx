@@ -1,102 +1,53 @@
 import { useParams, Link } from 'react-router';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 
-const errorRecords = [
-  {
-    rowNumber: 45,
-    field: 'student_code',
-    error: 'Formato de código de estudiante inválido',
-    value: '123ABC',
-  },
-  {
-    rowNumber: 128,
-    field: 'gpa',
-    error: 'Valor de promedio fuera de rango (0-5)',
-    value: '6.2',
-  },
-  {
-    rowNumber: 203,
-    field: 'enrollment_date',
-    error: 'Formato de fecha inválido',
-    value: '32/13/2026',
-  },
-  {
-    rowNumber: 267,
-    field: 'course_code',
-    error: 'Código de curso no existe en el catálogo',
-    value: 'MAT-999',
-  },
-  {
-    rowNumber: 312,
-    field: 'credits',
-    error: 'Créditos deben ser un entero positivo',
-    value: '-2',
-  },
-  {
-    rowNumber: 445,
-    field: 'student_code',
-    error: 'Código de estudiante duplicado en el lote',
-    value: '1151234',
-  },
-  {
-    rowNumber: 556,
-    field: 'semester',
-    error: 'Formato de semestre inválido',
-    value: '2026-3',
-  },
-  {
-    rowNumber: 678,
-    field: 'grade',
-    error: 'Valor de nota fuera de rango (0-5)',
-    value: '5.8',
-  },
-  {
-    rowNumber: 789,
-    field: 'program_code',
-    error: 'Código de programa no encontrado',
-    value: 'ING-ZZZ',
-  },
-  {
-    rowNumber: 890,
-    field: 'email',
-    error: 'Formato de correo inválido',
-    value: 'student@invalid',
-  },
-  {
-    rowNumber: 945,
-    field: 'phone',
-    error: 'El número de teléfono debe tener 10 dígitos',
-    value: '123',
-  },
-  {
-    rowNumber: 1023,
-    field: 'cohort',
-    error: 'Año de cohorte debe estar entre 2000-2030',
-    value: '1999',
-  },
-  {
-    rowNumber: 1150,
-    field: 'status',
-    error: 'Estado de estudiante inválido',
-    value: 'UNKNOWN',
-  },
-  {
-    rowNumber: 1267,
-    field: 'gpa',
-    error: 'El promedio no puede ser nulo para estudiantes activos',
-    value: 'NULL',
-  },
-  {
-    rowNumber: 1389,
-    field: 'student_code',
-    error: 'El código de estudiante ya existe en la base de datos',
-    value: '1151567',
-  },
-];
 
 export default function ImportLog() {
   const { id } = useParams();
+  const [logData, setLogData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLog = async () => {
+      try {
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const response = await fetch(`${baseUrl}/api/academico/bitacora/${id}/`);
+        const result = await response.json();
+        if (result.status === 'success') {
+          setLogData(result.data);
+        }
+      } catch (error) {
+        console.error("Error fetching log:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchLog();
+  }, [id]);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center p-20">
+        <div className="w-12 h-12 border-4 border-[#C8102E] border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-gray-600 font-medium">Cargando detalles del log...</p>
+      </div>
+    );
+  }
+
+  if (!logData) {
+    return (
+      <div className="p-10 text-center">
+        <h2 className="text-xl font-bold text-gray-900">Bitácora no encontrada</h2>
+        <Link to="/dashboard/admin/import" className="text-[#C8102E] hover:underline mt-4 inline-block">
+          Volver al módulo de importación
+        </Link>
+      </div>
+    );
+  }
+
+  const errorRecords = logData.detalles_errores || [];
 
   return (
     <div className="space-y-6">
@@ -111,32 +62,32 @@ export default function ImportLog() {
       {/* Summary card with red accent */}
       <div className="bg-white rounded-lg border border-gray-200 border-l-4 border-l-[#C8102E] p-6">
         <h1 className="text-xl font-bold text-gray-900 mb-4">
-          Detalles del Registro de Importación - Sesión #{id}
+          Detalles de Importación - {logData.archivo_nombre}
         </h1>
 
         <div className="grid grid-cols-4 gap-6">
           <div>
             <p className="text-sm text-gray-500 mb-1">Total Procesado</p>
-            <p className="text-2xl font-bold text-gray-900">2,890</p>
+            <p className="text-2xl font-bold text-gray-900">{logData.total_procesados.toLocaleString()}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500 mb-1">Exitosos</p>
             <div className="flex items-center gap-2">
                <CheckCircle className="w-5 h-5 text-green-600" />
-               <p className="text-2xl font-bold text-green-600">2,875</p>
+               <p className="text-2xl font-bold text-green-600">{(logData.total_procesados - logData.total_errores).toLocaleString()}</p>
             </div>
           </div>
           <div>
             <p className="text-sm text-gray-500 mb-1">Errores</p>
             <div className="flex items-center gap-2">
               <XCircle className="w-5 h-5 text-red-600" />
-              <p className="text-2xl font-bold text-red-600">15</p>
+              <p className="text-2xl font-bold text-red-600">{logData.total_errores.toLocaleString()}</p>
             </div>
           </div>
           <div>
             <p className="text-sm text-gray-500 mb-1">Fecha de Importación</p>
-            <p className="text-lg font-semibold text-gray-900">2026-04-05</p>
-            <p className="text-sm text-gray-500">09:15 AM</p>
+            <p className="text-lg font-semibold text-gray-900">{logData.fecha.split(' ')[0]}</p>
+            <p className="text-sm text-gray-500">{logData.fecha.split(' ')[1]}</p>
           </div>
         </div>
       </div>
@@ -175,17 +126,17 @@ export default function ImportLog() {
                   className={`${index % 2 === 0 ? 'bg-white' : 'bg-[#F5F5F5]'} bg-[#FDECEA]`}
                 >
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {error.rowNumber}
+                    {error.fila || 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <code className="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
-                      {error.field}
+                      {error.campo || 'General'}
                     </code>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{error.error}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">{error.mensaje || error.error}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">
                     <code className="px-2 py-1 bg-white border border-gray-200 rounded text-xs font-mono">
-                      {error.value}
+                      {error.valor || error.value || 'N/A'}
                     </code>
                   </td>
                 </tr>
