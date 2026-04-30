@@ -38,7 +38,7 @@ interface ApiResponse {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const API_BASE = 'http://localhost:8000/api/academico';
+const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/academico`;
 const PAGE_SIZE = 15;
 const UMBRAL_CRITICO = 30;
 
@@ -94,8 +94,8 @@ export default function CourseList() {
   const usuarioId = user?.id;
 
   const countCriticos = allCourses.filter(c => c.es_critico).length;
-  const countMedio    = allCourses.filter(c => !c.es_critico && getRiskLevel(c.tasa_reprobacion) === 'medium').length;
-  const countOk       = allCourses.filter(c => getRiskLevel(c.tasa_reprobacion) === 'low').length;
+  const countMedio = allCourses.filter(c => !c.es_critico && getRiskLevel(c.tasa_reprobacion) === 'medium').length;
+  const countOk = allCourses.filter(c => getRiskLevel(c.tasa_reprobacion) === 'low').length;
 
   const barData = [...allCourses]
     .filter(c => c.matriculados > 0)
