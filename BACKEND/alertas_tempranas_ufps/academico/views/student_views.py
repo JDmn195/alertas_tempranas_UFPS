@@ -230,8 +230,8 @@ def obtener_indicadores_estudiante(request, codigo):
     """
     estudiante = get_object_or_404(Estudiante, codigo=codigo)
     
-    # 1. Total de créditos disponibles en el sistema
-    total_creditos_sistema = Materia.objects.aggregate(total=Sum('creditos'))['total'] or 0
+    # 1. Total de créditos del programa (Valor fijo: 165)
+    TOTAL_CREDITOS_SISTEMA = 165
     
     # 2. Obtener todas las notas del estudiante
     notas_qs = Nota.objects.filter(estudiante=estudiante)
@@ -247,8 +247,8 @@ def obtener_indicadores_estudiante(request, codigo):
     
     # 5. Calcular porcentaje
     porcentaje = 0
-    if total_creditos_sistema > 0:
-        porcentaje = round((creditos_aprobados / total_creditos_sistema) * 100, 1)
+    if TOTAL_CREDITOS_SISTEMA > 0:
+        porcentaje = round((creditos_aprobados / TOTAL_CREDITOS_SISTEMA) * 100, 1)
 
     # 6. Identificar materias repetidas
     materias_dict = {}
@@ -285,7 +285,7 @@ def obtener_indicadores_estudiante(request, codigo):
             'reprobadas': reprobadas_count,
             'creditos_cursados': creditos_aprobados,
             'porcentaje_progreso': porcentaje,
-            'total_sistema': total_creditos_sistema,
+            'total_sistema': TOTAL_CREDITOS_SISTEMA,
             'materias_repetidas': materias_repetidas,
             'promedio_acumulado': datos_promedio['promedio_acumulado'],
             'tendencia': datos_promedio['tendencia'],
