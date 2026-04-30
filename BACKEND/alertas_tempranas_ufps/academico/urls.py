@@ -1,3 +1,4 @@
+from django.urls import path
 from .views import (
     importar_estudiantes_dirplan,
     importar_historial_academico,
