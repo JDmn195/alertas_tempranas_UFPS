@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router';
-import { Search, AlertTriangle, CheckCircle, Activity, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, AlertTriangle, CheckCircle, Activity, RefreshCw, ChevronLeft, ChevronRight, Bell, UserMinus } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 
@@ -54,10 +54,12 @@ export default function StudentList() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  // Summary counts per risk level
-  const countHigh   = students.filter(s => s.nivel_riesgo === 'high').length;
-  const countMedium = students.filter(s => s.nivel_riesgo === 'medium').length;
-  const countLow    = students.filter(s => s.nivel_riesgo === 'low').length;
+  // Summary counts per risk level and other indicators
+  const countHigh     = students.filter(s => s.nivel_riesgo === 'high').length;
+  const countMedium   = students.filter(s => s.nivel_riesgo === 'medium').length;
+  const countLow      = students.filter(s => s.nivel_riesgo === 'low').length;
+  const countAlerts   = students.reduce((sum, s) => sum + (s.alertas_activas || 0), 0);
+  const countInactive = students.filter(s => s.estado_matricula && s.estado_matricula.toLowerCase() !== 'activo').length;
 
   // ── Debounce search input ──────────────────────────────────────────────────
   useEffect(() => {
@@ -116,37 +118,59 @@ export default function StudentList() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
             <AlertTriangle className="w-5 h-5 text-red-600" />
           </div>
           <div>
-            <p className="text-xs text-red-600 font-medium uppercase tracking-wide">Riesgo Alto</p>
-            <p className="text-2xl font-bold text-red-700">
+            <p className="text-[10px] sm:text-xs text-red-600 font-medium uppercase tracking-wide leading-tight">Riesgo Alto</p>
+            <p className="text-xl sm:text-2xl font-bold text-red-700">
               {loading ? '—' : countHigh}
             </p>
           </div>
         </div>
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
             <Activity className="w-5 h-5 text-yellow-600" />
           </div>
           <div>
-            <p className="text-xs text-yellow-600 font-medium uppercase tracking-wide">Riesgo Medio</p>
-            <p className="text-2xl font-bold text-yellow-700">
+            <p className="text-[10px] sm:text-xs text-yellow-600 font-medium uppercase tracking-wide leading-tight">Riesgo Medio</p>
+            <p className="text-xl sm:text-2xl font-bold text-yellow-700">
               {loading ? '—' : countMedium}
             </p>
           </div>
         </div>
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
             <CheckCircle className="w-5 h-5 text-green-600" />
           </div>
           <div>
-            <p className="text-xs text-green-600 font-medium uppercase tracking-wide">Riesgo Bajo</p>
-            <p className="text-2xl font-bold text-green-700">
+            <p className="text-[10px] sm:text-xs text-green-600 font-medium uppercase tracking-wide leading-tight">Riesgo Bajo</p>
+            <p className="text-xl sm:text-2xl font-bold text-green-700">
               {loading ? '—' : countLow}
+            </p>
+          </div>
+        </div>
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+            <Bell className="w-5 h-5 text-purple-600" />
+          </div>
+          <div>
+            <p className="text-[10px] sm:text-xs text-purple-600 font-medium uppercase tracking-wide leading-tight">Alertas Activas</p>
+            <p className="text-xl sm:text-2xl font-bold text-purple-700">
+              {loading ? '—' : countAlerts}
+            </p>
+          </div>
+        </div>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+            <UserMinus className="w-5 h-5 text-gray-600" />
+          </div>
+          <div>
+            <p className="text-[10px] sm:text-xs text-gray-600 font-medium uppercase tracking-wide leading-tight">Inactivos</p>
+            <p className="text-xl sm:text-2xl font-bold text-gray-700">
+              {loading ? '—' : countInactive}
             </p>
           </div>
         </div>
