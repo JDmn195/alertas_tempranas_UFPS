@@ -9,12 +9,31 @@ import unicodedata
 import traceback
 from datetime import date
 from django.conf import settings
-from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia
+from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia, BitacoraImportacion
 from usuarios.models import Usuario
 
 # ==============================================================================
 # VISTAS PARA LA IMPORTACIÓN DE DATOS ACADÉMICOS
 # ==============================================================================
+
+def _registrar_bitacora(request, archivo_nombre, tipo, total_procesados, errores, exitoso):
+    usuario_id = request.POST.get('usuario_id')
+    usuario = None
+    if usuario_id:
+        try:
+            usuario = Usuario.objects.get(id=usuario_id)
+        except Usuario.DoesNotExist:
+            pass
+    
+    BitacoraImportacion.objects.create(
+        usuario=usuario,
+        archivo_nombre=archivo_nombre,
+        tipo=tipo,
+        total_procesados=total_procesados,
+        total_errores=len(errores) if isinstance(errores, list) else 0,
+        detalles_errores=errores if isinstance(errores, list) else [],
+        exitoso=exitoso
+    )
 
 @csrf_exempt
 def importar_estudiantes_dirplan(request):
@@ -94,9 +113,11 @@ def importar_estudiantes_dirplan(request):
 
             if not c_codigo or not c_nombre:
                 detected_cols = list(df.columns)
+                err_msg = f"Columnas requeridas 'Codigo' y 'Nombre' no encontradas. Detectadas: {', '.join(detected_cols)}"
+                _registrar_bitacora(request, file.name, 'ESTUDIANTES', 0, [{"mensaje": err_msg}], False)
                 return JsonResponse({
                     "status": "error",
-                    "error": f"Columnas requeridas 'Codigo' y 'Nombre' no encontradas. Detectadas: {', '.join(detected_cols)}"
+                    "error": err_msg
                 }, status=400)
 
             def safe_int(val):
@@ -181,6 +202,8 @@ def importar_estudiantes_dirplan(request):
                     )
                     processed_count = len(estudiantes_objs)
 
+            _registrar_bitacora(request, file.name, 'ESTUDIANTES', processed_count, [], True)
+
             return JsonResponse({
                 "status": "success",
                 "message": "Importación masiva finalizada correctamente",
@@ -193,6 +216,8 @@ def importar_estudiantes_dirplan(request):
         except Exception as e:
             import traceback
             print(traceback.format_exc())
+            if 'file' in locals() and hasattr(file, 'name'):
+                _registrar_bitacora(request, file.name, 'ESTUDIANTES', 0, [{"mensaje": str(e)}], False)
             return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
     return JsonResponse({"status": "error", "message": "Método no permitido o archivo faltante"}, status=400)
@@ -235,6 +260,8 @@ def importar_historial_academico(request):
             col for col in columnas_requeridas if col not in df.columns
         ]
         if columnas_faltantes:
+            err_msg = f"Faltan columnas requeridas: {', '.join(columnas_faltantes)}"
+            _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', 0, [{"mensaje": err_msg}], False)
             return JsonResponse({
                 "status": "error",
                 "mensaje": "El archivo no tiene el formato de Historial Académico esperado.",
@@ -317,6 +344,7 @@ def importar_historial_academico(request):
             })
 
         if errores:
+            _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', 0, errores, False)
             return JsonResponse({
                 "status": "error", "mensaje": "Errores encontrados en el archivo.",
                 "errores": errores
@@ -333,9 +361,12 @@ def importar_historial_academico(request):
                 )
                 creados += 1
 
+        _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', creados, [], True)
         return JsonResponse({"status": "success", "creados": creados})
     except Exception as e:
         traceback.print_exc()
+        if 'nombre_archivo' in locals():
+            _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', 0, [{"mensaje": str(e)}], False)
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 
@@ -409,6 +440,8 @@ def importar_oferta_academica(request):
     ]
 
     if faltantes:
+        err_msg = f"Faltan columnas requeridas: {', '.join(faltantes)}"
+        _registrar_bitacora(request, nombre_archivo, 'OFERTA', 0, [{"mensaje": err_msg}], False)
         return JsonResponse({
             "status": "error",
             "mensaje": "El archivo no tiene el formato de Oferta Académica esperado.",
@@ -500,6 +533,7 @@ def importar_oferta_academica(request):
 
     # CANCELAR SI HAY ERRORES
     if errores:
+        _registrar_bitacora(request, nombre_archivo, 'OFERTA', len(registros_validos), errores, False)
         return JsonResponse({
             "status": "error",
             "mensaje": "Se encontraron errores.",
@@ -549,6 +583,7 @@ def importar_oferta_academica(request):
                 else:
                     cursos_actualizados += 1
 
+        _registrar_bitacora(request, nombre_archivo, 'OFERTA', len(registros_validos), [], True)
         return JsonResponse({
 
             "status": "success",
@@ -566,6 +601,8 @@ def importar_oferta_academica(request):
 
         traceback.print_exc()
 
+        if 'nombre_archivo' in locals():
+            _registrar_bitacora(request, nombre_archivo, 'OFERTA', 0, [{"mensaje": str(e)}], False)
         return JsonResponse({
             "status": "error",
             "mensaje": str(e)
@@ -610,6 +647,7 @@ def importar_docentes(request):
         df = pd.read_excel(archivo)
         df.columns = df.columns.str.strip()
     except Exception as e:
+        _registrar_bitacora(request, archivo.name, 'DOCENTES', 0, [{"mensaje": f"Error al leer el archivo: {str(e)}"}], False)
         return JsonResponse(
             {"error": f"Error al leer el archivo: {str(e)}"},
             status=400
@@ -629,17 +667,21 @@ def importar_docentes(request):
     es_otro_archivo = any(c for c in df.columns if 'Materia' in c or 'Horario' in c)
 
     if es_otro_archivo:
+        err_msg = "El archivo parece ser un reporte de Cursos u Oferta Académica."
+        _registrar_bitacora(request, archivo.name, 'DOCENTES', 0, [{"mensaje": err_msg}], False)
         return JsonResponse({
             "status": "error",
-            "mensaje": "El archivo parece ser un reporte de Cursos u Oferta Académica.",
+            "mensaje": err_msg,
             "error": "Se detectó la columna 'Materia' o 'Horario', las cuales no pertenecen al formato de Docentes."
         }, status=400)
 
     # 3. VERIFICAR COLUMNAS MÍNIMAS
     if not col_codigo or not col_nombre:
+        err_msg = "No se encontraron las columnas de Código o Nombre del docente."
+        _registrar_bitacora(request, archivo.name, 'DOCENTES', 0, [{"mensaje": err_msg}], False)
         return JsonResponse({
             "status": "error",
-            "mensaje": "No se encontraron las columnas de Código o Nombre del docente.",
+            "mensaje": err_msg,
             "encontradas": list(df.columns)
         }, status=400)
 
@@ -723,6 +765,7 @@ def importar_docentes(request):
     # ─────────────────────────────────────────────
     # 4. RETORNAR RESUMEN
     # ─────────────────────────────────────────────
+    _registrar_bitacora(request, archivo.name, 'DOCENTES', creados + actualizados, errores, not errores)
     return JsonResponse({
         "status":                "success" if not errores else "parcial",
         "mensaje":               "Importación de docentes completada.",
