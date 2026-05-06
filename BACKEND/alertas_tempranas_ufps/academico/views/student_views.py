@@ -5,25 +5,62 @@ from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import csrf_exempt
 
 from academico.models import Estudiante, Nota, Materia
-from alertas.models import Alerta
+from alertas.models import Alerta, Regla
 
 
-def calcular_nivel_riesgo(promedio):
+def calcular_nivel_riesgo(estudiante, promedio=None, reglas=None):
     """
-    Calcula el nivel de riesgo de un estudiante basado en su promedio acumulado.
-    - Alto  : promedio < 3.0
-    - Medio : 3.0 <= promedio < 3.5
-    - Bajo  : promedio >= 3.5
-    Si no hay promedio registrado se clasifica como desconocido.
+    Calcula el nivel de riesgo de un estudiante basado en las reglas activas.
+    Si no se pasan reglas, se consultan las activas de la BD.
     """
+    if promedio is None and hasattr(estudiante, 'promedio'):
+        promedio = estudiante.promedio
+    
     if promedio is None:
         return 'unknown'
-    p = float(promedio)
-    if p < 3.0:
-        return 'high'
-    elif p < 3.5:
-        return 'medium'
-    return 'low'
+
+    if reglas is None:
+        reglas = Regla.objects.filter(activo=True)
+
+    # Ordenamos por nivel de severidad para retornar el más alto que aplique
+    # high > medium > low
+    orden_niveles = {'high': 3, 'medium': 2, 'low': 1}
+    nivel_actual = 'low'
+    valor_max_nivel = 0
+
+    for regla in reglas:
+        aplica = False
+        valor_comparar = 0
+
+        if regla.tipo == 'PROMEDIO':
+            valor_comparar = float(promedio)
+        elif regla.tipo == 'REPROBACION':
+            # Conteo de reprobadas en el último periodo registrado
+            # (Simplificación: todas las reprobadas del histórico)
+            valor_comparar = Nota.objects.filter(estudiante=estudiante, definitiva__lt=3.0).count()
+        elif regla.tipo == 'ATRASO':
+            # Heurística simple: semestre actual vs materias aprobadas
+            # (Asumiendo 5 materias por semestre)
+            aprobadas = Nota.objects.filter(estudiante=estudiante, definitiva__gte=3.0).count()
+            semestre_teorico = max(1, (aprobadas // 5) + 1)
+            valor_comparar = max(0, estudiante.semestre - semestre_teorico)
+
+        # Evaluación de la condición
+        try:
+            if regla.operador == '<': aplica = valor_comparar < float(regla.valor_umbral)
+            elif regla.operador == '>': aplica = valor_comparar > float(regla.valor_umbral)
+            elif regla.operador == '<=': aplica = valor_comparar <= float(regla.valor_umbral)
+            elif regla.operador == '>=': aplica = valor_comparar >= float(regla.valor_umbral)
+            elif regla.operador == '==': aplica = valor_comparar == float(regla.valor_umbral)
+        except:
+            continue
+
+        if aplica:
+            if orden_niveles.get(regla.nivel, 0) > valor_max_nivel:
+                nivel_actual = regla.nivel
+                valor_max_nivel = orden_niveles[regla.nivel]
+
+    return nivel_actual
 
 
 def _calcular_historial_promedios(estudiante):
@@ -148,9 +185,15 @@ def listar_estudiantes(request):
     )
 
     # ── Construcción de resultados con nivel de riesgo ────────────────────────
+    reglas_activas = list(Regla.objects.filter(activo=True))
     results = []
     for e in estudiantes_raw:
-        nivel = calcular_nivel_riesgo(e['promedio'])
+        # Creamos un objeto dummy o pasamos datos para evitar queries extra por estudiante si es posible
+        # Pero calcular_nivel_riesgo podría necesitar queries para REPROBACION/ATRASO
+        # Para optimizar, en el futuro se podrían anotar estos valores en el QS base.
+        
+        est_obj = Estudiante(codigo=e['codigo'], nombre=e['nombre'], semestre=e['semestre'], promedio=e['promedio'])
+        nivel = calcular_nivel_riesgo(est_obj, e['promedio'], reglas_activas)
 
         # Aplicar filtro de riesgo en Python (evita expr complejas en SQL)
         if risk and risk != nivel:
@@ -193,7 +236,7 @@ def obtener_detalle_estudiante(request, codigo):
         
         # Anotar conteo de alertas activas
         total_alertas = Alerta.objects.filter(estudiante=e, estado='activa').count()
-        nivel = calcular_nivel_riesgo(e.promedio)
+        nivel = calcular_nivel_riesgo(e)
 
         return JsonResponse({
             'codigo':              e.codigo,
