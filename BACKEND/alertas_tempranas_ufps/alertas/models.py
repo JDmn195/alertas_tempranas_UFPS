@@ -1,9 +1,33 @@
 from django.db import models
 
 class Regla(models.Model):
+    TIPO_CHOICES = [
+        ('PROMEDIO', 'Promedio Acumulado'),
+        ('REPROBACION', 'Número de Materias Reprobadas'),
+        ('ATRASO', 'Atraso Curricular'),
+    ]
+
+    NIVEL_CHOICES = [
+        ('high', 'Alto'),
+        ('medium', 'Medio'),
+        ('low', 'Bajo'),
+    ]
+
+    OPERADOR_CHOICES = [
+        ('<', 'Menor que'),
+        ('>', 'Mayor que'),
+        ('<=', 'Menor o igual que'),
+        ('>=', 'Mayor o igual que'),
+        ('==', 'Igual que'),
+    ]
+
     nombre = models.CharField(max_length=150)
-    nivel = models.CharField(max_length=30)
-    condicion = models.TextField()
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default='PROMEDIO')
+    valor_umbral = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    operador = models.CharField(max_length=5, choices=OPERADOR_CHOICES, default='<')
+    nivel = models.CharField(max_length=20, choices=NIVEL_CHOICES, default='medium')
+    activo = models.BooleanField(default=True)
+    descripcion = models.TextField(null=True, blank=True)
 
     class Meta:
         db_table = 'regla'
@@ -11,7 +35,7 @@ class Regla(models.Model):
         verbose_name_plural = 'Reglas'
 
     def __str__(self):
-        return self.nombre
+        return f"{self.nombre} ({self.get_tipo_display()})"
 
 
 class Alerta(models.Model):
