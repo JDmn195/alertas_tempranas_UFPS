@@ -198,7 +198,7 @@ export default function RiskRules() {
                     Editar
                   </Button>
                   
-                  <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50 border-red-200" onClick={() => rule.id && handleDelete(rule.id)}>
+                  <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50 border-red-200" onClick={() => { if(rule.id) handleDelete(rule.id); }}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
