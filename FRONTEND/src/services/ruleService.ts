@@ -1,4 +1,5 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = `${BASE_URL}/api`;
 
 export interface Rule {
   id?: number;
@@ -15,7 +16,10 @@ export interface Rule {
 export const ruleService = {
   getRules: async () => {
     const response = await fetch(`${API_URL}/alertas/reglas/`);
-    if (!response.ok) throw new Error('Error al obtener las reglas');
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Error al obtener las reglas');
+    }
     return response.json();
   },
 
@@ -25,7 +29,10 @@ export const ruleService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...rule, usuario_id: usuarioId }),
     });
-    if (!response.ok) throw new Error('Error al crear la regla');
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Error al crear la regla');
+    }
     return response.json();
   },
 
@@ -35,7 +42,10 @@ export const ruleService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...rule, usuario_id: usuarioId }),
     });
-    if (!response.ok) throw new Error('Error al actualizar la regla');
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Error al actualizar la regla');
+    }
     return response.json();
   },
 
@@ -44,7 +54,7 @@ export const ruleService = {
       method: 'DELETE',
     });
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || 'Error al eliminar la regla');
     }
     return response.json();

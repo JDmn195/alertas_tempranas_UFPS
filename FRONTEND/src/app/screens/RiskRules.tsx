@@ -96,8 +96,8 @@ export default function RiskRules() {
       setShowModal(false);
       resetForm();
       loadRules();
-    } catch (error) {
-      alert('Error al guardar la regla');
+    } catch (error: any) {
+      alert(error.message || 'Error al guardar la regla');
     }
   };
 

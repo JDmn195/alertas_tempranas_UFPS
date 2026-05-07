@@ -4,6 +4,7 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
 from ..models import Regla
+from django.db.models import ProtectedError
 from usuarios.models import Usuario
 
 @csrf_exempt
@@ -37,7 +38,7 @@ def listar_crear_reglas(request):
                 return JsonResponse({'error': 'usuario_id es requerido'}, status=400)
             
             usuario = get_object_or_404(Usuario, id=usuario_id)
-            if usuario.rol not in [ 'BIENESTAR', 'ADMINISTRADOR']:
+            if usuario.rol not in ['DIRECTOR', 'BIENESTAR', 'ADMINISTRADOR']:
                 return JsonResponse({'error': 'No tiene permisos para crear reglas'}, status=403)
 
             regla = Regla.objects.create(
@@ -53,7 +54,6 @@ def listar_crear_reglas(request):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
 
-from django.db.models import ProtectedError
 
 @csrf_exempt
 @require_http_methods(["GET", "PUT", "DELETE"])
@@ -82,7 +82,7 @@ def detalle_regla(request, pk):
             body = json.loads(request.body)
             usuario_id = body.get('usuario_id')
             usuario = get_object_or_404(Usuario, id=usuario_id)
-            if usuario.rol not in ['BIENESTAR', 'ADMINISTRADOR']:
+            if usuario.rol not in ['DIRECTOR', 'BIENESTAR', 'ADMINISTRADOR']:
                 return JsonResponse({'error': 'No tiene permisos para modificar reglas'}, status=403)
 
             regla.nombre = body.get('nombre', regla.nombre)
