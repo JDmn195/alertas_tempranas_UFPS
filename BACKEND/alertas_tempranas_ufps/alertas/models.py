@@ -75,3 +75,35 @@ class Intervencion(models.Model):
 
     def __str__(self):
         return f"Intervención {self.tipo} a alerta {self.alerta_id}"
+
+
+class Evidencia(models.Model):
+    intervencion = models.ForeignKey(Intervencion, on_delete=models.CASCADE, related_name='evidencias')
+    archivo_url = models.URLField(max_length=500)
+    nombre_archivo = models.CharField(max_length=255)
+    tipo_archivo = models.CharField(max_length=100, null=True, blank=True)
+    fecha_subida = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'evidencia'
+        verbose_name = 'Evidencia'
+        verbose_name_plural = 'Evidencias'
+
+    def __str__(self):
+        return f"Evidencia: {self.nombre_archivo} de Intervención {self.intervencion_id}"
+
+
+class AnotacionIntervencion(models.Model):
+    intervencion = models.ForeignKey(Intervencion, on_delete=models.CASCADE, related_name='anotaciones')
+    usuario = models.ForeignKey('usuarios.Usuario', on_delete=models.PROTECT)
+    texto = models.TextField()
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'anotacion_intervencion'
+        verbose_name = 'Anotación'
+        verbose_name_plural = 'Anotaciones'
+        ordering = ['-fecha']
+
+    def __str__(self):
+        return f"Anotación de {self.usuario.nombre} en Intervención {self.intervencion_id}"
