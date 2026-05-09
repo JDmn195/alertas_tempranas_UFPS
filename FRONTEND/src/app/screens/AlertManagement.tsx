@@ -3,7 +3,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { X, ClipboardList, CheckCircle2, AlertTriangle } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000/api/alertas';
+const API_BASE = 'https://alertas-tempranas-ufps.vercel.app';
 
 const tabs = ['Activas', 'En Seguimiento', 'Atendidas', 'Cerradas'];
 
