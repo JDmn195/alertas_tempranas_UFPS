@@ -54,8 +54,15 @@ class Alerta(models.Model):
 
 
 class Intervencion(models.Model):
+    TIPO_CHOICES = [
+        ('TUTORIA', 'Tutoría'),
+        ('CITACION', 'Citación'),
+        ('REMISION', 'Remisión'),
+    ]
+
     alerta = models.ForeignKey(Alerta, on_delete=models.CASCADE)
     usuario = models.ForeignKey('usuarios.Usuario', on_delete=models.PROTECT)
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
     fecha = models.DateTimeField(auto_now_add=True)
     observaciones = models.TextField(null=True, blank=True)
     evidencia = models.CharField(max_length=300, null=True, blank=True)
@@ -67,4 +74,4 @@ class Intervencion(models.Model):
         verbose_name_plural = 'Intervenciones'
 
     def __str__(self):
-        return f"Intervención a alerta {self.alerta_id}"
+        return f"Intervención {self.tipo} a alerta {self.alerta_id}"
