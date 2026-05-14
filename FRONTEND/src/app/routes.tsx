@@ -15,6 +15,7 @@ import DirectorDashboard from "./screens/DirectorDashboard";
 import ExportReports from "./screens/ExportReports";
 import UserManagement from "./screens/UserManagement";
 import CourseList from './screens/CourseList'
+import EvidenceManagement from './screens/EvidenceManagement';
 
 export const router = createBrowserRouter([
   {
@@ -69,6 +70,10 @@ export const router = createBrowserRouter([
       { 
         path: "alerts", 
         element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR']}><AlertManagement /></ProtectedRoute> 
+      },
+      {
+        path: "intervenciones/:intervencionId/evidencias",
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR']}><EvidenceManagement /></ProtectedRoute>
       },
       { 
         path: "teacher", 

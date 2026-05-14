@@ -130,3 +130,112 @@ def listar_intervenciones(request, alerta_id):
         'total':      len(results),
         'intervenciones': results,
     })
+
+
+from alertas.models import AnotacionIntervencion
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def gestionar_anotaciones(request, intervencion_id):
+    """
+    GET: Lista las anotaciones de una intervención.
+    POST: Crea una nueva anotación (requiere usuario_id y texto).
+    """
+    try:
+        intervencion = Intervencion.objects.get(id=intervencion_id)
+    except Intervencion.DoesNotExist:
+        return JsonResponse({'error': 'Intervención no encontrada'}, status=404)
+
+    if request.method == "GET":
+        anotaciones = AnotacionIntervencion.objects.filter(intervencion=intervencion).order_by('-fecha')
+        results = []
+        for a in anotaciones:
+            results.append({
+                'id': a.id,
+                'texto': a.texto,
+                'fecha': a.fecha.strftime('%Y-%m-%d %H:%M'),
+                'usuario': a.usuario.nombre,
+                'usuario_rol': a.usuario.rol
+            })
+        return JsonResponse({'anotaciones': results})
+
+    elif request.method == "POST":
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Body JSON inválido'}, status=400)
+
+        usuario_id = body.get('usuario_id')
+        texto = body.get('texto', '').strip()
+
+        if not usuario_id or not texto:
+            return JsonResponse({'error': 'usuario_id y texto son obligatorios'}, status=400)
+
+        try:
+            usuario = Usuario.objects.get(id=int(usuario_id))
+        except (Usuario.DoesNotExist, ValueError):
+            return JsonResponse({'error': 'usuario_id inválido o no encontrado'}, status=400)
+
+        anotacion = AnotacionIntervencion.objects.create(
+            intervencion=intervencion,
+            usuario=usuario,
+            texto=texto
+        )
+
+        return JsonResponse({
+            'mensaje': 'Anotación creada exitosamente',
+            'anotacion': {
+                'id': anotacion.id,
+                'texto': anotacion.texto,
+                'fecha': anotacion.fecha.strftime('%Y-%m-%d %H:%M'),
+                'usuario': usuario.nombre,
+                'usuario_rol': usuario.rol
+            }
+        }, status=201)
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def eliminar_anotacion(request, anotacion_id):
+    """
+    DELETE /api/alertas/anotaciones/<id>/
+    Elimina una anotación específica.
+    """
+    try:
+        anotacion = AnotacionIntervencion.objects.get(id=anotacion_id)
+        anotacion.delete()
+        return JsonResponse({'mensaje': 'Anotación eliminada correctamente'})
+    except AnotacionIntervencion.DoesNotExist:
+        return JsonResponse({'error': 'Anotación no encontrada'}, status=404)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def concluir_intervencion(request, intervencion_id):
+    """
+    POST /api/alertas/intervenciones/<id>/concluir/
+    Recibe un 'resultado' (resumen), actualiza la intervención y cierra la alerta.
+    """
+    try:
+        intervencion = Intervencion.objects.get(id=intervencion_id)
+    except Intervencion.DoesNotExist:
+        return JsonResponse({'error': 'Intervención no encontrada'}, status=404)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Body JSON inválido'}, status=400)
+
+    resultado = body.get('resultado', '').strip()
+    if not resultado:
+        return JsonResponse({'error': 'El resumen final (resultado) es obligatorio'}, status=400)
+
+    # Actualizar intervención
+    intervencion.resultado = resultado
+    intervencion.save()
+
+    # Cerrar la alerta
+    alerta = intervencion.alerta
+    alerta.estado = 'cerrada'
+    alerta.save()
+
+    return JsonResponse({'mensaje': 'Intervención concluida y alerta cerrada exitosamente'})
+

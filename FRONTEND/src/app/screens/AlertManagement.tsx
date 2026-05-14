@@ -121,7 +121,7 @@ function ModalRegistrar({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          usuario_id:    user?.id,
+          usuario_id: user?.id,
           tipo,
           observaciones: observaciones.trim(),
         }),
@@ -268,7 +268,7 @@ function ModalHistorial({
   };
 
   const TIPO_COLOR: Record<string, string> = {
-    TUTORIA:  'bg-blue-100 text-blue-700',
+    TUTORIA: 'bg-blue-100 text-blue-700',
     CITACION: 'bg-yellow-100 text-yellow-700',
     REMISION: 'bg-purple-100 text-purple-700',
   };
@@ -424,9 +424,8 @@ export default function AlertManagement() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-6 py-4 text-sm font-medium transition-colors relative ${
-                  activeTab === tab ? 'text-[#C8102E]' : 'text-gray-500 hover:text-gray-700'
-                }`}
+                className={`px-6 py-4 text-sm font-medium transition-colors relative ${activeTab === tab ? 'text-[#C8102E]' : 'text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 {tab}
                 {activeTab === tab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#C8102E]" />}
