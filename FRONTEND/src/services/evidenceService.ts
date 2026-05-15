@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8000/api/alertas';
+const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000') + '/api/alertas';
 
 export interface Evidencia {
   id: number;

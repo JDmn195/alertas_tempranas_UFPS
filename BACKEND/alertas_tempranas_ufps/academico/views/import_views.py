@@ -201,6 +201,13 @@ def importar_estudiantes_dirplan(request):
                         update_fields=update_fields
                     )
                     processed_count = len(estudiantes_objs)
+            
+            # AUTOMATIZACIÓN: Generar alertas para los estudiantes procesados
+            try:
+                from alertas.views.alert_generation_views import reprocesar_alertas_completas
+                reprocesar_alertas_completas()
+            except Exception as ae:
+                print(f"Error en generación automática de alertas: {ae}")
 
             _registrar_bitacora(request, file.name, 'ESTUDIANTES', processed_count, [], True)
 
@@ -293,14 +300,8 @@ def importar_historial_academico(request):
             anio = int(periodo_match.group(1))
             semestre = int(periodo_match.group(2))
 
-            try:
-                periodo_obj = Periodo.objects.get(anio=anio, semestre=semestre)
-            except Periodo.DoesNotExist:
-                errores.append({
-                    "fila": fila_num, "campo": "Periodo", "valor": periodo_raw,
-                    "mensaje": f"El periodo '{periodo_raw}' no existe en el sistema."
-                })
-                continue
+            # Si el periodo no existe, se crea automáticamente
+            periodo_obj, _ = Periodo.objects.get_or_create(anio=anio, semestre=semestre)
 
             # --- Validar Curso ---
             codigo_materia = str(row.get('Codigo Materia', '')).strip()
@@ -362,6 +363,14 @@ def importar_historial_academico(request):
                 creados += 1
 
         _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', creados, [], True)
+        
+        # AUTOMATIZACIÓN: Recalcular alertas tras importar historial
+        try:
+            from alertas.views.alert_generation_views import reprocesar_alertas_completas
+            reprocesar_alertas_completas()
+        except Exception as ae:
+            print(f"Error en generación automática de alertas: {ae}")
+
         return JsonResponse({"status": "success", "creados": creados})
     except Exception as e:
         traceback.print_exc()
@@ -490,9 +499,17 @@ def importar_oferta_academica(request):
 
         nombre_materia = str(row['Nombre']).strip()
 
-        codigo_docente = str(
-            row['Código Docente']
-        ).strip()
+        codigo_docente = str(row['Código Docente']).strip()
+        # Asegurar que el código tenga 5 dígitos (rellenar con ceros a la izquierda)
+        if codigo_docente and codigo_docente.lower() != 'nan':
+            # Intentar convertir a int y luego a string de 5 dígitos si es numérico
+            try:
+                codigo_docente = str(int(float(codigo_docente))).zfill(5)
+            except:
+                codigo_docente = codigo_docente.zfill(5)
+        
+        if not codigo_docente or codigo_docente.lower() == 'nan':
+            continue
 
         nombre_docente = str(
             row['Nombre Docente']
@@ -703,9 +720,19 @@ def importar_docentes(request):
 
             # ── Leer y limpiar código ──────────────────────────────────
             codigo_raw = row.get(col_codigo)
-            if pd.isna(codigo_raw):
+            if pd.isna(codigo_raw) or str(codigo_raw).strip() == '':
                 continue
+            
             codigo = str(codigo_raw).strip().lstrip("'")
+            # Asegurar que el código tenga 5 dígitos (rellenar con ceros a la izquierda)
+            if codigo and codigo.lower() != 'nan':
+                try:
+                    codigo = str(int(float(codigo))).zfill(5)
+                except:
+                    codigo = codigo.zfill(5)
+            
+            if not codigo or codigo.lower() == 'nan':
+                continue
 
             # ── Leer demás campos ──────────────────────────────────────
             nombre               = str(row.get(col_nombre, '')).strip()
