@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { X, ClipboardList, CheckCircle2, AlertTriangle } from 'lucide-react';
@@ -6,69 +6,6 @@ import { X, ClipboardList, CheckCircle2, AlertTriangle } from 'lucide-react';
 const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas`;
 
 const tabs = ['Activas', 'En Seguimiento', 'Atendidas', 'Cerradas'];
-
-const alerts = [
-  {
-    id: '1',
-    studentName: 'María Alejandra Ramírez González',
-    studentCode: '1151234',
-    riskLevel: 'high',
-    alertType: 'Bajo Promedio - Crítico',
-    generatedDate: '2026-04-05',
-    assignedTeacher: 'Prof. Juan Pérez',
-    status: 'active',
-  },
-  {
-    id: '2',
-    studentName: 'Carlos Andrés Mendoza Pérez',
-    studentCode: '1151567',
-    riskLevel: 'high',
-    alertType: 'Múltiples Cursos Reprobados',
-    generatedDate: '2026-04-04',
-    assignedTeacher: 'Prof. María García',
-    status: 'active',
-  },
-  {
-    id: '3',
-    studentName: 'Diego Fernando Castillo Ruiz',
-    studentCode: '1152134',
-    riskLevel: 'medium',
-    alertType: 'Baja Tasa de Asistencia',
-    generatedDate: '2026-04-03',
-    assignedTeacher: 'Prof. Ana López',
-    status: 'monitoring',
-  },
-  {
-    id: '4',
-    studentName: 'Ana María López Martínez',
-    studentCode: '1152456',
-    riskLevel: 'high',
-    alertType: 'Tendencia Decreciente de Promedio',
-    generatedDate: '2026-04-02',
-    assignedTeacher: 'Prof. Juan Pérez',
-    status: 'active',
-  },
-  {
-    id: '5',
-    studentName: 'Isabella Sofía Rodríguez Cruz',
-    studentCode: '1153012',
-    riskLevel: 'medium',
-    alertType: 'Un Curso Reprobado',
-    generatedDate: '2026-04-01',
-    assignedTeacher: 'Prof. Carlos Ruiz',
-    status: 'monitoring',
-  },
-  {
-    id: '6',
-    studentName: 'Valentina Andrea Morales Vargas',
-    studentCode: '1153678',
-    riskLevel: 'high',
-    alertType: 'Bajo Promedio - Crítico',
-    generatedDate: '2026-03-28',
-    assignedTeacher: 'Prof. María García',
-    status: 'active',
-  },
-];
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface AlertItem {
@@ -367,19 +304,44 @@ function ModalHistorial({
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function AlertManagement() {
   const [activeTab, setActiveTab] = useState('Activas');
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [errorData, setErrorData] = useState<string | null>(null);
   const [modalRegistrar, setModalRegistrar] = useState<AlertItem | null>(null);
   const [modalHistorial, setModalHistorial] = useState<AlertItem | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  const fetchAlerts = async () => {
+    setLoadingData(true);
+    setErrorData(null);
+    try {
+      const res = await fetch(`${API_BASE}`);
+      if (!res.ok) throw new Error('Error al cargar alertas');
+      const data = await res.json();
+      setAlerts(data.alertas || []);
+    } catch {
+      setErrorData('No se pudo cargar la lista de alertas desde el servidor.');
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAlerts();
+  }, []);
+
   const filteredAlerts = alerts.filter((alert) => {
     if (activeTab === 'Activas') return alert.status === 'active';
     if (activeTab === 'En Seguimiento') return alert.status === 'monitoring';
+    if (activeTab === 'Atendidas') return alert.status === 'attended';
+    if (activeTab === 'Cerradas') return alert.status === 'closed';
     return false;
   });
 
   const handleSuccess = () => {
     setSuccessMsg('Intervención registrada exitosamente');
     setTimeout(() => setSuccessMsg(null), 4000);
+    fetchAlerts();
   };
 
   return (
@@ -465,15 +427,19 @@ export default function AlertManagement() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       {alert.status === 'active' && <Badge variant="error" size="sm">Activa</Badge>}
                       {alert.status === 'monitoring' && <Badge variant="gray" size="sm">En seguimiento</Badge>}
+                      {alert.status === 'attended' && <Badge variant="medium" size="sm">Atendida</Badge>}
+                      {alert.status === 'closed' && <Badge variant="success" size="sm">Cerrada</Badge>}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" onClick={() => setModalHistorial(alert)}>
                           Ver historial
                         </Button>
-                        <Button variant="primary" size="sm" onClick={() => setModalRegistrar(alert)}>
-                          Registrar intervención
-                        </Button>
+                        {alert.status !== 'closed' && (
+                          <Button variant="primary" size="sm" onClick={() => setModalRegistrar(alert)}>
+                            Registrar intervención
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -482,12 +448,12 @@ export default function AlertManagement() {
                 <tr>
                   <td colSpan={8} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center">
-                      <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-3">
-                        <svg className="w-8 h-8 text-[#C8102E]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
+                      <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-3">
+                        <ClipboardList className="w-8 h-8 text-gray-400" />
                       </div>
-                      <p className="text-gray-500 text-sm">No se encontraron alertas en esta categoría</p>
+                      <p className="text-gray-500 text-sm">
+                        {loadingData ? 'Cargando alertas...' : errorData || 'No se encontraron alertas en esta categoría'}
+                      </p>
                     </div>
                   </td>
                 </tr>

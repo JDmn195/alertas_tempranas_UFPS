@@ -2,8 +2,10 @@ from django.urls import path
 from .views import rule_views
 from .views.intervencion_views import registrar_intervencion, listar_intervenciones, gestionar_anotaciones, eliminar_anotacion, concluir_intervencion
 from .views.evidence_views import upload_evidence, list_evidence, delete_evidence
+from .views.alerta_views import listar_alertas
 
 urlpatterns = [
+    path('', listar_alertas, name='listar-alertas'),
     path('reglas/', rule_views.listar_crear_reglas, name='listar_crear_reglas'),
     path('reglas/<int:pk>/', rule_views.detalle_regla, name='detalle_regla'),
     path('<int:alerta_id>/intervenciones/', listar_intervenciones,  name='listar-intervenciones'),
