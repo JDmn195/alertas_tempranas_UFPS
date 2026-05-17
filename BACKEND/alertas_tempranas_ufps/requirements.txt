@@ -14,3 +14,4 @@ tzdata==2026.1
 gunicorn
 whitenoise
 dj-database-url
+supabase
