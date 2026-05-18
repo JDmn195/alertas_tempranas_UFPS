@@ -5,10 +5,10 @@ from .views.evidence_views import upload_evidence, list_evidence, delete_evidenc
 from .views.alert_generation_views import generar_alertas, listar_alertas, cerrar_alerta
 
 urlpatterns = [
+    path('', listar_alertas, name='listar-alertas'),
     path('reglas/', rule_views.listar_crear_reglas, name='listar_crear_reglas'),
     path('reglas/<int:pk>/', rule_views.detalle_regla, name='detalle_regla'),
     path('generar/', generar_alertas, name='generar-alertas'),
-    path('', listar_alertas, name='listar-alertas'),
     path('<int:alerta_id>/cerrar/', cerrar_alerta, name='cerrar-alerta'),
     path('<int:alerta_id>/intervenciones/', listar_intervenciones,  name='listar-intervenciones'),
     path('<int:alerta_id>/intervenciones/registrar/', registrar_intervencion, name='registrar-intervencion'),
