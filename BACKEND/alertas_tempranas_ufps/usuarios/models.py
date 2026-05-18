@@ -5,6 +5,7 @@ class Usuario(models.Model):
         ('DOCENTE', 'Docente'),
         ('DIRECTOR', 'Director'),
         ('BIENESTAR', 'Bienestar'),
+        ('ADMINISTRADOR', 'Administrador'),
     ]
 
     nombre = models.CharField(max_length=150)

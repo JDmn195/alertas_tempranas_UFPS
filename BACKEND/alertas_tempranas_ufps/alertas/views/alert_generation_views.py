@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404
 from academico.models import Estudiante, Nota
 from alertas.models import Regla, Alerta, RiesgoEstudiante
 from academico.views.student_views import calcular_nivel_riesgo
+from alertas.services import NotificationService
 
 def reprocesar_alertas_completas(estudiantes_qs=None):
     """
@@ -55,15 +56,21 @@ def reprocesar_alertas_completas(estudiantes_qs=None):
                     metadata_regla = {'materias': [n.curso.materia.nombre for n in reprobadas_qs]}
                 elif r.tipo == 'ATRASO':
                     from academico.models import Materia
-                    aprobadas_ids = Nota.objects.filter(estudiante=est, definitiva__gte=3.0).values_list('curso__materia_id', flat=True)
-                    atrasadas_qs = Materia.objects.filter(semestre__lt=est.semestre).exclude(codigo__in=aprobadas_ids)
+                    tiene_notas = Nota.objects.filter(estudiante=est).exists()
                     
-                    val = atrasadas_qs.count()
-                    metadata_regla = {
-                        'semestre_actual': est.semestre, 
-                        'materias_atrasadas': [m.nombre for m in atrasadas_qs],
-                        'total_atrasadas': val
-                    }
+                    if tiene_notas:
+                        aprobadas_ids = Nota.objects.filter(estudiante=est, definitiva__gte=3.0).values_list('curso__materia_id', flat=True)
+                        atrasadas_qs = Materia.objects.filter(semestre__lt=est.semestre).exclude(codigo__in=aprobadas_ids)
+                        
+                        val = atrasadas_qs.count()
+                        metadata_regla = {
+                            'semestre_actual': est.semestre, 
+                            'materias_atrasadas': [m.nombre for m in atrasadas_qs],
+                            'total_atrasadas': val
+                        }
+                    else:
+                        val = 0
+                        metadata_regla = {}
                 
                 try:
                     if r.operador == '<': aplica = val < float(r.valor_umbral)
@@ -98,13 +105,14 @@ def reprocesar_alertas_completas(estudiantes_qs=None):
 
             # 3. Generar Alertas
             for r_app in reglas_que_aplican:
-                Alerta.objects.create(
+                nueva_alerta = Alerta.objects.create(
                     estudiante=est,
                     regla_id=r_app['id'],
                     estado='activa',
                     valor_causa=r_app['valor'],
                     metadata=r_app['metadata']
                 )
+                NotificationService.notificar_alerta(nueva_alerta)
                 nuevas_alertas += 1
 
     return {

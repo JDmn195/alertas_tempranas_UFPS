@@ -1,7 +1,7 @@
 type BadgeProps = {
   variant: 'low' | 'medium' | 'high' | 'success' | 'error' | 'gray';
   children: React.ReactNode;
-  size?: 'sm' | 'md';
+  size?: 'xs' | 'sm' | 'md';
   className?: string;
 };
 
@@ -16,6 +16,7 @@ export function Badge({ variant, children, size = 'md', className = '' }: BadgeP
   };
 
   const sizes = {
+    xs: 'px-1.5 py-0.5 text-[10px]',
     sm: 'px-2 py-0.5 text-xs',
     md: 'px-3 py-1 text-sm',
   };

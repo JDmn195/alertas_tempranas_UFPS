@@ -132,3 +132,50 @@ class AnotacionIntervencion(models.Model):
 
     def __str__(self):
         return f"Anotación de {self.usuario.nombre} en Intervención {self.intervencion_id}"
+
+
+class NotificacionHistorial(models.Model):
+    CANAL_CHOICES = [
+        ('EMAIL', 'Correo Electrónico'),
+        ('INTERNA', 'Notificación Interna'),
+    ]
+
+    ESTADO_CHOICES = [
+        ('exitoso', 'Exitoso'),
+        ('fallido', 'Fallido'),
+        ('reintento', 'Pendiente de Reintento'),
+    ]
+
+    alerta = models.ForeignKey(Alerta, on_delete=models.CASCADE, related_name='historial_notificaciones')
+    destinatario = models.CharField(max_length=255)  # Email o ID de usuario
+    rol_destinatario = models.CharField(max_length=50)
+    canal = models.CharField(max_length=20, choices=CANAL_CHOICES)
+    fecha_envio = models.DateTimeField(auto_now_add=True)
+    resultado = models.CharField(max_length=20, choices=ESTADO_CHOICES)
+    detalle_error = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'notificacion_historial'
+        verbose_name = 'Historial de Notificación'
+        verbose_name_plural = 'Historial de Notificaciones'
+        ordering = ['-fecha_envio']
+
+    def __str__(self):
+        return f"{self.canal} a {self.destinatario} - {self.resultado}"
+
+
+class NotificacionInterna(models.Model):
+    usuario = models.ForeignKey('usuarios.Usuario', on_delete=models.CASCADE, related_name='notificaciones_internas')
+    alerta = models.ForeignKey(Alerta, on_delete=models.CASCADE)
+    mensaje = models.TextField()
+    leida = models.BooleanField(default=False)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'notificacion_interna'
+        verbose_name = 'Notificación Interna'
+        verbose_name_plural = 'Notificaciones Internas'
+        ordering = ['-fecha_creacion']
+
+    def __str__(self):
+        return f"Notificación para {self.usuario.nombre} - {self.leida}"

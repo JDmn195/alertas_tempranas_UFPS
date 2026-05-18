@@ -15,3 +15,5 @@ gunicorn
 whitenoise
 dj-database-url
 supabase
+requests
+django-rest-framework
