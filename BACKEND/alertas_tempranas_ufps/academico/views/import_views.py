@@ -322,14 +322,54 @@ def importar_historial_academico(request):
                 curso_obj = Curso.objects.filter(materia__codigo=base_materia, grupo=grupo_str).first()
             if not curso_obj:
                 curso_obj = Curso.objects.filter(materia__codigo=base_materia).first()
-
+            
             if not curso_obj:
+                # Si el curso no existe, se crea automáticamente a partir de la materia
                 nombre_materia = str(row.get('Nombre Materia', '')).strip()
-                errores.append({
-                    "fila": fila_num, "campo": "Codigo Materia",
-                    "mensaje": f"No existe curso con materia base '{base_materia} - {nombre_materia}'."
-                })
-                continue
+                creditos_raw = row.get('Creditos')
+                try:
+                    creditos_val = int(float(creditos_raw)) if not pd.isna(creditos_raw) else None
+                except:
+                    creditos_val = None
+
+                # Obtener o crear la materia base
+                materia_obj, _ = Materia.objects.get_or_create(
+                    codigo=base_materia,
+                    defaults={
+                        "nombre": nombre_materia,
+                        "creditos": creditos_val,
+                        "tipo": "linea"  # Por defecto
+                    }
+                )
+
+                # Obtener o crear docente por defecto para satisfacer el FK obligatorio
+                default_user, _ = Usuario.objects.get_or_create(
+                    correo='docente.defecto@ufps.edu.co',
+                    defaults={
+                        'nombre': 'Docente por Asignar',
+                        'rol': 'DOCENTE',
+                        'contrasena': '00000',
+                        'activo': True
+                    }
+                )
+                default_docente, _ = Docente.objects.get_or_create(
+                    codigo='00000',
+                    defaults={
+                        'nombre': 'Docente por Asignar',
+                        'tipo_vinculacion': 'DOCENTE CATEDRA',
+                        'usuario': default_user
+                    }
+                )
+
+                # Crear el curso con grupo por defecto 'A' si no viene especificado
+                grupo_para_crear = grupo_str if grupo_str else 'A'
+                curso_obj = Curso.objects.create(
+                    materia=materia_obj,
+                    grupo=grupo_para_crear,
+                    docente=default_docente,
+                    horario='POR DEFINIR',
+                    cantidad_matriculados=0
+                )
 
             # --- Validar Nota ---
             nota_raw = row.get('Definitiva')

@@ -15,10 +15,17 @@ class Periodo(models.Model):
 
 
 class Materia(models.Model):
+    TIPO_CHOICES = [
+        ('linea', 'De línea'),
+        ('profesional', 'Electiva Profesional'),
+        ('sociohumanistica', 'Electiva Sociohumanística'),
+    ]
+
     codigo = models.CharField(max_length=20, primary_key=True)
     nombre = models.CharField(max_length=150)
     creditos = models.SmallIntegerField(null=True, blank=True)
     semestre = models.SmallIntegerField(null=True, blank=True)
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default='linea')
 
     class Meta:
         db_table = 'materia'
