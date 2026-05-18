@@ -18,6 +18,7 @@ class Materia(models.Model):
     codigo = models.CharField(max_length=20, primary_key=True)
     nombre = models.CharField(max_length=150)
     creditos = models.SmallIntegerField(null=True, blank=True)
+    semestre = models.SmallIntegerField(null=True, blank=True)
 
     class Meta:
         db_table = 'materia'

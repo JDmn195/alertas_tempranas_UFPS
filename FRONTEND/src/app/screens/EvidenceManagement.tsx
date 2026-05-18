@@ -156,8 +156,8 @@ export default function EvidenceManagement() {
     try {
       await evidenceService.concluirIntervencion(id, resumenFinal.trim());
       setShowConcludeModal(false);
-      setSuccessMsg('Intervención concluida y alerta cerrada con éxito.');
-      loadEvidencias(); // Recargar para actualizar el estado a cerrado
+      setSuccessMsg('Intervención concluida y alerta marcada como atendida.');
+      loadEvidencias(); // Recargar para actualizar el estado a atendido
     } catch (err: any) {
       setError(err.message || 'Error al concluir la intervención');
     } finally {
@@ -177,11 +177,11 @@ export default function EvidenceManagement() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <button 
-          onClick={() => navigate('/dashboard/alerts')}
+          onClick={() => navigate(-1)}
           className="flex items-center gap-2 text-gray-500 hover:text-[#C8102E] transition-colors font-medium"
         >
           <ArrowLeft className="w-5 h-5" />
-          Volver a Intervenciones
+          Volver
         </button>
         
         <div className="flex flex-col items-end text-right">

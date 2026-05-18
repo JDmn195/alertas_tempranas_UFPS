@@ -26,6 +26,7 @@ class Regla(models.Model):
     valor_umbral = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
     operador = models.CharField(max_length=5, choices=OPERADOR_CHOICES, default='<')
     nivel = models.CharField(max_length=20, choices=NIVEL_CHOICES, default='medium')
+    prioridad = models.IntegerField(default=0)
     activo = models.BooleanField(default=True)
     descripcion = models.TextField(null=True, blank=True)
 
@@ -43,6 +44,8 @@ class Alerta(models.Model):
     regla = models.ForeignKey(Regla, on_delete=models.PROTECT)
     fecha_generacion = models.DateTimeField(auto_now_add=True)
     estado = models.CharField(max_length=30)
+    valor_causa = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    metadata = models.JSONField(default=dict, null=True, blank=True)
 
     class Meta:
         db_table = 'alerta'
@@ -51,6 +54,28 @@ class Alerta(models.Model):
 
     def __str__(self):
         return f"{self.estudiante.codigo} - {self.estado}"
+
+
+class RiesgoEstudiante(models.Model):
+    NIVEL_CHOICES = [
+        ('high', 'Alto'),
+        ('medium', 'Medio'),
+        ('low', 'Bajo'),
+        ('unknown', 'Sin Dato'),
+    ]
+
+    estudiante = models.OneToOneField('academico.Estudiante', on_delete=models.CASCADE, related_name='riesgo')
+    nivel_riesgo = models.CharField(max_length=20, choices=NIVEL_CHOICES, default='unknown')
+    fecha_calculo = models.DateTimeField(auto_now=True)
+    reglas_aplicadas = models.JSONField(default=list)
+
+    class Meta:
+        db_table = 'riesgo_estudiante'
+        verbose_name = 'Riesgo Estudiante'
+        verbose_name_plural = 'Riesgos Estudiantes'
+
+    def __str__(self):
+        return f"{self.estudiante.codigo} - {self.nivel_riesgo}"
 
 
 class Intervencion(models.Model):

@@ -59,7 +59,13 @@ export default function StudentList() {
   const countMedium   = students.filter(s => s.nivel_riesgo === 'medium').length;
   const countLow      = students.filter(s => s.nivel_riesgo === 'low').length;
   const countAlerts   = students.reduce((sum, s) => sum + (s.alertas_activas || 0), 0);
-  const countInactive = students.filter(s => s.estado_matricula && s.estado_matricula.toLowerCase() !== 'activo').length;
+  
+  // Lógica corregida: Considerar inactivos solo estados terminales (Retirado, Graduado, Cancelado)
+  const countInactive = students.filter(s => {
+    if (!s.estado_matricula) return false;
+    const est = s.estado_matricula.toLowerCase();
+    return est.includes('retirado') || est.includes('graduado') || est.includes('cancelado');
+  }).length;
 
   // ── Debounce search input ──────────────────────────────────────────────────
   useEffect(() => {

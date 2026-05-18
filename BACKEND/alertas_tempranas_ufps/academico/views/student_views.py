@@ -39,11 +39,10 @@ def calcular_nivel_riesgo(estudiante, promedio=None, reglas=None):
             # (Simplificación: todas las reprobadas del histórico)
             valor_comparar = Nota.objects.filter(estudiante=estudiante, definitiva__lt=3.0).count()
         elif regla.tipo == 'ATRASO':
-            # Heurística simple: semestre actual vs materias aprobadas
-            # (Asumiendo 5 materias por semestre)
-            aprobadas = Nota.objects.filter(estudiante=estudiante, definitiva__gte=3.0).count()
-            semestre_teorico = max(1, (aprobadas // 5) + 1)
-            valor_comparar = max(0, estudiante.semestre - semestre_teorico)
+            # Nueva lógica: materias de semestres anteriores no aprobadas
+            from academico.models import Materia
+            aprobadas_ids = Nota.objects.filter(estudiante=estudiante, definitiva__gte=3.0).values_list('curso__materia_id', flat=True)
+            valor_comparar = Materia.objects.filter(semestre__lt=estudiante.semestre).exclude(codigo__in=aprobadas_ids).count()
 
         # Evaluación de la condición
         try:

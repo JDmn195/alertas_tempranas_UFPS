@@ -1,22 +1,41 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
-import { X, ClipboardList, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { X, ClipboardList, CheckCircle2, AlertTriangle, Filter, ExternalLink, RefreshCw, ChevronRight } from 'lucide-react';
 
 const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas`;
 
-const tabs = ['Activas', 'En Seguimiento', 'Atendidas', 'Cerradas'];
+const RISK_CONFIG: Record<string, { label: string; variant: 'high' | 'medium' | 'low' }> = {
+  high: { label: 'ALTO', variant: 'high' },
+  medium: { label: 'MEDIO', variant: 'medium' },
+  low: { label: 'BAJO', variant: 'low' },
+  alto: { label: 'ALTO', variant: 'high' },
+  medio: { label: 'MEDIO', variant: 'medium' },
+  bajo: { label: 'BAJO', variant: 'low' },
+  ALTO: { label: 'ALTO', variant: 'high' },
+  MEDIO: { label: 'MEDIO', variant: 'medium' },
+  BAJO: { label: 'BAJO', variant: 'low' },
+};
 
+const tabMapping: Record<string, string> = {
+  'Activas': 'activa',
+  'En Seguimiento': 'en_monitoreo',
+  'Atendidas': 'atendida',
+  'Cerradas': 'cerrada'
+};
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface AlertItem {
-  id: string;
+  id: string | number;
   studentName: string;
   studentCode: string;
   riskLevel: string;
   alertType: string;
   generatedDate: string;
-  assignedTeacher: string;
   status: string;
+  tipo_regla: string;
+  valor_causa?: number;
+  metadata?: any;
 }
 
 interface Intervencion {
@@ -25,7 +44,13 @@ interface Intervencion {
   observaciones: string;
   fecha: string;
   usuario: string;
-  usuario_rol: string;
+}
+
+interface Conteos {
+  activa: number;
+  en_monitoreo: number;
+  atendida: number;
+  cerrada: number;
 }
 
 // ─── Modal Registrar Intervención ─────────────────────────────────────────────
@@ -65,12 +90,10 @@ function ModalRegistrar({
       });
 
       const data = await res.json();
-
       if (!res.ok) {
         setError(data.error || 'Error al registrar la intervención');
         return;
       }
-
       onSuccess();
       onClose();
     } catch {
@@ -82,13 +105,8 @@ function ModalRegistrar({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Overlay */}
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-
-      {/* Modal */}
       <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 z-10">
-
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
             <ClipboardList className="w-5 h-5 text-[#C8102E]" />
@@ -98,18 +116,12 @@ function ModalRegistrar({
             <X className="w-5 h-5" />
           </button>
         </div>
-
-        {/* Info estudiante */}
         <div className="px-6 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-xs text-gray-500">Estudiante</p>
           <p className="text-sm font-semibold text-gray-800">{alerta.studentName}</p>
           <p className="text-xs text-gray-500 mt-0.5">{alerta.alertType}</p>
         </div>
-
-        {/* Formulario */}
         <div className="px-6 py-5 space-y-4">
-
-          {/* Tipo */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Tipo de intervención <span className="text-red-500">*</span>
@@ -125,8 +137,6 @@ function ModalRegistrar({
               <option value="REMISION">Remisión</option>
             </select>
           </div>
-
-          {/* Observaciones */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Observaciones <span className="text-red-500">*</span>
@@ -135,24 +145,10 @@ function ModalRegistrar({
               value={observaciones}
               onChange={(e) => setObservaciones(e.target.value)}
               rows={4}
-              placeholder="Describe las acciones realizadas con el estudiante..."
+              placeholder="Describe las acciones realizadas..."
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] text-sm resize-none"
             />
-            <p className="text-xs text-gray-400 mt-1">{observaciones.length} caracteres</p>
           </div>
-
-          {/* Responsable (solo lectura) */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Responsable</label>
-            <input
-              type="text"
-              value={user?.nombre || 'Usuario actual'}
-              readOnly
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-500 cursor-not-allowed"
-            />
-          </div>
-
-          {/* Error */}
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
               <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
@@ -160,25 +156,17 @@ function ModalRegistrar({
             </div>
           )}
         </div>
-
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
             Cancelar
           </button>
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-white bg-[#C8102E] rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            className="px-4 py-2 text-sm font-medium text-white bg-[#C8102E] rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center gap-2"
           >
-            {loading ? (
-              <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Guardando...</>
-            ) : (
-              <><CheckCircle2 className="w-4 h-4" /> Guardar intervención</>
-            )}
+            {loading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            Guardar intervención
           </button>
         </div>
       </div>
@@ -197,21 +185,12 @@ function ModalHistorial({
   const [intervenciones, setIntervenciones] = useState<Intervencion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
-  const TIPO_LABEL: Record<string, string> = {
-    TUTORIA: 'Tutoría',
-    CITACION: 'Citación',
-    REMISION: 'Remisión',
-  };
+  const TIPO_LABEL: Record<string, string> = { TUTORIA: 'Tutoría', CITACION: 'Citación', REMISION: 'Remisión' };
+  const TIPO_COLOR: Record<string, string> = { TUTORIA: 'bg-blue-100 text-blue-700', CITACION: 'bg-yellow-100 text-yellow-700', REMISION: 'bg-purple-100 text-purple-700' };
 
-  const TIPO_COLOR: Record<string, string> = {
-    TUTORIA: 'bg-blue-100 text-blue-700',
-    CITACION: 'bg-yellow-100 text-yellow-700',
-    REMISION: 'bg-purple-100 text-purple-700',
-  };
-
-  // Cargar al abrir
-  useState(() => {
+  useEffect(() => {
     const fetchData = async () => {
       try {
         const res = await fetch(`${API_BASE}/${alerta.id}/intervenciones/`);
@@ -225,14 +204,12 @@ function ModalHistorial({
       }
     };
     fetchData();
-  });
+  }, [alerta.id]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 z-10 max-h-[80vh] flex flex-col">
-
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
             <ClipboardList className="w-5 h-5 text-[#C8102E]" />
@@ -242,231 +219,335 @@ function ModalHistorial({
             <X className="w-5 h-5" />
           </button>
         </div>
-
-        {/* Info estudiante */}
         <div className="px-6 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-sm font-semibold text-gray-800">{alerta.studentName}</p>
           <p className="text-xs text-gray-500">{alerta.alertType}</p>
         </div>
-
-        {/* Contenido */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          {loading && (
-            <div className="space-y-3">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="animate-pulse bg-gray-100 rounded-lg h-20" />
-              ))}
+          {loading && <div className="text-center py-10">Cargando...</div>}
+          {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+          {!loading && intervenciones.length === 0 && <p className="text-sm text-gray-500 text-center py-10">Sin intervenciones registradas</p>}
+          {!loading && intervenciones.map((item) => (
+            <div key={item.id} className="border border-gray-200 rounded-lg p-4 mb-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-xs font-semibold px-2 py-1 rounded-full ${TIPO_COLOR[item.tipo] || 'bg-gray-100 text-gray-600'}`}>
+                  {TIPO_LABEL[item.tipo] || item.tipo}
+                </span>
+                <span className="text-xs text-gray-400">{item.fecha}</span>
+              </div>
+              <p className="text-sm text-gray-700">{item.observaciones}</p>
+              <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs text-gray-400">Por: <span className="font-medium text-gray-600">{item.usuario}</span></p>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-7 text-[10px] gap-1 hover:bg-gray-50"
+                  onClick={() => navigate(`/dashboard/intervenciones/${item.id}/evidencias`)}
+                >
+                  <ExternalLink className="w-3 h-3" /> Ver Evidencias
+                </Button>
+              </div>
             </div>
-          )}
-
-          {error && (
-            <div className="text-center py-8">
-              <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-2" />
-              <p className="text-sm text-red-500">{error}</p>
-            </div>
-          )}
-
-          {!loading && !error && intervenciones.length === 0 && (
-            <div className="text-center py-10">
-              <ClipboardList className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No hay intervenciones registradas</p>
-            </div>
-          )}
-
-          {!loading && !error && intervenciones.length > 0 && (
-            <div className="space-y-3">
-              {intervenciones.map((item) => (
-                <div key={item.id} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${TIPO_COLOR[item.tipo] || 'bg-gray-100 text-gray-600'}`}>
-                      {TIPO_LABEL[item.tipo] || item.tipo}
-                    </span>
-                    <span className="text-xs text-gray-400">{item.fecha}</span>
-                  </div>
-                  <p className="text-sm text-gray-700">{item.observaciones}</p>
-                  <p className="text-xs text-gray-400 mt-2">Registrado por: <span className="font-medium text-gray-600">{item.usuario}</span></p>
-                </div>
-              ))}
-            </div>
-          )}
+          ))}
         </div>
-
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-            Cerrar
-          </button>
+          <Button variant="outline" size="sm" onClick={onClose}>Cerrar</Button>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Componente principal ─────────────────────────────────────────────────────
+// ─── Componente Principal ─────────────────────────────────────────────────────
 export default function AlertManagement() {
   const [activeTab, setActiveTab] = useState('Activas');
-  const [alerts, setAlerts] = useState<AlertItem[]>([]);
-  const [loadingData, setLoadingData] = useState(true);
-  const [errorData, setErrorData] = useState<string | null>(null);
-  const [modalRegistrar, setModalRegistrar] = useState<AlertItem | null>(null);
-  const [modalHistorial, setModalHistorial] = useState<AlertItem | null>(null);
+  const [filterType, setFilterType] = useState('all');
+  const [alertsList, setAlertsList] = useState<AlertItem[]>([]);
+  const [conteos, setConteos] = useState<Conteos>({ activa: 0, en_monitoreo: 0, atendida: 0, cerrada: 0 });
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [expandedStudents, setExpandedStudents] = useState<Record<string, boolean>>({});
 
-  const fetchAlerts = async () => {
-    setLoadingData(true);
-    setErrorData(null);
+  const [selectedAlert, setSelectedAlert] = useState<AlertItem | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const navigate = useNavigate();
+
+  const fetchAlerts = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}`);
-      if (!res.ok) throw new Error('Error al cargar alertas');
+      const stateParam = tabMapping[activeTab];
+      const res = await fetch(`${API_BASE}/?estado=${stateParam}&tipo_regla=${filterType}`);
       const data = await res.json();
-      setAlerts(data.alertas || []);
-    } catch {
-      setErrorData('No se pudo cargar la lista de alertas desde el servidor.');
+      setAlertsList(data.alertas);
+      setConteos(data.conteos);
+    } catch (e) {
+      console.error(e);
     } finally {
-      setLoadingData(false);
+      setLoading(false);
     }
-  };
+  }, [activeTab, filterType]);
 
   useEffect(() => {
     fetchAlerts();
-  }, []);
+  }, [fetchAlerts]);
 
-  const filteredAlerts = alerts.filter((alert) => {
-    if (activeTab === 'Activas') return alert.status === 'active';
-    if (activeTab === 'En Seguimiento') return alert.status === 'monitoring';
-    if (activeTab === 'Atendidas') return alert.status === 'attended';
-    if (activeTab === 'Cerradas') return alert.status === 'closed';
-    return false;
-  });
-
-  const handleSuccess = () => {
-    setSuccessMsg('Intervención registrada exitosamente');
-    setTimeout(() => setSuccessMsg(null), 4000);
-    fetchAlerts();
+  const handleGenerateAlerts = async () => {
+    setGenerating(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas/generar/`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      setSuccessMsg(`Proceso completado: ${data.nuevas_alertas} alertas procesadas.`);
+      fetchAlerts();
+      setTimeout(() => setSuccessMsg(null), 5000);
+    } catch (err) {
+      alert('Error al conectar con el servicio de alertas');
+    } finally {
+      setGenerating(false);
+    }
   };
 
+  const handleCerrarAlerta = async (id: string | number) => {
+    try {
+      await fetch(`${API_BASE}/${id}/cerrar/`, { method: 'POST' });
+      setSuccessMsg('Alerta cerrada correctamente');
+      fetchAlerts();
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const toggleStudent = (code: string) => {
+    setExpandedStudents(prev => ({ ...prev, [code]: !prev[code] }));
+  };
+
+  // Agrupar alertas por estudiante
+  const groupedAlerts = alertsList.reduce((acc: Record<string, any>, alert) => {
+    if (!acc[alert.studentCode]) {
+      acc[alert.studentCode] = {
+        studentName: alert.studentName,
+        studentCode: alert.studentCode,
+        alerts: []
+      };
+    }
+    acc[alert.studentCode].alerts.push(alert);
+    return acc;
+  }, {});
+
+  const studentGroups = Object.values(groupedAlerts);
+
   return (
-    <div className="space-y-6">
-
-      {/* Modales */}
-      {modalRegistrar && (
-        <ModalRegistrar
-          alerta={modalRegistrar}
-          onClose={() => setModalRegistrar(null)}
-          onSuccess={handleSuccess}
+    <div className="space-y-6 pb-20 max-w-7xl mx-auto px-4 sm:px-6">
+      {showModal && selectedAlert && (
+        <ModalRegistrar 
+          alerta={selectedAlert} 
+          onClose={() => setShowModal(false)} 
+          onSuccess={() => { setSuccessMsg('Intervención registrada'); fetchAlerts(); setTimeout(() => setSuccessMsg(null), 3000); }} 
         />
       )}
-      {modalHistorial && (
-        <ModalHistorial
-          alerta={modalHistorial}
-          onClose={() => setModalHistorial(null)}
+      {showHistory && selectedAlert && (
+        <ModalHistorial 
+          alerta={selectedAlert} 
+          onClose={() => setShowHistory(false)} 
         />
       )}
 
-      {/* Header */}
-      <div className="border-l-4 border-[#C8102E] pl-4">
-        <h1 className="text-2xl font-bold text-gray-900">Gestión de Alertas</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Monitorear y gestionar alertas de riesgo de estudiantes en todos los programas
-        </p>
+      {/* Header section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mt-4">
+        <div className="border-l-4 border-[#C8102E] pl-4">
+          <h1 className="text-2xl font-extrabold text-gray-900">Gestión de Alertas</h1>
+          <p className="text-sm text-gray-500 font-medium">Monitoreo y seguimiento del riesgo académico estudiantil.</p>
+        </div>
+        
+        <div className="flex items-center gap-3 bg-white p-1.5 rounded-2xl border border-gray-200 shadow-sm">
+          <div className="flex items-center gap-2 px-3 border-r border-gray-100">
+            <Filter className="w-4 h-4 text-gray-400" />
+            <select 
+              value={filterType} 
+              onChange={(e) => setFilterType(e.target.value)}
+              className="text-xs font-bold text-gray-700 border-none focus:ring-0 bg-transparent cursor-pointer uppercase"
+            >
+              <option value="all">TODOS LOS TIPOS</option>
+              <option value="PROMEDIO">PROMEDIO</option>
+              <option value="REPROBACION">REPROBACIÓN</option>
+              <option value="ATRASO">ATRASO</option>
+            </select>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleGenerateAlerts} 
+            disabled={generating}
+            className="text-[#C8102E] hover:bg-red-50 gap-2 h-9 px-4 rounded-xl"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${generating ? 'animate-spin' : ''}`} />
+            <span className="text-[11px] font-extrabold uppercase tracking-widest">{generating ? 'Procesando...' : 'Actualizar'}</span>
+          </Button>
+        </div>
       </div>
 
-      {/* Toast éxito */}
       {successMsg && (
-        <div className="flex items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-          <p className="text-sm font-medium text-green-700">{successMsg}</p>
+        <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-2xl animate-in fade-in slide-in-from-top-4">
+          <CheckCircle2 className="w-5 h-5 text-green-500" />
+          <p className="text-sm font-semibold text-green-700">{successMsg}</p>
         </div>
       )}
 
-      {/* Tabs y tabla */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="border-b border-gray-200">
-          <div className="flex">
-            {tabs.map((tab) => (
+      {/* Tabs Control */}
+      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="flex border-b border-gray-100 bg-gray-50/50 p-1.5">
+          {Object.keys(tabMapping).map((tab) => {
+            const state = tabMapping[tab] as keyof Conteos;
+            const count = conteos[state] || 0;
+            const isActive = activeTab === tab;
+            return (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-6 py-4 text-sm font-medium transition-colors relative ${activeTab === tab ? 'text-[#C8102E]' : 'text-gray-500 hover:text-gray-700'
-                  }`}
+                className={`flex-1 py-3 px-4 text-[10px] font-extrabold uppercase tracking-widest transition-all relative flex items-center justify-center gap-2 rounded-xl ${isActive ? 'bg-white text-[#C8102E] shadow-sm ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100/50'}`}
               >
                 {tab}
-                {activeTab === tab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#C8102E]" />}
+                <span className={`px-2 py-0.5 rounded-full text-[9px] ${isActive ? 'bg-[#C8102E] text-white' : 'bg-gray-200 text-gray-500'}`}>
+                  {count}
+                </span>
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-[#C8102E] text-white">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Estudiante</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Código</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Nivel de Riesgo</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Tipo de Alerta</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Fecha</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Docente Asignado</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Estado</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredAlerts.length > 0 ? (
-                filteredAlerts.map((alert, index) => (
-                  <tr key={alert.id} className={index % 2 === 0 ? 'bg-white' : 'bg-[#F5F5F5]'}>
-                    <td className="px-6 py-4 text-sm text-gray-900">{alert.studentName}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{alert.studentCode}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {alert.riskLevel === 'high' && <Badge variant="high">ALTO</Badge>}
-                      {alert.riskLevel === 'medium' && <Badge variant="medium">MEDIO</Badge>}
-                      {alert.riskLevel === 'low' && <Badge variant="low">BAJO</Badge>}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{alert.alertType}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{alert.generatedDate}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{alert.assignedTeacher}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {alert.status === 'active' && <Badge variant="error" size="sm">Activa</Badge>}
-                      {alert.status === 'monitoring' && <Badge variant="gray" size="sm">En seguimiento</Badge>}
-                      {alert.status === 'attended' && <Badge variant="medium" size="sm">Atendida</Badge>}
-                      {alert.status === 'closed' && <Badge variant="success" size="sm">Cerrada</Badge>}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={() => setModalHistorial(alert)}>
-                          Ver historial
-                        </Button>
-                        {alert.status !== 'closed' && (
-                          <Button variant="primary" size="sm" onClick={() => setModalRegistrar(alert)}>
-                            Registrar intervención
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center">
-                    <div className="flex flex-col items-center">
-                      <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-3">
-                        <ClipboardList className="w-8 h-8 text-gray-400" />
-                      </div>
-                      <p className="text-gray-500 text-sm">
-                        {loadingData ? 'Cargando alertas...' : errorData || 'No se encontraron alertas en esta categoría'}
-                      </p>
+        {/* Content List */}
+        <div className="divide-y divide-gray-50">
+          {loading ? (
+            <div className="py-24 flex flex-col items-center justify-center space-y-4">
+              <div className="w-12 h-12 border-4 border-gray-100 border-t-[#C8102E] rounded-full animate-spin" />
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Cargando información...</p>
+            </div>
+          ) : studentGroups.length === 0 ? (
+            <div className="py-32 text-center space-y-4">
+              <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto border border-gray-100">
+                <CheckCircle2 className="w-10 h-10 text-gray-200" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">No hay registros</h3>
+                <p className="text-xs text-gray-400 font-medium">Todo está bajo control en esta categoría.</p>
+              </div>
+            </div>
+          ) : (
+            studentGroups.map((group: any) => (
+              <div key={group.studentCode} className="group border-b border-gray-50 last:border-0">
+                {/* Header: Student Name */}
+                <div 
+                  onClick={() => toggleStudent(group.studentCode)}
+                  className={`px-8 py-5 flex items-center justify-between cursor-pointer transition-all ${expandedStudents[group.studentCode] ? 'bg-gray-50' : 'hover:bg-gray-50/50'}`}
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="w-12 h-12 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center justify-center text-[#C8102E] font-extrabold text-sm group-hover:scale-105 transition-transform">
+                      {group.studentName.split(' ').filter(Boolean).map((n: string) => n[0]).join('').substring(0, 2)}
                     </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-gray-900 group-hover:text-[#C8102E] transition-colors tracking-tight uppercase">
+                        {group.studentName}
+                      </h3>
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">{group.studentCode}</p>
+                    </div>
+                    <Badge variant="gray" size="sm" className="text-[9px] font-extrabold px-2 py-0.5">
+                      {group.alerts.length} {group.alerts.length === 1 ? 'ALERTA' : 'ALERTAS'}
+                    </Badge>
+                  </div>
+                  <ChevronRight className={`w-5 h-5 text-gray-300 transition-all duration-300 ${expandedStudents[group.studentCode] ? 'rotate-90 text-[#C8102E]' : 'group-hover:text-gray-400'}`} />
+                </div>
 
-        {filteredAlerts.length > 0 && (
-          <div className="border-t border-gray-200 px-6 py-4 bg-gray-50">
-            <p className="text-sm text-gray-600">Mostrando {filteredAlerts.length} alertas</p>
-          </div>
-        )}
+                {/* Expanded: Alerts List */}
+                {expandedStudents[group.studentCode] && (
+                  <div className="px-8 pb-8 pt-2 bg-gray-50/50 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                    {group.alerts.map((alert: AlertItem) => (
+                      <div key={alert.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 hover:shadow-md transition-all border-l-4 border-l-[#C8102E]/20">
+                        <div className="space-y-2 flex-1">
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-extrabold text-gray-800 uppercase tracking-tight">{alert.alertType}</span>
+                            {RISK_CONFIG[alert.riskLevel] && (
+                              <Badge variant={RISK_CONFIG[alert.riskLevel].variant} size="xs" className="text-[9px] font-extrabold">
+                                {RISK_CONFIG[alert.riskLevel].label}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-gray-400 font-semibold">
+                            <div className="flex items-center gap-1.5">
+                              <RefreshCw className="w-3 h-3" />
+                              <span>Creada: {alert.generatedDate}</span>
+                            </div>
+                            <span>•</span>
+                            <span className="text-[#C8102E] font-bold uppercase tracking-wider">
+                              {alert.tipo_regla === 'PROMEDIO' ? `Promedio: ${alert.valor_causa?.toFixed(2)}` : `${Math.round(alert.valor_causa || 0)} ${alert.tipo_regla === 'REPROBACION' ? 'Materias Perdidas' : 'Materias Pendientes'}`}
+                            </span>
+                          </div>
+                          
+                          {/* Metadata Badges */}
+                          {(alert.metadata?.materias || alert.metadata?.materias_atrasadas) && (
+                            <div className="flex flex-wrap gap-1.5 mt-3">
+                              {(alert.metadata.materias || alert.metadata.materias_atrasadas).map((m: string, i: number) => (
+                                <span key={i} className={`text-[9px] font-extrabold px-2.5 py-1 rounded-lg border tracking-wide uppercase ${alert.tipo_regla === 'REPROBACION' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
+                                  {m}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto pt-4 lg:pt-0 border-t lg:border-0 border-gray-50">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-9 px-4 text-gray-500 hover:bg-gray-100 rounded-xl flex-1 lg:flex-none"
+                            onClick={() => navigate(`/dashboard/students/${alert.studentCode}`)}
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 mr-2" />
+                            <span className="text-[10px] font-extrabold uppercase tracking-widest">Perfil</span>
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-9 px-4 text-gray-500 hover:bg-gray-100 rounded-xl flex-1 lg:flex-none"
+                            onClick={() => { setSelectedAlert(alert); setShowHistory(true); }}
+                          >
+                            <ClipboardList className="w-3.5 h-3.5 mr-2" />
+                            <span className="text-[10px] font-extrabold uppercase tracking-widest">Historial</span>
+                          </Button>
+                          
+                          {activeTab !== 'Atendidas' && activeTab !== 'Cerradas' && (
+                            <>
+                              <Button 
+                                size="sm" 
+                                className="h-9 px-5 bg-[#C8102E] text-white hover:bg-red-700 shadow-md shadow-red-100 rounded-xl flex-1 lg:flex-none"
+                                onClick={() => { setSelectedAlert(alert); setShowModal(true); }}
+                              >
+                                <span className="text-[10px] font-extrabold uppercase tracking-widest">Intervenir</span>
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-9 px-3 border-gray-200 text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-xl"
+                                onClick={() => { if(window.confirm('¿Seguro que deseas cerrar esta alerta?')) handleCerrarAlerta(alert.id); }}
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

@@ -81,6 +81,11 @@ def registrar_intervencion(request, alerta_id):
         resultado=resultado,
     )
 
+    # Automatización de estados: Si está activa, pasar a en_monitoreo
+    if alerta.estado.lower() in ['activa', 'active']:
+        alerta.estado = 'en_monitoreo'
+        alerta.save()
+
     return JsonResponse({
         'mensaje': 'Intervención registrada exitosamente',
         'intervencion': {
@@ -232,10 +237,10 @@ def concluir_intervencion(request, intervencion_id):
     intervencion.resultado = resultado
     intervencion.save()
 
-    # Cerrar la alerta
+    # Cambiar estado de la alerta a 'atendida'
     alerta = intervencion.alerta
-    alerta.estado = 'cerrada'
+    alerta.estado = 'atendida'
     alerta.save()
 
-    return JsonResponse({'mensaje': 'Intervención concluida y alerta cerrada exitosamente'})
+    return JsonResponse({'mensaje': 'Intervención concluida y alerta marcada como atendida'})
 
