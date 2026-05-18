@@ -1,4 +1,5 @@
 import { Bell } from 'lucide-react';
+import { Link } from 'react-router';
 
 export function TopNav() {
   return (
@@ -9,10 +10,10 @@ export function TopNav() {
       </div>
 
       <div className="flex items-center gap-4">
-        <button className="relative p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50">
+        <Link to="/dashboard/notifications" className="relative p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50">
           <Bell className="w-5 h-5" />
           <span className="absolute top-1 right-1 w-2 h-2 bg-[#C8102E] rounded-full"></span>
-        </button>
+        </Link>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 type ButtonProps = {
-  variant?: 'primary' | 'secondary' | 'outline';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   children: React.ReactNode;
   onClick?: () => void;
@@ -23,6 +23,7 @@ export function Button({
     primary: 'bg-[#C8102E] text-white hover:bg-[#A00D25] border-transparent',
     secondary: 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-300',
     outline: 'bg-white text-[#C8102E] hover:bg-red-50 border-[#C8102E]',
+    ghost: 'bg-transparent text-gray-700 hover:bg-gray-100 border-transparent',
   };
 
   const sizes = {

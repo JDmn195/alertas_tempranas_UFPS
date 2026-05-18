@@ -16,6 +16,8 @@ import ExportReports from "./screens/ExportReports";
 import UserManagement from "./screens/UserManagement";
 import CourseList from './screens/CourseList'
 import EvidenceManagement from './screens/EvidenceManagement';
+import NotificationHistory from "./screens/NotificationHistory";
+import NotificationInbox from "./screens/NotificationInbox";
 
 export const router = createBrowserRouter([
   {
@@ -87,8 +89,18 @@ export const router = createBrowserRouter([
         path: "reports", 
         element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'BIENESTAR']}><ExportReports /></ProtectedRoute> 
       },
-      { path: 'courses', element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DIRECTOR', 'DOCENTE']}><CourseList /></ProtectedRoute> 
-}
+      { 
+        path: "courses", 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DIRECTOR', 'DOCENTE']}><CourseList /></ProtectedRoute> 
+      },
+      {
+        path: "notifications",
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DOCENTE', 'DIRECTOR']}><NotificationInbox /></ProtectedRoute>
+      },
+      {
+        path: "admin/notifications-history",
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR']}><NotificationHistory /></ProtectedRoute>
+      }
     ],
   },
 ]);
