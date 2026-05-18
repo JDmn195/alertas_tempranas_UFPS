@@ -24,7 +24,6 @@ const tabMapping: Record<string, string> = {
   'Atendidas': 'atendida',
   'Cerradas': 'cerrada'
 };
-
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface AlertItem {
   id: string | number;
