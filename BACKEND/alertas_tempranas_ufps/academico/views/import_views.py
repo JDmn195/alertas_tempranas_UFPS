@@ -205,7 +205,9 @@ def importar_estudiantes_dirplan(request):
             # AUTOMATIZACIÓN: Generar alertas para los estudiantes procesados
             try:
                 from alertas.views.alert_generation_views import reprocesar_alertas_completas
-                reprocesar_alertas_completas()
+                codigos_importados = [est.codigo for est in estudiantes_objs]
+                estudiantes_qs = Estudiante.objects.filter(codigo__in=codigos_importados)
+                reprocesar_alertas_completas(estudiantes_qs)
             except Exception as ae:
                 print(f"Error en generación automática de alertas: {ae}")
 
@@ -407,7 +409,7 @@ def importar_historial_academico(request):
         # AUTOMATIZACIÓN: Recalcular alertas tras importar historial
         try:
             from alertas.views.alert_generation_views import reprocesar_alertas_completas
-            reprocesar_alertas_completas()
+            reprocesar_alertas_completas(Estudiante.objects.filter(codigo=codigo_estudiante))
         except Exception as ae:
             print(f"Error en generación automática de alertas: {ae}")
 
