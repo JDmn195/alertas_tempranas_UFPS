@@ -130,3 +130,135 @@ def cambiar_contrasena(request):
             
     except Exception as e:
         return JsonResponse({'error': f'Error al actualizar contraseña: {str(e)}'}, status=500)
+
+
+@csrf_exempt
+def listar_usuarios(request):
+    if request.method == 'GET':
+        usuarios = Usuario.objects.all().order_by('nombre')
+        results = []
+        for u in usuarios:
+            roles = u.rol.split(',') if u.rol else []
+            results.append({
+                'id': u.id,
+                'nombre': u.nombre,
+                'correo': u.correo,
+                'roles': roles,
+                'activo': u.activo,
+            })
+        return JsonResponse({'usuarios': results}, status=200)
+        
+    elif request.method == 'POST':
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Body JSON inválido.'}, status=400)
+        
+        nombre = body.get('nombre', '').strip()
+        correo = body.get('correo', '').strip()
+        contrasena = body.get('contrasena', '').strip()
+        roles = body.get('roles', [])
+
+        if not nombre or not correo or not contrasena:
+            return JsonResponse({'error': 'Nombre, correo y contraseña son obligatorios.'}, status=400)
+
+        if not isinstance(roles, list):
+            return JsonResponse({'error': 'El campo roles debe ser una lista.'}, status=400)
+        
+        roles = [r.strip().upper() for r in roles if r.strip()]
+        if len(roles) == 0:
+            return JsonResponse({'error': 'Debe asignar al menos un rol.'}, status=400)
+
+        roles_validos = ['DOCENTE', 'DIRECTOR', 'BIENESTAR', 'ADMINISTRADOR']
+        for r in roles:
+            if r not in roles_validos:
+                return JsonResponse({'error': f'Rol inválido: {r}'}, status=400)
+
+        if Usuario.objects.filter(correo=correo).exists():
+            return JsonResponse({'error': 'El correo electrónico ya está registrado.'}, status=400)
+
+        try:
+            usuario = Usuario.objects.create(
+                nombre=nombre,
+                correo=correo,
+                contrasena=contrasena,
+                rol=','.join(roles),
+                activo=True
+            )
+        except Exception as e:
+            return JsonResponse({'error': f'Error al crear el usuario: {str(e)}'}, status=500)
+
+        return JsonResponse({
+            'mensaje': 'Usuario creado correctamente.',
+            'usuario': {
+                'id': usuario.id,
+                'nombre': usuario.nombre,
+                'correo': usuario.correo,
+                'roles': usuario.rol.split(','),
+                'activo': usuario.activo,
+            }
+        }, status=201)
+        
+    else:
+        return JsonResponse({'error': 'Método no permitido. Se espera GET o POST.'}, status=405)
+
+
+@csrf_exempt
+def gestionar_usuario(request, usuario_id):
+    if request.method not in ['PUT', 'POST']:
+        return JsonResponse({'error': 'Método no permitido. Se espera PUT o POST.'}, status=405)
+
+    try:
+        usuario = Usuario.objects.get(id=usuario_id)
+    except Usuario.DoesNotExist:
+        return JsonResponse({'error': 'Usuario no encontrado.'}, status=404)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Body JSON inválido.'}, status=400)
+
+    nombre = body.get('nombre')
+    correo = body.get('correo')
+    activo = body.get('activo')
+    roles = body.get('roles')
+
+    if nombre is not None:
+        usuario.nombre = nombre
+    if correo is not None:
+        usuario.correo = correo
+    if activo is not None:
+        usuario.activo = bool(activo)
+
+    if roles is not None:
+        if not isinstance(roles, list):
+            return JsonResponse({'error': 'El campo roles debe ser una lista.'}, status=400)
+        
+        roles = [r.strip().upper() for r in roles if r.strip()]
+        # Validar que tenga al menos un rol (Escenario 3)
+        if len(roles) == 0:
+            return JsonResponse({'error': 'Debe asignar al menos un rol.'}, status=400)
+
+        roles_validos = ['DOCENTE', 'DIRECTOR', 'BIENESTAR', 'ADMINISTRADOR']
+        for r in roles:
+            if r not in roles_validos:
+                return JsonResponse({'error': f'Rol inválido: {r}'}, status=400)
+
+        usuario.rol = ','.join(roles)
+
+    try:
+        usuario.save()
+    except Exception as e:
+        return JsonResponse({'error': f'Error al guardar el usuario: {str(e)}'}, status=500)
+
+    return JsonResponse({
+        'mensaje': 'Usuario actualizado correctamente.',
+        'usuario': {
+            'id': usuario.id,
+            'nombre': usuario.nombre,
+            'correo': usuario.correo,
+            'roles': usuario.rol.split(','),
+            'activo': usuario.activo,
+        }
+    }, status=200)
+

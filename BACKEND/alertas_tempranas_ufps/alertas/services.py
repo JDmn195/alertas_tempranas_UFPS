@@ -187,7 +187,7 @@ class NotificationService:
 
         # 3. DIRECTOR (si es severidad Alta)
         if regla.nivel == 'high':
-            directores = Usuario.objects.filter(rol='DIRECTOR', activo=True)
+            directores = Usuario.objects.filter(rol__contains='DIRECTOR', activo=True)
             for director in directores:
                 destinatarios.append({
                     'nombre': director.nombre,
@@ -197,7 +197,7 @@ class NotificationService:
                 })
 
         # 4. ADMINISTRADORES (Siempre reciben copia)
-        administradores = Usuario.objects.filter(rol='ADMINISTRADOR', activo=True)
+        administradores = Usuario.objects.filter(rol__contains='ADMINISTRADOR', activo=True)
         for admin in administradores:
             destinatarios.append({
                 'nombre': admin.nombre,

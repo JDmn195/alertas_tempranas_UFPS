@@ -11,7 +11,7 @@ class Usuario(models.Model):
     nombre = models.CharField(max_length=150)
     correo = models.EmailField(max_length=150, unique=True)
     contrasena = models.CharField(max_length=255)
-    rol = models.CharField(max_length=20, choices=ROL_CHOICES)
+    rol = models.CharField(max_length=150, default='DOCENTE')
     activo = models.BooleanField(default=True)
 
     class Meta:

@@ -40,9 +40,11 @@ export function Sidebar() {
   const userRole = user?.rol || '';
 
   // Filtrar items por rol
-  const filteredItems = navItems.filter((item) => 
-    !item.roles || item.roles.includes(userRole)
-  );
+  const filteredItems = navItems.filter((item) => {
+    if (!item.roles) return true;
+    const userRoles = userRole ? userRole.split(',') : [];
+    return item.roles.some((role) => userRoles.includes(role));
+  });
 
   const handleLogout = () => {
     localStorage.removeItem('user');
