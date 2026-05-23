@@ -16,11 +16,14 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
 
   const user = JSON.parse(userJson);
 
-  if (allowedRoles && !allowedRoles.includes(user.rol)) {
-    // Si el rol no está permitido, redirigir al dashboard principal del usuario
-    // o a una página de acceso denegado. Por ahora, al dashboard base.
-    console.warn(`Acceso denegado para el rol: ${user.rol}`);
-    return <Navigate to="/dashboard" replace />;
+  if (allowedRoles) {
+    const userRoles = user.rol ? user.rol.split(',') : [];
+    const hasAccess = allowedRoles.some(role => userRoles.includes(role));
+    if (!hasAccess) {
+      // Si ningún rol está permitido, redirigir al dashboard principal del usuario
+      console.warn(`Acceso denegado para los roles: ${user.rol}`);
+      return <Navigate to="/dashboard" replace />;
+    }
   }
 
   return <>{children}</>;
