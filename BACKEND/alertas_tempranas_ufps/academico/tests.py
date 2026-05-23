@@ -99,3 +99,99 @@ class ImportViewsTestCase(TestCase):
             self.assertEqual(response.status_code, 200)
             json_data = response.json()
             self.assertEqual(json_data['status'], 'template')
+
+
+from django.utils import timezone
+from datetime import timedelta
+from alertas.models import Alerta, Regla, Intervencion
+
+class StudentInterventionsTestCase(TestCase):
+    def setUp(self):
+        self.client = Client()
+        # Create student
+        self.estudiante = Estudiante.objects.create(
+            codigo="1150003",
+            nombre="Pedro Perez",
+            tipo_documento="CC",
+            numero_documento="123456",
+            semestre=3,
+            promedio=3.5,
+            estado_matricula="Matriculado"
+        )
+        
+        # Create coordinator/user
+        self.coordinador = Usuario.objects.create(
+            nombre="Coordinador Academico",
+            correo="coordinador@ufps.edu.co",
+            rol="DIRECTOR",
+            contrasena="123456"
+        )
+        
+        # Create rule and alert
+        self.regla = Regla.objects.create(
+            nombre="Promedio Bajo",
+            tipo="PROMEDIO",
+            valor_umbral=3.0,
+            operador="<",
+            nivel="medium",
+            activo=True
+        )
+        
+        self.alerta = Alerta.objects.create(
+            estudiante=self.estudiante,
+            regla=self.regla,
+            estado="activa",
+            valor_causa=2.8
+        )
+
+    def test_get_interventions_empty(self):
+        """Escenario 2: Estudiante sin intervenciones registradas."""
+        url = reverse('student-interventions', kwargs={'codigo': self.estudiante.codigo})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['codigo'], self.estudiante.codigo)
+        self.assertEqual(data['intervenciones'], [])
+
+    def test_get_interventions_sorted_desc(self):
+        """Escenario 1: Consulta exitosa del historial, ordenadas por fecha descendente."""
+        i1 = Intervencion.objects.create(
+            alerta=self.alerta,
+            usuario=self.coordinador,
+            tipo="TUTORIA",
+            observaciones="Primera intervencion",
+        )
+        i2 = Intervencion.objects.create(
+            alerta=self.alerta,
+            usuario=self.coordinador,
+            tipo="CITACION",
+            observaciones="Segunda intervencion",
+        )
+        
+        # Modificar fechas manualmente para verificar el orden descendente
+        i1.fecha = timezone.now() - timedelta(days=2)
+        i1.save()
+        
+        i2.fecha = timezone.now() - timedelta(days=1)
+        i2.save()
+
+        url = reverse('student-interventions', kwargs={'codigo': self.estudiante.codigo})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        
+        intervenciones = data['intervenciones']
+        self.assertEqual(len(intervenciones), 2)
+        
+        # i2 (más reciente) debe estar primero, i1 después
+        self.assertEqual(intervenciones[0]['id'], i2.id)
+        self.assertEqual(intervenciones[0]['tipo'], "Tutoría" if i2.tipo == 'TUTORIA' else "Citación")
+        self.assertEqual(intervenciones[0]['tipo_raw'], "CITACION")
+        self.assertEqual(intervenciones[0]['observaciones'], "Segunda intervencion")
+        self.assertEqual(intervenciones[0]['usuario'], self.coordinador.nombre)
+        self.assertEqual(intervenciones[0]['alerta_causa'], self.regla.nombre)
+
+        self.assertEqual(intervenciones[1]['id'], i1.id)
+        self.assertEqual(intervenciones[1]['tipo_raw'], "TUTORIA")
+        self.assertEqual(intervenciones[1]['observaciones'], "Primera intervencion")
+

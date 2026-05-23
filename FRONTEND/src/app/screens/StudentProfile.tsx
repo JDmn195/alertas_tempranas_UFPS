@@ -626,12 +626,150 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
   );
 }
 
+export interface Intervencion {
+  id: number;
+  tipo: string;
+  observaciones: string;
+  evidencia: string | null;
+  resultado: string | null;
+  fecha: string;
+  usuario: string;
+  usuario_rol: string;
+  alerta_id: number;
+  alerta_causa: string;
+  alerta_estado: string;
+}
+
+function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | null; loading: boolean }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+      {/* Header de sección */}
+      <div className="bg-red-800 px-6 py-4 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+          <History className="w-4 h-4 text-white" />
+        </div>
+        <div>
+          <h2 className="text-base font-semibold text-white">Historial de Intervenciones</h2>
+          <p className="text-xs text-red-200">Seguimiento de acciones de acompañamiento realizadas al estudiante</p>
+        </div>
+        {!loading && data && data.length > 0 && (
+          <div className="ml-auto">
+            <span className="text-xs bg-white/20 text-white px-2.5 py-1 rounded-full font-semibold">
+              {data.length} {data.length === 1 ? 'Intervención' : 'Intervenciones'}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Contenido */}
+      <div className="p-6">
+        {loading ? (
+          <div className="space-y-4">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="flex gap-4 p-4 border border-gray-100 rounded-xl animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-24" />
+                <div className="h-4 bg-gray-200 rounded w-48" />
+                <div className="h-4 bg-gray-200 rounded w-32" />
+              </div>
+            ))}
+          </div>
+        ) : !data || data.length === 0 ? (
+          <div className="text-center py-10">
+            <History className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-gray-500">No hay intervenciones registradas</p>
+            <p className="text-xs text-gray-400 mt-1">El estudiante no cuenta con acciones de seguimiento en este momento.</p>
+          </div>
+        ) : (
+          <div className="relative border-l-2 border-red-100 ml-4 pl-6 space-y-6">
+            {data.map((intervencion) => (
+              <div key={intervencion.id} className="relative">
+                {/* Dot/Indicator */}
+                <div className="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full border-2 border-white bg-[#C8102E] shadow-sm" />
+
+                <div className="bg-gray-50/50 rounded-xl p-5 border border-gray-150 hover:border-red-200 hover:bg-white transition-all duration-200 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b border-gray-100">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-gray-800">
+                        {intervencion.tipo}
+                      </span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        intervencion.usuario_rol === 'BIENESTAR' 
+                          ? 'bg-purple-100 text-purple-700' 
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {intervencion.usuario_rol}
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-400 font-mono font-medium">
+                      {intervencion.fecha}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-3">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Atendido por</span>
+                        <span className="text-xs font-semibold text-gray-700">{intervencion.usuario}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Causa de la Alerta</span>
+                        <span className="text-xs font-medium text-gray-600 bg-red-50/50 border border-red-100 px-2 py-0.5 rounded mt-1 inline-block">
+                          {intervencion.alerta_causa} (Alerta #{intervencion.alerta_id})
+                        </span>
+                      </div>
+
+                      {intervencion.evidencia && (
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Evidencia</span>
+                          <a 
+                            href={intervencion.evidencia} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-xs text-[#C8102E] underline hover:no-underline font-semibold mt-1 inline-flex items-center gap-1"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            Ver documento adjunto
+                          </a>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Detalle de la intervención (Observaciones)</span>
+                        <p className="text-xs text-gray-600 whitespace-pre-line mt-1 bg-white p-2.5 rounded-lg border border-gray-100 leading-relaxed font-medium">
+                          {intervencion.observaciones}
+                        </p>
+                      </div>
+
+                      {intervencion.resultado && (
+                        <div className="bg-green-50/70 border border-green-150 rounded-lg p-3">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-green-700 block">Resultado / Conclusión</span>
+                          <p className="text-xs text-green-800 mt-1 font-semibold leading-relaxed">
+                            {intervencion.resultado}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Página principal StudentProfile ─────────────────────────────────────────
 export default function StudentProfile() {
   const { id } = useParams();
   const [student, setStudent] = useState<StudentDetail | null>(null);
   const [indicadores, setIndicadores] = useState<IndicadoresData | null>(null);
   const [historial, setHistorial] = useState<HistorialPeriodo[] | null>(null);
+  const [intervenciones, setIntervenciones] = useState<Intervencion[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -643,10 +781,11 @@ export default function StudentProfile() {
         const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
         
         // Cargar datos del perfil, indicadores e historial en paralelo
-        const [studentRes, indicatorsRes, historialRes] = await Promise.all([
+        const [studentRes, indicatorsRes, historialRes, intervencionesRes] = await Promise.all([
           fetch(`${baseUrl}/api/academico/students/${id}/`),
           fetch(`${baseUrl}/api/academico/students/${id}/indicators/`),
-          fetch(`${baseUrl}/api/academico/students/${id}/history/`)
+          fetch(`${baseUrl}/api/academico/students/${id}/history/`),
+          fetch(`${baseUrl}/api/academico/students/${id}/intervenciones/`)
         ]);
 
         if (!studentRes.ok) {
@@ -665,6 +804,11 @@ export default function StudentProfile() {
         if (historialRes.ok) {
           const historialData = await historialRes.json();
           setHistorial(historialData.historial);
+        }
+
+        if (intervencionesRes.ok) {
+          const intervencionesData = await intervencionesRes.json();
+          setIntervenciones(intervencionesData.intervenciones);
         }
       } catch (err: any) {
         setError(err.message);
@@ -762,6 +906,9 @@ export default function StudentProfile() {
 
       {/* ── Bloque 3: Historial Académico ────────────────────────────────── */}
       <HistorialAcademico data={historial} loading={loading} />
+
+      {/* ── Bloque 4: Historial de Intervenciones ────────────────────────── */}
+      <HistorialIntervenciones data={intervenciones} loading={loading} />
     </div>
   );
 }

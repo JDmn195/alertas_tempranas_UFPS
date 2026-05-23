@@ -404,3 +404,41 @@ def obtener_historial_academico(request, codigo):
         'codigo': codigo,
         'historial': resultados
     })
+
+
+@require_GET
+def obtener_intervenciones_estudiante(request, codigo):
+    """
+    GET /api/academico/students/<codigo>/intervenciones/
+    Devuelve el historial de intervenciones de un estudiante,
+    ordenadas de forma descendente por fecha.
+    """
+    estudiante = get_object_or_404(Estudiante, codigo=codigo)
+    
+    from alertas.models import Intervencion
+    intervenciones = Intervencion.objects.filter(alerta__estudiante=estudiante).select_related(
+        'usuario', 'alerta__regla'
+    ).order_by('-fecha')
+    
+    results = []
+    for i in intervenciones:
+        results.append({
+            'id':            i.id,
+            'tipo':          i.get_tipo_display(),
+            'tipo_raw':      i.tipo,
+            'observaciones': i.observaciones,
+            'evidencia':     i.evidencia,
+            'resultado':     i.resultado,
+            'fecha':         i.fecha.strftime('%Y-%m-%d %H:%M'),
+            'usuario':       i.usuario.nombre,
+            'usuario_rol':   i.usuario.rol,
+            'alerta_id':     i.alerta.id,
+            'alerta_causa':  i.alerta.regla.nombre if i.alerta.regla else 'Alerta manual',
+            'alerta_estado': i.alerta.estado,
+        })
+        
+    return JsonResponse({
+        'codigo': codigo,
+        'intervenciones': results
+    })
+

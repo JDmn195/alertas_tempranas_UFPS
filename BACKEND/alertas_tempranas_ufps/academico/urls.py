@@ -8,6 +8,7 @@ from .views import (
     obtener_detalle_estudiante,
     obtener_indicadores_estudiante,
     obtener_historial_academico,
+    obtener_intervenciones_estudiante,
     listar_indicadores_cursos,
 )
 from .views.bitacora_views import listar_bitacoras, detalle_bitacora
@@ -17,6 +18,7 @@ urlpatterns = [
     path('students/<str:codigo>/',              obtener_detalle_estudiante,     name='detail-student'),
     path('students/<str:codigo>/indicators/',   obtener_indicadores_estudiante, name='student-indicators'),
     path('students/<str:codigo>/history/',      obtener_historial_academico,    name='student-history'),
+    path('students/<str:codigo>/intervenciones/', obtener_intervenciones_estudiante, name='student-interventions'),
     path('import/students/',                    importar_estudiantes_dirplan,   name='import-students-dirplan'),
     path('import/history/',                     importar_historial_academico,   name='import-history-individual'),
     path('import/offering/',                    importar_oferta_academica,      name='import-academic-offering'),

@@ -25,7 +25,7 @@ const navItems: NavItem[] = [
   { path: '/dashboard/admin/risk-rules', label: 'Reglas de Riesgo', icon: Settings, roles: ['ADMINISTRADOR'] },
   { path: '/dashboard/admin/users', label: 'Gestión de Usuarios', icon: Shield, roles: ['ADMINISTRADOR'] },
   { path: '/dashboard/admin/notifications-history', label: 'Historial Notif.', icon: FileText, roles: ['ADMINISTRADOR'] },
-  { path: '/dashboard/students', label: 'Estudiantes', icon: Users, roles: ['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR'] },
+  { path: '/dashboard/students', label: 'Estudiantes', icon: Users, roles: ['ADMINISTRADOR', 'DIRECTOR', 'DOCENTE', 'BIENESTAR'] },
   { path: '/dashboard/courses', label: 'Cursos', icon: BookOpen, roles: ['ADMINISTRADOR', 'DIRECTOR', 'DOCENTE'] },
   { path: '/dashboard/alerts', label: 'Gestión de Alertas', icon: AlertTriangle, roles: ['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR'] },
   { path: '/dashboard/teacher', label: 'Panel del Docente', icon: GraduationCap, roles: ['DOCENTE'] },

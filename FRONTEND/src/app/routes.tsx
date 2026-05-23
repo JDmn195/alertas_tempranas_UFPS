@@ -63,11 +63,11 @@ export const router = createBrowserRouter([
       },
       { 
         path: "students", 
-        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR']}><StudentList /></ProtectedRoute> 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DIRECTOR', 'DOCENTE', 'BIENESTAR']}><StudentList /></ProtectedRoute> 
       },
       { 
         path: "students/:id", 
-        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR']}><StudentProfile /></ProtectedRoute> 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DIRECTOR', 'DOCENTE', 'BIENESTAR']}><StudentProfile /></ProtectedRoute> 
       },
       { 
         path: "alerts", 
