@@ -4,6 +4,7 @@ from .views.intervencion_views import registrar_intervencion, listar_intervencio
 from .views.evidence_views import upload_evidence, list_evidence, delete_evidence
 from .views.alert_generation_views import generar_alertas, listar_alertas, cerrar_alerta
 from .views import notification_views
+from .views.report_views import export_report_data
 
 urlpatterns = [
     path('', listar_alertas, name='listar-alertas'),
@@ -20,6 +21,9 @@ urlpatterns = [
     path('intervenciones/<int:intervencion_id>/evidencias/', list_evidence, name='listar-evidencias'),
     path('intervenciones/<int:intervencion_id>/evidencias/upload/', upload_evidence, name='subir-evidencia'),
     path('evidencias/<int:evidencia_id>/', delete_evidence, name='eliminar-evidencia'),
+    
+    # Reportes académicos para visualización
+    path('reportes/', export_report_data, name='export-report-data'),
     
     # Notificaciones e Historial
     path('notificaciones/historial/', notification_views.listar_historial_notificaciones, name='historial-notificaciones'),
