@@ -14,7 +14,7 @@ tzdata==2026.1
 gunicorn
 whitenoise
 dj-database-url
-supabase
+supabase==2.7.4
 requests
 django-rest-framework
 PyJWT==2.8.0
