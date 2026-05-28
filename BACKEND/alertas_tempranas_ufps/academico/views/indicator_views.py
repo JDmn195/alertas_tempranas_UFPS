@@ -242,3 +242,54 @@ def listar_indicadores_cursos(request):
         'pages':     max(1, -(-total // page_size)),
         'results':   page_results,
     })
+
+
+from usuarios.decorators import requiere_rol
+
+@csrf_exempt
+@require_GET
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'DIRECTOR', 'BIENESTAR'])
+def detalle_curso(request, curso_id):
+    """
+    GET /api/academico/courses/<int:curso_id>/detail/
+    Retorna el detalle de un curso: materia, docente y lista de estudiantes matriculados ordenados por periodo más reciente.
+    """
+    try:
+        curso = Curso.objects.select_related('materia', 'docente').get(id=curso_id)
+    except Curso.DoesNotExist:
+        return JsonResponse({'error': 'Curso no encontrado'}, status=404)
+
+    usuario = request.usuario
+    if usuario.rol == 'DOCENTE':
+        try:
+            docente = usuario.docente
+            if curso.docente != docente:
+                return JsonResponse({'error': 'Acceso denegado: este curso no le pertenece.'}, status=403)
+        except Exception:
+            return JsonResponse({'error': 'El usuario no tiene perfil de docente.'}, status=404)
+
+    # Estudiantes matriculados a través de Notas, ordenados por periodo más reciente
+    notas = Nota.objects.filter(curso=curso).select_related('estudiante', 'periodo').order_by(
+        '-periodo__anio', '-periodo__semestre', 'estudiante__nombre'
+    )
+
+    estudiantes_data = []
+    for n in notas:
+        est = n.estudiante
+        periodo_str = f"{n.periodo.anio}-{n.periodo.semestre}" if n.periodo else "—"
+        estudiantes_data.append({
+            'codigo': est.codigo,
+            'nombre': est.nombre,
+            'periodo': periodo_str,
+            'definitiva': float(n.definitiva) if n.definitiva is not None else None,
+        })
+
+    return JsonResponse({
+        'curso_id': curso.id,
+        'codigo_materia': curso.materia.codigo,
+        'materia': curso.materia.nombre,
+        'grupo': curso.grupo,
+        'docente': curso.docente.nombre if curso.docente else 'Sin asignar',
+        'estudiantes': estudiantes_data,
+    })
+

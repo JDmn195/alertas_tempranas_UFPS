@@ -5,12 +5,15 @@ from django.views.decorators.http import require_http_methods
 
 from alertas.models import Alerta, Intervencion
 from usuarios.models import Usuario
+from usuarios.decorators import requiere_rol
+from usuarios.utils import registrar_auditoria
 
 ESTADOS_PERMITIDOS = ['activa', 'en_monitoreo', 'ACTIVA', 'EN_MONITOREO', 'active', 'monitoring']
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def registrar_intervencion(request, alerta_id):
     """
     POST /api/alertas/<alerta_id>/intervenciones/
@@ -79,6 +82,13 @@ def registrar_intervencion(request, alerta_id):
         observaciones=observaciones,
         evidencia=evidencia,
         resultado=resultado,
+    )
+
+    # Registrar auditoría de la intervención
+    registrar_auditoria(
+        usuario,
+        'REGISTRAR_INTERVENCION',
+        f"Registrada intervención '{tipo}' para la alerta ID {alerta.id} del estudiante {alerta.estudiante.codigo}."
     )
 
     # Automatización de estados: Si está activa, pasar a en_monitoreo
@@ -214,6 +224,7 @@ def eliminar_anotacion(request, anotacion_id):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def concluir_intervencion(request, intervencion_id):
     """
     POST /api/alertas/intervenciones/<id>/concluir/
@@ -241,6 +252,13 @@ def concluir_intervencion(request, intervencion_id):
     alerta = intervencion.alerta
     alerta.estado = 'atendida'
     alerta.save()
+
+    # Registrar auditoría de conclusión de intervención
+    registrar_auditoria(
+        request.usuario,
+        'CONCLUIR_INTERVENCION',
+        f"Concluida intervención ID {intervencion.id} de tipo '{intervencion.tipo}' para alerta ID {alerta.id}. Alerta marcada como atendida."
+    )
 
     return JsonResponse({'mensaje': 'Intervención concluida y alerta marcada como atendida'})
 
