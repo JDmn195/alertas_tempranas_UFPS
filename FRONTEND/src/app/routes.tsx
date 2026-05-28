@@ -18,6 +18,7 @@ import CourseList from './screens/CourseList'
 import EvidenceManagement from './screens/EvidenceManagement';
 import NotificationHistory from "./screens/NotificationHistory";
 import NotificationInbox from "./screens/NotificationInbox";
+import AuditLog from "./screens/AuditLog";
 
 export const router = createBrowserRouter([
   {
@@ -62,6 +63,10 @@ export const router = createBrowserRouter([
         element: <ProtectedRoute allowedRoles={['ADMINISTRADOR']}><UserManagement /></ProtectedRoute> 
       },
       { 
+        path: "admin/audit-log", 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR']}><AuditLog /></ProtectedRoute> 
+      },
+      { 
         path: "students", 
         element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR']}><StudentList /></ProtectedRoute> 
       },
@@ -87,7 +92,7 @@ export const router = createBrowserRouter([
       },
       { 
         path: "reports", 
-        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'BIENESTAR']}><ExportReports /></ProtectedRoute> 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'BIENESTAR', 'DOCENTE']}><ExportReports /></ProtectedRoute> 
       },
       { 
         path: "courses", 
