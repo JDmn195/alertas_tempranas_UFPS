@@ -119,14 +119,7 @@ export default function Login() {
                 />
               </div>
 
-              <div className="flex items-center justify-between">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 text-[#C8102E] border-gray-300 rounded focus:ring-[#C8102E]"
-                  />
-                  <span className="ml-2 text-sm text-gray-600">Recordarme</span>
-                </label>
+              <div className="flex justify-end">
                 <Link to="/forgot-password" className="text-sm text-[#C8102E] hover:underline">
                   ¿Olvidaste tu contraseña?
                 </Link>
