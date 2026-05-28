@@ -30,6 +30,7 @@ class Auditoria(models.Model):
         ('IMPORTACION', 'Importación de Datos'),
         ('CREAR_REGLA', 'Crear Regla'),
         ('MODIFICAR_REGLA', 'Modificar Regla'),
+        ('ACTIVAR_REGLA', 'Activar Regla'),
         ('DESACTIVAR_REGLA', 'Desactivar Regla'),
         ('CERRAR_ALERTA', 'Cerrar Alerta'),
         ('REGISTRAR_INTERVENCION', 'Registrar Intervención'),

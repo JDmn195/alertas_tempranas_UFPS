@@ -78,6 +78,7 @@ def detalle_regla(request, pk):
         try:
             body = json.loads(request.body)
 
+            estado_anterior = regla.activo
             regla.nombre = body.get('nombre', regla.nombre)
             regla.tipo = body.get('tipo', regla.tipo)
             regla.valor_umbral = body.get('valor_umbral', regla.valor_umbral)
@@ -86,7 +87,14 @@ def detalle_regla(request, pk):
             regla.activo = body.get('activo', regla.activo)
             regla.descripcion = body.get('descripcion', regla.descripcion)
             regla.save()
-            registrar_auditoria(request.usuario, 'MODIFICAR_REGLA', f"Regla '{regla.nombre}' modificada.")
+            
+            if estado_anterior is True and regla.activo is False:
+                registrar_auditoria(request.usuario, 'DESACTIVAR_REGLA', f"Regla '{regla.nombre}' desactivada.")
+            elif estado_anterior is False and regla.activo is True:
+                registrar_auditoria(request.usuario, 'ACTIVAR_REGLA', f"Regla '{regla.nombre}' activada.")
+            else:
+                registrar_auditoria(request.usuario, 'MODIFICAR_REGLA', f"Regla '{regla.nombre}' modificada.")
+                
             return JsonResponse({'mensaje': 'Regla actualizada exitosamente'})
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)

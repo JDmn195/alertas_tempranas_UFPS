@@ -151,9 +151,6 @@ export default function ImportLog() {
             <p className="text-sm text-gray-600">
               Mostrando {errorRecords.length} registros de error
             </p>
-            <Button variant="outline" size="sm">
-              Exportar Reporte de Errores
-            </Button>
           </div>
         </div>
       </div>
