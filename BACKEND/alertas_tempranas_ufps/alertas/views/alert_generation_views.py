@@ -6,7 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.shortcuts import get_object_or_404
 
-from academico.models import Estudiante, Nota
+from academico.models import Estudiante, Nota, Curso
 from alertas.models import Regla, Alerta, RiesgoEstudiante
 from academico.views.student_views import calcular_nivel_riesgo
 from alertas.services import NotificationService
@@ -122,14 +122,26 @@ def reprocesar_alertas_completas(estudiantes_qs=None):
         'estudiantes_por_nivel': por_nivel
     }
 
+from usuarios.decorators import requiere_rol
+from usuarios.utils import registrar_auditoria
+
 @csrf_exempt
 @require_http_methods(["POST"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def generar_alertas(request):
     """
     POST /api/alertas/generar/
     """
     try:
         resultado = reprocesar_alertas_completas()
+        
+        # Registrar auditoría de generación
+        registrar_auditoria(
+            request.usuario, 
+            'GENERAR_ALERTAS', 
+            f"Se ejecutó el reprocesamiento manual de alertas. Total evaluados: {resultado.get('total_evaluados', 0)}, nuevas alertas: {resultado.get('nuevas_alertas', 0)}"
+        )
+        
         return JsonResponse({
             'mensaje': 'Proceso de generación completado',
             **resultado
@@ -138,21 +150,32 @@ def generar_alertas(request):
         import traceback
         print(traceback.format_exc())
         return JsonResponse({'error': str(e)}, status=500)
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        return JsonResponse({'error': str(e)}, status=500)
 
+@csrf_exempt
 @require_http_methods(["GET"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def listar_alertas(request):
     """
     GET /api/alertas/
     """
+    usuario = request.usuario
     estado = request.GET.get('estado', 'activa')
     tipo_regla = request.GET.get('tipo_regla')
     
     qs = Alerta.objects.select_related('estudiante', 'regla').order_by('-fecha_generacion')
+    total_qs = Alerta.objects.all()
     
+    if usuario.rol == 'DOCENTE':
+        try:
+            docente = usuario.docente
+            ids_cursos = Curso.objects.filter(docente=docente).values_list('id', flat=True)
+            estudiantes_ids = Nota.objects.filter(curso__in=ids_cursos).values_list('estudiante_id', flat=True).distinct()
+            qs = qs.filter(estudiante_id__in=estudiantes_ids)
+            total_qs = total_qs.filter(estudiante_id__in=estudiantes_ids)
+        except Exception:
+            qs = qs.none()
+            total_qs = total_qs.none()
+            
     if estado:
         mapping = {'activa': ['activa', 'active'], 'en_monitoreo': ['en_monitoreo', 'monitoring'], 'atendida': ['atendida', 'atended'], 'cerrada': ['cerrada', 'closed']}
         target_states = mapping.get(estado.lower(), [estado])
@@ -161,7 +184,6 @@ def listar_alertas(request):
     if tipo_regla and tipo_regla != 'all':
         qs = qs.filter(regla__tipo=tipo_regla)
         
-    total_qs = Alerta.objects.all()
     conteos = {
         'activa': total_qs.filter(estado__in=['activa', 'active']).count(),
         'en_monitoreo': total_qs.filter(estado__in=['en_monitoreo', 'monitoring']).count(),
@@ -191,6 +213,7 @@ def listar_alertas(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def cerrar_alerta(request, alerta_id):
     """
     POST /api/alertas/<id>/cerrar/
@@ -199,4 +222,13 @@ def cerrar_alerta(request, alerta_id):
     alerta = get_object_or_404(Alerta, id=alerta_id)
     alerta.estado = 'cerrada'
     alerta.save()
+    
+    # Registrar auditoría de cierre de alerta
+    registrar_auditoria(
+        request.usuario,
+        'CERRAR_ALERTA',
+        f"Alerta ID {alerta.id} de tipo '{alerta.regla.nombre}' para estudiante {alerta.estudiante.codigo} fue cerrada."
+    )
+    
     return JsonResponse({'mensaje': 'Alerta cerrada correctamente'})
+

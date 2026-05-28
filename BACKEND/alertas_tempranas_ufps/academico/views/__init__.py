@@ -5,4 +5,5 @@ from .import_views import (
     importar_docentes,
 )
 from .student_views import listar_estudiantes, obtener_detalle_estudiante, obtener_indicadores_estudiante, obtener_historial_academico, obtener_intervenciones_estudiante
-from .indicator_views import listar_indicadores_cursos  # HU-11
+from .indicator_views import listar_indicadores_cursos, detalle_curso  # HU-11
+from .teacher_views import teacher_dashboard, teacher_course_students  # Panel del Docente

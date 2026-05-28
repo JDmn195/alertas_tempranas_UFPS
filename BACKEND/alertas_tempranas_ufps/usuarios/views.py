@@ -1,11 +1,16 @@
 import json
+import jwt
+from datetime import datetime, timedelta, timezone
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core import signing
 from django.core.mail import send_mail
 from django.conf import settings
 from django.apps import apps
+from django.views.decorators.http import require_http_methods
 from .models import Usuario
+from .decorators import requiere_rol
+from .utils import registrar_auditoria
 
 @csrf_exempt
 def login_view(request):
@@ -20,7 +25,6 @@ def login_view(request):
         if not correo or not contrasena:
             return JsonResponse({'error': 'Faltan credenciales.'}, status=400)
 
-        # Búsqueda simple (sin encriptar como pidió el usuario)
         try:
             usuario = Usuario.objects.get(correo=correo, contrasena=contrasena)
             
@@ -28,20 +32,26 @@ def login_view(request):
                 return JsonResponse({'error': 'La cuenta está desactivada.'}, status=403)
 
             # Lógica de cambio obligatorio (primer login)
-            # Verifica si el correo existe en Docentes y si la contraseña es igual al código
             cambio_obligatorio = False
             try:
                 Docente = apps.get_model('academico', 'Docente')
-                # Buscamos el docente asociado a este usuario
                 docente = Docente.objects.get(usuario=usuario)
                 if contrasena == docente.codigo:
                     cambio_obligatorio = True
             except (Docente.DoesNotExist, LookupError):
-                # Si no es docente o no existe el modelo, no aplica cambio obligatorio por esta lógica
                 pass
 
-            # Respuesta exitosa con datos del usuario
+            payload = {
+                'user_id': usuario.id,
+                'exp': datetime.now(timezone.utc) + timedelta(days=1),
+                'iat': datetime.now(timezone.utc)
+            }
+            token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+
+            registrar_auditoria(usuario, 'LOGIN', f"Usuario {usuario.correo} inició sesión exitosamente.")
+
             return JsonResponse({
+                'token': token,
                 'id': usuario.id,
                 'nombre': usuario.nombre,
                 'correo': usuario.correo,
@@ -70,7 +80,6 @@ def solicitar_recuperacion(request):
         try:
             usuario = Usuario.objects.get(correo=correo)
             
-            # Generar token firmado con marca de tiempo
             signer = signing.TimestampSigner()
             token = signer.sign(signing.dumps({'user_id': usuario.id}))
             
@@ -84,7 +93,6 @@ def solicitar_recuperacion(request):
             return JsonResponse({'mensaje': 'Correo de recuperación enviado.'}, status=200)
             
         except Usuario.DoesNotExist:
-            # Por seguridad no revelamos si el correo existe o no
             return JsonResponse({'mensaje': 'Si el correo existe, se enviarán instrucciones.'}, status=200)
             
     except Exception as e:
@@ -99,13 +107,11 @@ def cambiar_contrasena(request):
         data = json.loads(request.body)
         token = data.get('token')
         nueva_contrasena = data.get('password')
-        user_id = data.get('user_id') # Para el caso de cambio obligatorio directo
+        user_id = data.get('user_id')
 
         if token:
-            # Flujo de recuperación por correo
             try:
                 signer = signing.TimestampSigner()
-                # Expira en 3600 segundos (1 hora)
                 original_data = signer.unsign(token, max_age=3600)
                 payload = signing.loads(original_data)
                 usuario = Usuario.objects.get(id=payload['user_id'])
@@ -114,7 +120,6 @@ def cambiar_contrasena(request):
             except (signing.BadSignature, Exception):
                 return JsonResponse({'error': 'Enlace de recuperación inválido.'}, status=400)
         elif user_id:
-            # Flujo de cambio obligatorio tras login
             try:
                 usuario = Usuario.objects.get(id=user_id)
             except Usuario.DoesNotExist:
@@ -122,7 +127,6 @@ def cambiar_contrasena(request):
         else:
             return JsonResponse({'error': 'Información insuficiente para cambiar contraseña.'}, status=400)
 
-        # Actualizar contraseña
         usuario.contrasena = nueva_contrasena
         usuario.save()
         
@@ -132,133 +136,133 @@ def cambiar_contrasena(request):
         return JsonResponse({'error': f'Error al actualizar contraseña: {str(e)}'}, status=500)
 
 
+# --- CRUD de Usuarios (HU-26) ---
+
 @csrf_exempt
+@require_http_methods(["GET"])
+@requiere_rol(['ADMINISTRADOR'])
 def listar_usuarios(request):
-    if request.method == 'GET':
-        usuarios = Usuario.objects.all().order_by('nombre')
-        results = []
-        for u in usuarios:
-            roles = u.rol.split(',') if u.rol else []
-            results.append({
-                'id': u.id,
-                'nombre': u.nombre,
-                'correo': u.correo,
-                'roles': roles,
-                'activo': u.activo,
-            })
-        return JsonResponse({'usuarios': results}, status=200)
+    usuarios = Usuario.objects.all().order_by('nombre')
+    data = [{
+        'id': u.id,
+        'nombre': u.nombre,
+        'correo': u.correo,
+        'rol': u.rol,
+        'activo': u.activo
+    } for u in usuarios]
+    return JsonResponse({'usuarios': data}, status=200)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@requiere_rol(['ADMINISTRADOR'])
+def crear_usuario(request):
+    try:
+        data = json.loads(request.body)
+        nombre = data.get('nombre')
+        correo = data.get('correo')
+        rol = data.get('rol')
         
-    elif request.method == 'POST':
-        try:
-            body = json.loads(request.body)
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Body JSON inválido.'}, status=400)
-        
-        nombre = body.get('nombre', '').strip()
-        correo = body.get('correo', '').strip()
-        contrasena = body.get('contrasena', '').strip()
-        roles = body.get('roles', [])
-
-        if not nombre or not correo or not contrasena:
-            return JsonResponse({'error': 'Nombre, correo y contraseña son obligatorios.'}, status=400)
-
-        if not isinstance(roles, list):
-            return JsonResponse({'error': 'El campo roles debe ser una lista.'}, status=400)
-        
-        roles = [r.strip().upper() for r in roles if r.strip()]
-        if len(roles) == 0:
-            return JsonResponse({'error': 'Debe asignar al menos un rol.'}, status=400)
-
-        roles_validos = ['DOCENTE', 'DIRECTOR', 'BIENESTAR', 'ADMINISTRADOR']
-        for r in roles:
-            if r not in roles_validos:
-                return JsonResponse({'error': f'Rol inválido: {r}'}, status=400)
-
+        if not all([nombre, correo, rol]):
+            return JsonResponse({'error': 'Faltan campos obligatorios'}, status=400)
+            
         if Usuario.objects.filter(correo=correo).exists():
             return JsonResponse({'error': 'El correo electrónico ya está registrado.'}, status=400)
-
-        try:
-            usuario = Usuario.objects.create(
-                nombre=nombre,
-                correo=correo,
-                contrasena=contrasena,
-                rol=','.join(roles),
-                activo=True
-            )
-        except Exception as e:
-            return JsonResponse({'error': f'Error al crear el usuario: {str(e)}'}, status=500)
-
-        return JsonResponse({
-            'mensaje': 'Usuario creado correctamente.',
-            'usuario': {
-                'id': usuario.id,
-                'nombre': usuario.nombre,
-                'correo': usuario.correo,
-                'roles': usuario.rol.split(','),
-                'activo': usuario.activo,
-            }
-        }, status=201)
+            
+        # Contraseña por defecto igual al correo
+        nuevo_usuario = Usuario.objects.create(
+            nombre=nombre,
+            correo=correo,
+            rol=rol,
+            contrasena=correo,
+            activo=True
+        )
         
-    else:
-        return JsonResponse({'error': 'Método no permitido. Se espera GET o POST.'}, status=405)
-
+        registrar_auditoria(request.usuario, 'CREAR_USUARIO', f"Creado usuario {correo} con rol {rol}")
+        return JsonResponse({'mensaje': 'Usuario creado exitosamente', 'id': nuevo_usuario.id}, status=201)
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
-def gestionar_usuario(request, usuario_id):
-    if request.method not in ['PUT', 'POST']:
-        return JsonResponse({'error': 'Método no permitido. Se espera PUT o POST.'}, status=405)
-
+@require_http_methods(["PUT", "PATCH"])
+@requiere_rol(['ADMINISTRADOR'])
+def actualizar_usuario(request, usuario_id):
     try:
-        usuario = Usuario.objects.get(id=usuario_id)
-    except Usuario.DoesNotExist:
-        return JsonResponse({'error': 'Usuario no encontrado.'}, status=404)
-
-    try:
-        body = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({'error': 'Body JSON inválido.'}, status=400)
-
-    nombre = body.get('nombre')
-    correo = body.get('correo')
-    activo = body.get('activo')
-    roles = body.get('roles')
-
-    if nombre is not None:
-        usuario.nombre = nombre
-    if correo is not None:
-        usuario.correo = correo
-    if activo is not None:
-        usuario.activo = bool(activo)
-
-    if roles is not None:
-        if not isinstance(roles, list):
-            return JsonResponse({'error': 'El campo roles debe ser una lista.'}, status=400)
+        usuario_target = Usuario.objects.get(id=usuario_id)
+        data = json.loads(request.body)
         
-        roles = [r.strip().upper() for r in roles if r.strip()]
-        # Validar que tenga al menos un rol (Escenario 3)
-        if len(roles) == 0:
-            return JsonResponse({'error': 'Debe asignar al menos un rol.'}, status=400)
-
-        roles_validos = ['DOCENTE', 'DIRECTOR', 'BIENESTAR', 'ADMINISTRADOR']
-        for r in roles:
-            if r not in roles_validos:
-                return JsonResponse({'error': f'Rol inválido: {r}'}, status=400)
-
-        usuario.rol = ','.join(roles)
-
-    try:
-        usuario.save()
+        old_rol = usuario_target.rol
+        if 'nombre' in data: usuario_target.nombre = data['nombre']
+        if 'rol' in data: usuario_target.rol = data['rol']
+        
+        usuario_target.save()
+        
+        if old_rol != usuario_target.rol:
+            registrar_auditoria(request.usuario, 'EDITAR_ROL', f"Rol de {usuario_target.correo} cambiado de {old_rol} a {usuario_target.rol}")
+            
+        return JsonResponse({'mensaje': 'Usuario actualizado correctamente'})
+    except Usuario.DoesNotExist:
+        return JsonResponse({'error': 'Usuario no encontrado'}, status=404)
     except Exception as e:
-        return JsonResponse({'error': f'Error al guardar el usuario: {str(e)}'}, status=500)
+        return JsonResponse({'error': str(e)}, status=500)
 
-    return JsonResponse({
-        'mensaje': 'Usuario actualizado correctamente.',
-        'usuario': {
-            'id': usuario.id,
-            'nombre': usuario.nombre,
-            'correo': usuario.correo,
-            'roles': usuario.rol.split(','),
-            'activo': usuario.activo,
-        }
-    }, status=200)
+@csrf_exempt
+@require_http_methods(["POST"])
+@requiere_rol(['ADMINISTRADOR'])
+def desactivar_usuario(request, usuario_id):
+    try:
+        usuario_target = Usuario.objects.get(id=usuario_id)
+        
+        if usuario_target.id == request.usuario.id:
+            return JsonResponse({'error': 'No puedes desactivarte a ti mismo.'}, status=400)
+            
+        usuario_target.activo = not usuario_target.activo
+        accion = "activado" if usuario_target.activo else "desactivado"
+        usuario_target.save()
+        
+        registrar_auditoria(request.usuario, 'DESACTIVAR_USUARIO', f"Usuario {usuario_target.correo} {accion}")
+        
+        return JsonResponse({'mensaje': f'Usuario {accion} correctamente', 'activo': usuario_target.activo})
+    except Usuario.DoesNotExist:
+        return JsonResponse({'error': 'Usuario no encontrado'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
+
+# --- Auditoría (HU-28) ---
+
+@csrf_exempt
+@require_http_methods(["GET"])
+@requiere_rol(['ADMINISTRADOR'])
+def listar_auditoria(request):
+    from .models import Auditoria
+    
+    tipo_accion = request.GET.get('tipo_accion')
+    usuario_id = request.GET.get('usuario_id')
+    fecha_inicio = request.GET.get('fecha_inicio')
+    fecha_fin = request.GET.get('fecha_fin')
+    
+    qs = Auditoria.objects.select_related('usuario').all()
+    
+    if tipo_accion:
+        qs = qs.filter(tipo_accion=tipo_accion)
+    if usuario_id:
+        qs = qs.filter(usuario_id=usuario_id)
+    if fecha_inicio:
+        qs = qs.filter(fecha_hora__gte=fecha_inicio)
+    if fecha_fin:
+        qs = qs.filter(fecha_hora__lte=fecha_fin)
+        
+    data = []
+    for a in qs:
+        data.append({
+            'id': a.id,
+            'usuario_nombre': a.usuario.nombre if a.usuario else 'Sistema',
+            'usuario_correo': a.usuario.correo if a.usuario else '',
+            'fecha_hora': a.fecha_hora.isoformat(),
+            'tipo_accion': a.tipo_accion,
+            'tipo_accion_display': a.get_tipo_accion_display(),
+            'detalle': a.detalle
+        })
+        
+    return JsonResponse({'registros': data}, status=200)

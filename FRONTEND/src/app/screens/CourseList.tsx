@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Search, RefreshCw, ChevronLeft, ChevronRight,
   AlertTriangle, TrendingUp, TrendingDown, Minus,
-  BookOpen, Users, BarChart2,
+  BookOpen, Users, BarChart2, X,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   Cell, PieChart, Pie, Legend,
 } from 'recharts';
+import { apiFetch } from '../../services/apiFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CourseIndicator {
@@ -87,6 +88,46 @@ export default function CourseList() {
   const [periodoAnio, setPeriodoAnio] = useState('2025');
   const [periodoSemestre, setPeriodoSemestre] = useState('1');
 
+  // Detalle de curso modal states
+  const [selectedCourseDetail, setSelectedCourseDetail] = useState<number | null>(null);
+  const [courseDetailData, setCourseDetailData] = useState<{
+    curso_id: number;
+    codigo_materia: string;
+    materia: string;
+    grupo: string;
+    docente: string;
+    estudiantes: Array<{
+      codigo: string;
+      nombre: string;
+      periodo: string;
+      definitiva: number | null;
+    }>;
+  } | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
+  const fetchCourseDetail = useCallback(async (cursoId: number) => {
+    setDetailLoading(true);
+    setDetailError(null);
+    setCourseDetailData(null);
+    try {
+      const res = await apiFetch(`${API_BASE}/courses/${cursoId}/detail/`);
+      if (!res.ok) throw new Error('No se pudo cargar el detalle del curso');
+      const data = await res.json();
+      setCourseDetailData(data);
+    } catch (err: any) {
+      setDetailError(err.message || 'Error al obtener el detalle');
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedCourseDetail !== null) {
+      fetchCourseDetail(selectedCourseDetail);
+    }
+  }, [selectedCourseDetail, fetchCourseDetail]);
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const userJson = localStorage.getItem('user');
@@ -135,7 +176,7 @@ export default function CourseList() {
     if (debouncedSearch) params.append('search', debouncedSearch);
     if (estadoFilter) params.append('estado', estadoFilter);
     try {
-      const res = await fetch(`${API_BASE}/courses/indicators/?${params.toString()}`);
+      const res = await apiFetch(`${API_BASE}/courses/indicators/?${params.toString()}`);
       if (!res.ok) throw new Error(`Error ${res.status}`);
       const data: ApiResponse = await res.json();
       setCourses(data.results);
@@ -157,7 +198,7 @@ export default function CourseList() {
         periodo_anio: periodoAnio,
         periodo_semestre: periodoSemestre,
       });
-      const res = await fetch(`${API_BASE}/courses/indicators/?${params.toString()}`);
+      const res = await apiFetch(`${API_BASE}/courses/indicators/?${params.toString()}`);
       if (!res.ok) return;
       const data: ApiResponse = await res.json();
       setAllCourses(data.results);
@@ -341,7 +382,11 @@ export default function CourseList() {
                 {courses.map((course, index) => {
                   const risk = getRiskLevel(course.tasa_reprobacion);
                   return (
-                    <tr key={course.curso_id} className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${course.es_critico ? '!bg-red-50' : ''} hover:bg-red-50 transition-colors duration-100`}>
+                    <tr
+                      key={course.curso_id}
+                      onClick={() => setSelectedCourseDetail(course.curso_id)}
+                      className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${course.es_critico ? '!bg-red-50' : ''} hover:bg-red-50 transition-colors duration-100 cursor-pointer`}
+                    >
                       <td className="px-5 py-3.5 text-sm font-mono font-medium text-gray-700">{course.codigo_materia}</td>
                       <td className="px-5 py-3.5 text-sm text-gray-900 max-w-[200px] truncate font-medium">{course.materia}</td>
                       <td className="px-5 py-3.5 text-sm text-gray-600">G-{course.grupo}</td>
@@ -450,6 +495,107 @@ export default function CourseList() {
           </div>
         )}
       </div>
+
+      {/* ── Modal de Detalle de Curso (Alumnos inscritos) ────────────────── */}
+      {selectedCourseDetail !== null && (
+        <>
+          <div
+            className="fixed inset-0 z-40 transition-opacity"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+            onClick={() => { setSelectedCourseDetail(null); setCourseDetailData(null); }}
+          />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-2xl border border-gray-200 w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+              {/* Header */}
+              <div className="bg-[#C8102E] text-white px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold">Detalle del Curso</h2>
+                  <p className="text-xs opacity-90">Consulta de estudiantes matriculados</p>
+                </div>
+                <button
+                  onClick={() => { setSelectedCourseDetail(null); setCourseDetailData(null); }}
+                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-1.5 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                {detailLoading ? (
+                  <div className="py-12 text-center text-gray-500">Cargando información del curso...</div>
+                ) : detailError ? (
+                  <div className="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                    {detailError}
+                  </div>
+                ) : courseDetailData ? (
+                  <>
+                    {/* Course Metadata Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                      <div>
+                        <span className="text-[10px] text-gray-500 uppercase font-bold block">Materia</span>
+                        <span className="text-sm font-semibold text-gray-900">{courseDetailData.materia}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-500 uppercase font-bold block">Código / Grupo</span>
+                        <span className="text-sm font-semibold text-gray-900 font-mono">{courseDetailData.codigo_materia} / G-{courseDetailData.grupo}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-500 uppercase font-bold block">Profesor</span>
+                        <span className="text-sm font-semibold text-gray-900">{courseDetailData.docente}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-500 uppercase font-bold block">Total Estudiantes</span>
+                        <span className="text-sm font-semibold text-gray-900">{courseDetailData.estudiantes.length} inscritos</span>
+                      </div>
+                    </div>
+
+                    {/* Table of Enrolled Students */}
+                    <div className="flex flex-col flex-1">
+                      <h3 className="text-sm font-bold text-gray-700 mb-2">Listado de Estudiantes</h3>
+                      <div className="overflow-x-auto border border-gray-200 rounded-lg max-h-[350px] overflow-y-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-[#C8102E] text-white sticky top-0 z-10">
+                            <tr>
+                              <th className="px-4 py-3 text-left font-medium uppercase tracking-wider">Estudiante</th>
+                              <th className="px-4 py-3 text-left font-medium uppercase tracking-wider">Código</th>
+                              <th className="px-4 py-3 text-center font-medium uppercase tracking-wider">Periodo</th>
+                              <th className="px-4 py-3 text-center font-medium uppercase tracking-wider">Nota Definitiva</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {courseDetailData.estudiantes.length === 0 ? (
+                              <tr>
+                                <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                                  No hay registros de notas/estudiantes asignados a este curso.
+                                </td>
+                              </tr>
+                            ) : (
+                              courseDetailData.estudiantes.map((est, idx) => (
+                                <tr key={`${est.codigo}-${idx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F5F5F5] hover:bg-red-50 transition-colors'}>
+                                  <td className="px-4 py-2.5 font-medium text-gray-900">{est.nombre}</td>
+                                  <td className="px-4 py-2.5 text-gray-600 font-mono">{est.codigo}</td>
+                                  <td className="px-4 py-2.5 text-center text-gray-600 font-semibold">{est.periodo}</td>
+                                  <td className="px-4 py-2.5 text-center">
+                                    <span className={`font-mono font-bold ${est.definitiva === null ? 'text-gray-400' : est.definitiva < 3.0 ? 'text-red-600' : 'text-green-600'}`}>
+                                      {est.definitiva !== null ? est.definitiva.toFixed(2) : '—'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
