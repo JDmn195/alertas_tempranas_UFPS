@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { Search, AlertTriangle, CheckCircle, Activity, RefreshCw, ChevronLeft, ChevronRight, Bell, UserMinus } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { apiFetch } from '../../services/apiFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Student {
@@ -91,7 +92,7 @@ export default function StudentList() {
     if (riskFilter)     params.append('risk', riskFilter);
 
     try {
-      const res = await fetch(`${API_BASE}/students/?${params.toString()}`);
+      const res = await apiFetch(`${API_BASE}/students/?${params.toString()}`);
       if (!res.ok) throw new Error(`Error ${res.status}`);
       const data: ApiResponse = await res.json();
       setStudents(data.results);

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { X, ClipboardList, CheckCircle2, AlertTriangle, Filter, ExternalLink, RefreshCw, ChevronRight } from 'lucide-react';
+import { apiFetch } from '../../services/apiFetch';
 
 const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas`;
 
@@ -79,9 +80,8 @@ function ModalRegistrar({
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE}/${alerta.id}/intervenciones/registrar/`, {
+      const res = await apiFetch(`${API_BASE}/${alerta.id}/intervenciones/registrar/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           usuario_id: user?.id,
           tipo,
@@ -193,7 +193,7 @@ function ModalHistorial({
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch(`${API_BASE}/${alerta.id}/intervenciones/`);
+        const res = await apiFetch(`${API_BASE}/${alerta.id}/intervenciones/`);
         if (!res.ok) throw new Error();
         const data = await res.json();
         setIntervenciones(data.intervenciones);
@@ -279,7 +279,7 @@ export default function AlertManagement() {
     setLoading(true);
     try {
       const stateParam = tabMapping[activeTab];
-      const res = await fetch(`${API_BASE}/?estado=${stateParam}&tipo_regla=${filterType}`);
+      const res = await apiFetch(`${API_BASE}/?estado=${stateParam}&tipo_regla=${filterType}`);
       const data = await res.json();
       setAlertsList(data.alertas);
       setConteos(data.conteos);
@@ -297,7 +297,7 @@ export default function AlertManagement() {
   const handleGenerateAlerts = async () => {
     setGenerating(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas/generar/`, {
+      const res = await apiFetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas/generar/`, {
         method: 'POST'
       });
       const data = await res.json();
@@ -313,7 +313,7 @@ export default function AlertManagement() {
 
   const handleCerrarAlerta = async (id: string | number) => {
     try {
-      await fetch(`${API_BASE}/${id}/cerrar/`, { method: 'POST' });
+      await apiFetch(`${API_BASE}/${id}/cerrar/`, { method: 'POST' });
       setSuccessMsg('Alerta cerrada correctamente');
       fetchAlerts();
       setTimeout(() => setSuccessMsg(null), 3000);

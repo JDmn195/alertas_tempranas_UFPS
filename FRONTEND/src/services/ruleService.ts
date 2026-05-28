@@ -1,3 +1,5 @@
+import { apiFetch } from './apiFetch';
+
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const API_URL = `${BASE_URL}/api`;
 
@@ -15,7 +17,7 @@ export interface Rule {
 
 export const ruleService = {
   getRules: async () => {
-    const response = await fetch(`${API_URL}/alertas/reglas/`);
+    const response = await apiFetch(`${API_URL}/alertas/reglas/`);
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || 'Error al obtener las reglas');
@@ -23,11 +25,11 @@ export const ruleService = {
     return response.json();
   },
 
-  createRule: async (rule: Rule, usuarioId: number) => {
-    const response = await fetch(`${API_URL}/alertas/reglas/`, {
+  // El usuario_id ya no es necesario: el backend lo obtiene del JWT
+  createRule: async (rule: Rule) => {
+    const response = await apiFetch(`${API_URL}/alertas/reglas/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...rule, usuario_id: usuarioId }),
+      body: JSON.stringify(rule),
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -36,11 +38,10 @@ export const ruleService = {
     return response.json();
   },
 
-  updateRule: async (id: number, rule: Partial<Rule>, usuarioId: number) => {
-    const response = await fetch(`${API_URL}/alertas/reglas/${id}/`, {
+  updateRule: async (id: number, rule: Partial<Rule>) => {
+    const response = await apiFetch(`${API_URL}/alertas/reglas/${id}/`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...rule, usuario_id: usuarioId }),
+      body: JSON.stringify(rule),
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -50,7 +51,7 @@ export const ruleService = {
   },
 
   deleteRule: async (id: number) => {
-    const response = await fetch(`${API_URL}/alertas/reglas/${id}/`, {
+    const response = await apiFetch(`${API_URL}/alertas/reglas/${id}/`, {
       method: 'DELETE',
     });
     if (!response.ok) {

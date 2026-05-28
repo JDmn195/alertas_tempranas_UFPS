@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Badge } from '../components/ui/Badge';
 import { Mail, Bell, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { apiFetch } from '../../services/apiFetch';
 
 export default function NotificationHistory() {
   const [history, setHistory] = useState<any[]>([]);
@@ -18,7 +19,7 @@ export default function NotificationHistory() {
       if (filter.resultado) params.append('resultado', filter.resultado);
       if (filter.canal) params.append('canal', filter.canal);
       
-      const response = await fetch(`${baseUrl}/api/alertas/notificaciones/historial/?${params.toString()}`);
+      const response = await apiFetch(`${baseUrl}/api/alertas/notificaciones/historial/?${params.toString()}`);
       const data = await response.json();
       setHistory(data.historial || []);
     } catch (error) {

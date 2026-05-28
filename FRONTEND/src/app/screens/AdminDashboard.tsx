@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { apiFetch } from '../../services/apiFetch';
 
 
 export default function AdminDashboard() {
@@ -16,7 +17,7 @@ export default function AdminDashboard() {
   const fetchHistory = async () => {
     try {
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${baseUrl}/api/academico/bitacora/`);
+      const response = await apiFetch(`${baseUrl}/api/academico/bitacora/`);
       const result = await response.json();
       if (result.status === 'success') {
         setImportHistory(result.data);
@@ -82,7 +83,7 @@ export default function AdminDashboard() {
       console.log("Endpoint usado:", endpoint);
 
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(
+      const response = await apiFetch(
         `${baseUrl}/api/academico/${endpoint}`,
         {
           method: "POST",
@@ -316,7 +317,7 @@ export default function AdminDashboard() {
                     {record.archivo_nombre}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900">
-                    <Badge variant="outline" size="sm">{record.tipo}</Badge>
+                    <Badge variant="gray" size="sm">{record.tipo}</Badge>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {record.total_procesados.toLocaleString()}

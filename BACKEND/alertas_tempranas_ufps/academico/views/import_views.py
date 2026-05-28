@@ -11,19 +11,23 @@ from datetime import date
 from django.conf import settings
 from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia, BitacoraImportacion
 from usuarios.models import Usuario
+from usuarios.decorators import requiere_rol
+from usuarios.utils import registrar_auditoria
 
 # ==============================================================================
 # VISTAS PARA LA IMPORTACIÓN DE DATOS ACADÉMICOS
 # ==============================================================================
 
 def _registrar_bitacora(request, archivo_nombre, tipo, total_procesados, errores, exitoso):
-    usuario_id = request.POST.get('usuario_id')
-    usuario = None
-    if usuario_id:
-        try:
-            usuario = Usuario.objects.get(id=usuario_id)
-        except Usuario.DoesNotExist:
-            pass
+    # Leer usuario del JWT (inyectado por el decorador) o del POST body como fallback
+    usuario = getattr(request, 'usuario', None)
+    if not usuario:
+        usuario_id = request.POST.get('usuario_id')
+        if usuario_id:
+            try:
+                usuario = Usuario.objects.get(id=usuario_id)
+            except Usuario.DoesNotExist:
+                pass
     
     BitacoraImportacion.objects.create(
         usuario=usuario,
@@ -36,6 +40,7 @@ def _registrar_bitacora(request, archivo_nombre, tipo, total_procesados, errores
     )
 
 @csrf_exempt
+@requiere_rol(['ADMINISTRADOR'])
 def importar_estudiantes_dirplan(request):
     """
     HU-01: IMPORTAR REPORTE GENERAL DE ESTUDIANTES DESDE DIRPLAN
@@ -212,6 +217,11 @@ def importar_estudiantes_dirplan(request):
                 print(f"Error en generación automática de alertas: {ae}")
 
             _registrar_bitacora(request, file.name, 'ESTUDIANTES', processed_count, [], True)
+            registrar_auditoria(
+                request.usuario,
+                'IMPORTACION',
+                f"Importación de ESTUDIANTES exitosa: {processed_count} registros procesados desde '{file.name}'."
+            )
 
             return JsonResponse({
                 "status": "success",
@@ -233,6 +243,7 @@ def importar_estudiantes_dirplan(request):
 
 
 @csrf_exempt
+@requiere_rol(['ADMINISTRADOR'])
 def importar_historial_academico(request):
     """
     HU-02: IMPORTAR REPORTES INDIVIDUALES DE CADA ESTUDIANTE
@@ -405,6 +416,11 @@ def importar_historial_academico(request):
                 creados += 1
 
         _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', creados, [], True)
+        registrar_auditoria(
+            request.usuario,
+            'IMPORTACION',
+            f"Importación de HISTORIAL exitosa: {creados} notas registradas desde '{nombre_archivo}'."
+        )
         
         # AUTOMATIZACIÓN: Recalcular alertas tras importar historial
         try:
@@ -422,6 +438,7 @@ def importar_historial_academico(request):
 
 
 @csrf_exempt
+@requiere_rol(['ADMINISTRADOR'])
 def importar_oferta_academica(request):   
     # 1. VALIDAR MÉTODO
     if request.method != 'POST':
@@ -544,7 +561,10 @@ def importar_oferta_academica(request):
         codigo_docente = str(row['Código Docente']).strip()
         # Asegurar que el código tenga 5 dígitos (rellenar con ceros a la izquierda)
         if codigo_docente and codigo_docente.lower() != 'nan':
-            # Intentar convertir a int y luego a string de 5 dígitos si es numérico
+            if '.' in codigo_docente:
+                parts = codigo_docente.split('.')
+                if parts[1] == '0' or parts[1] == '00' or all(ch == '0' for ch in parts[1]):
+                    codigo_docente = parts[0]
             try:
                 codigo_docente = str(int(float(codigo_docente))).zfill(5)
             except:
@@ -643,6 +663,11 @@ def importar_oferta_academica(request):
                     cursos_actualizados += 1
 
         _registrar_bitacora(request, nombre_archivo, 'OFERTA', len(registros_validos), [], True)
+        registrar_auditoria(
+            request.usuario,
+            'IMPORTACION',
+            f"Importación de OFERTA ACADÉMICA exitosa: {len(registros_validos)} registros desde '{nombre_archivo}'."
+        )
         return JsonResponse({
 
             "status": "success",
@@ -669,6 +694,7 @@ def importar_oferta_academica(request):
 
 
 @csrf_exempt
+@requiere_rol(['ADMINISTRADOR'])
 def importar_docentes(request):
     """
     
@@ -768,6 +794,10 @@ def importar_docentes(request):
             codigo = str(codigo_raw).strip().lstrip("'")
             # Asegurar que el código tenga 5 dígitos (rellenar con ceros a la izquierda)
             if codigo and codigo.lower() != 'nan':
+                if '.' in codigo:
+                    parts = codigo.split('.')
+                    if parts[1] == '0' or parts[1] == '00' or all(ch == '0' for ch in parts[1]):
+                        codigo = parts[0]
                 try:
                     codigo = str(int(float(codigo))).zfill(5)
                 except:
@@ -835,6 +865,12 @@ def importar_docentes(request):
     # 4. RETORNAR RESUMEN
     # ─────────────────────────────────────────────
     _registrar_bitacora(request, archivo.name, 'DOCENTES', creados + actualizados, errores, not errores)
+    if not errores:
+        registrar_auditoria(
+            request.usuario,
+            'IMPORTACION',
+            f"Importación de DOCENTES exitosa: {creados} creados, {actualizados} actualizados desde '{archivo.name}'."
+        )
     return JsonResponse({
         "status":                "success" if not errores else "parcial",
         "mensaje":               "Importación de docentes completada.",

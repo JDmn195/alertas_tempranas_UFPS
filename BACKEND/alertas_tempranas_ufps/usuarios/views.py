@@ -41,6 +41,7 @@ def login_view(request):
             except (Docente.DoesNotExist, LookupError):
                 pass
 
+            # Lógica de JWT
             payload = {
                 'user_id': usuario.id,
                 'exp': datetime.now(timezone.utc) + timedelta(days=1),
@@ -50,6 +51,7 @@ def login_view(request):
 
             registrar_auditoria(usuario, 'LOGIN', f"Usuario {usuario.correo} inició sesión exitosamente.")
 
+            # Respuesta exitosa con datos del usuario
             return JsonResponse({
                 'token': token,
                 'id': usuario.id,
@@ -136,6 +138,7 @@ def cambiar_contrasena(request):
         return JsonResponse({'error': f'Error al actualizar contraseña: {str(e)}'}, status=500)
 
 
+
 # --- CRUD de Usuarios (HU-26) ---
 
 @csrf_exempt
@@ -216,6 +219,7 @@ def desactivar_usuario(request, usuario_id):
         if usuario_target.id == request.usuario.id:
             return JsonResponse({'error': 'No puedes desactivarte a ti mismo.'}, status=400)
             
+        # HU-26: Solo se desactivan
         usuario_target.activo = not usuario_target.activo
         accion = "activado" if usuario_target.activo else "desactivado"
         usuario_target.save()

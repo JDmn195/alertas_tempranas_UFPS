@@ -80,6 +80,7 @@ export default function UserManagement() {
 
     try {
       if (editingUser) {
+        // Actualizar
         const res = await apiFetch(`${baseUrl}/api/usuarios/${editingUser.id}/actualizar/`, {
           method: 'PATCH',
           body: JSON.stringify(formData),
@@ -89,6 +90,7 @@ export default function UserManagement() {
           throw new Error(data.error || 'Error al actualizar usuario');
         }
       } else {
+        // Crear
         const res = await apiFetch(`${baseUrl}/api/usuarios/crear/`, {
           method: 'POST',
           body: JSON.stringify(formData),

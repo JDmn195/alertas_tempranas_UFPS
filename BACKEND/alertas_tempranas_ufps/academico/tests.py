@@ -120,6 +120,7 @@ class ImportViewsTestCase(TestCase):
 
     def test_teacher_dashboard_view(self):
         """Prueba la vista del panel del docente."""
+        # Configurar docente
         docente = Docente.objects.create(
             codigo="01713",
             nombre="Carlos Docente",
@@ -129,6 +130,7 @@ class ImportViewsTestCase(TestCase):
             usuario=self.docente_user
         )
 
+        # Configurar materia, periodo y curso
         materia = Materia.objects.create(codigo="1150301", nombre="Estructuras de Datos")
         periodo = Periodo.objects.create(anio=2025, semestre=1)
         curso = Curso.objects.create(
@@ -138,6 +140,7 @@ class ImportViewsTestCase(TestCase):
             cantidad_matriculados=2
         )
 
+        # Configurar estudiantes, nota, riesgo y alerta
         est1 = Estudiante.objects.create(codigo="1151234", nombre="Estudiante Riesgo Alto", semestre=4, numero_documento="DOC1")
         est2 = Estudiante.objects.create(codigo="1151235", nombre="Estudiante Estable", semestre=4, numero_documento="DOC2")
 
@@ -150,6 +153,7 @@ class ImportViewsTestCase(TestCase):
         regla = Regla.objects.create(nombre="Prueba", tipo="PROMEDIO", valor_umbral=3.0, operador="<", nivel="high")
         Alerta.objects.create(estudiante=est1, regla=regla, estado="activa")
 
+        # Petición a la vista
         url = reverse('teacher-dashboard')
         response = self.client.get(
             url, 
@@ -160,11 +164,12 @@ class ImportViewsTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         json_data = response.json()
 
+        # Verificar datos devueltos
         self.assertEqual(json_data['nombre_docente'], "Carlos Docente")
         self.assertEqual(len(json_data['cursos']), 1)
         self.assertEqual(json_data['cursos'][0]['materia'], "Estructuras de Datos")
         self.assertEqual(json_data['cursos'][0]['en_riesgo'], 1)
-        self.assertEqual(json_data['cursos'][0]['estado'], 'CRÍTICO')
+        self.assertEqual(json_data['cursos'][0]['estado'], 'CRÍTICO') # Tasa de reprobación 50% >= 30%
 
         self.assertEqual(len(json_data['estudiantes_en_riesgo']), 1)
         self.assertEqual(json_data['estudiantes_en_riesgo'][0]['nombre'], "Estudiante Riesgo Alto")
@@ -255,6 +260,7 @@ class ImportViewsTestCase(TestCase):
         materia = Materia.objects.create(codigo="1150301", nombre="Estructuras de Datos")
         periodo = Periodo.objects.create(anio=2025, semestre=1)
         
+        # Curso propio del docente
         curso_propio = Curso.objects.create(
             materia=materia,
             docente=docente_propio,
@@ -262,14 +268,18 @@ class ImportViewsTestCase(TestCase):
             cantidad_matriculados=1
         )
         
+        # Estudiante propio del docente
         est_propio = Estudiante.objects.create(codigo="1151234", nombre="Estudiante Propio", semestre=4, numero_documento="DOC1")
         Nota.objects.create(estudiante=est_propio, curso=curso_propio, periodo=periodo, definitiva=2.0)
         
+        # Estudiante ajeno del docente
         est_ajeno = Estudiante.objects.create(codigo="1159999", nombre="Estudiante Ajeno", semestre=4, numero_documento="DOC99")
         
         regla = Regla.objects.create(nombre="Prueba", tipo="PROMEDIO", valor_umbral=3.0, operador="<", nivel="high")
         
+        # Crear alerta propia
         alerta_propia = Alerta.objects.create(estudiante=est_propio, regla=regla, estado="activa")
+        # Crear alerta ajena
         alerta_ajena = Alerta.objects.create(estudiante=est_ajeno, regla=regla, estado="activa")
         
         response = self.client.get(

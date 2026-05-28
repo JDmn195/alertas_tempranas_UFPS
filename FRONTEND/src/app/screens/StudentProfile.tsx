@@ -38,6 +38,7 @@ import {
 } from 'recharts';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { apiFetch } from '../../services/apiFetch';
 
 interface StudentDetail {
   codigo: string;
@@ -782,10 +783,10 @@ export default function StudentProfile() {
         
         // Cargar datos del perfil, indicadores e historial en paralelo
         const [studentRes, indicatorsRes, historialRes, intervencionesRes] = await Promise.all([
-          fetch(`${baseUrl}/api/academico/students/${id}/`),
-          fetch(`${baseUrl}/api/academico/students/${id}/indicators/`),
-          fetch(`${baseUrl}/api/academico/students/${id}/history/`),
-          fetch(`${baseUrl}/api/academico/students/${id}/intervenciones/`)
+          apiFetch(`${baseUrl}/api/academico/students/${id}/`),
+          apiFetch(`${baseUrl}/api/academico/students/${id}/indicators/`),
+          apiFetch(`${baseUrl}/api/academico/students/${id}/history/`),
+          apiFetch(`${baseUrl}/api/academico/students/${id}/intervenciones/`)
         ]);
 
         if (!studentRes.ok) {
