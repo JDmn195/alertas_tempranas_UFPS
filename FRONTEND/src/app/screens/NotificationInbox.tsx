@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Badge } from '../components/ui/Badge';
 import { Mail, Check, Bell, Calendar, Filter } from 'lucide-react';
+import { apiFetch } from '../../services/apiFetch';
 
 export default function NotificationInbox() {
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -14,7 +15,7 @@ export default function NotificationInbox() {
     try {
       const user = JSON.parse(userStr);
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${baseUrl}/api/alertas/notificaciones/internas/?usuario_id=${user.id}`);
+      const response = await apiFetch(`${baseUrl}/api/alertas/notificaciones/internas/?usuario_id=${user.id}`);
       const data = await response.json();
       setNotifications(data.notificaciones || []);
     } catch (error) {
@@ -27,7 +28,7 @@ export default function NotificationInbox() {
   const markAsRead = async (id: number) => {
     try {
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      await fetch(`${baseUrl}/api/alertas/notificaciones/internas/${id}/leer/`, {
+      await apiFetch(`${baseUrl}/api/alertas/notificaciones/internas/${id}/leer/`, {
         method: 'POST'
       });
       setNotifications(notifications.map(n => n.id === id ? {...n, leida: true} : n));

@@ -6,9 +6,12 @@ from django.shortcuts import get_object_or_404
 from ..models import Regla
 from django.db.models import ProtectedError
 from usuarios.models import Usuario
+from usuarios.decorators import requiere_rol
+from usuarios.utils import registrar_auditoria
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
+@requiere_rol(['ADMINISTRADOR', 'DIRECTOR', 'BIENESTAR'])
 def listar_crear_reglas(request):
     """
     GET: Lista todas las reglas.
@@ -32,14 +35,6 @@ def listar_crear_reglas(request):
     elif request.method == "POST":
         try:
             body = json.loads(request.body)
-            # Validación básica de permisos (en un entorno real usaríamos decoradores de permisos)
-            usuario_id = body.get('usuario_id')
-            if not usuario_id:
-                return JsonResponse({'error': 'usuario_id es requerido'}, status=400)
-            
-            usuario = get_object_or_404(Usuario, id=usuario_id)
-            if usuario.rol not in ['DIRECTOR', 'BIENESTAR', 'ADMINISTRADOR']:
-                return JsonResponse({'error': 'No tiene permisos para crear reglas'}, status=403)
 
             regla = Regla.objects.create(
                 nombre=body.get('nombre'),
@@ -50,6 +45,7 @@ def listar_crear_reglas(request):
                 activo=body.get('activo', True),
                 descripcion=body.get('descripcion', '')
             )
+            registrar_auditoria(request.usuario, 'CREAR_REGLA', f"Regla '{regla.nombre}' creada.")
             return JsonResponse({'id': regla.id, 'mensaje': 'Regla creada exitosamente'}, status=201)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
@@ -57,6 +53,7 @@ def listar_crear_reglas(request):
 
 @csrf_exempt
 @require_http_methods(["GET", "PUT", "DELETE"])
+@requiere_rol(['ADMINISTRADOR', 'DIRECTOR', 'BIENESTAR'])
 def detalle_regla(request, pk):
     """
     GET: Obtiene detalle de una regla.
@@ -80,10 +77,6 @@ def detalle_regla(request, pk):
     elif request.method == "PUT":
         try:
             body = json.loads(request.body)
-            usuario_id = body.get('usuario_id')
-            usuario = get_object_or_404(Usuario, id=usuario_id)
-            if usuario.rol not in ['DIRECTOR', 'BIENESTAR', 'ADMINISTRADOR']:
-                return JsonResponse({'error': 'No tiene permisos para modificar reglas'}, status=403)
 
             regla.nombre = body.get('nombre', regla.nombre)
             regla.tipo = body.get('tipo', regla.tipo)
@@ -93,13 +86,16 @@ def detalle_regla(request, pk):
             regla.activo = body.get('activo', regla.activo)
             regla.descripcion = body.get('descripcion', regla.descripcion)
             regla.save()
+            registrar_auditoria(request.usuario, 'MODIFICAR_REGLA', f"Regla '{regla.nombre}' modificada.")
             return JsonResponse({'mensaje': 'Regla actualizada exitosamente'})
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
 
     elif request.method == "DELETE":
         try:
+            nombre_regla = regla.nombre
             regla.delete()
+            registrar_auditoria(request.usuario, 'DESACTIVAR_REGLA', f"Regla '{nombre_regla}' eliminada.")
             return JsonResponse({'mensaje': 'Regla eliminada exitosamente'})
         except ProtectedError:
             return JsonResponse({

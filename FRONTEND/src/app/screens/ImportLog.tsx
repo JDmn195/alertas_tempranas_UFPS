@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router';
 import { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { apiFetch } from '../../services/apiFetch';
 
 
 export default function ImportLog() {
@@ -13,7 +14,7 @@ export default function ImportLog() {
     const fetchLog = async () => {
       try {
         const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        const response = await fetch(`${baseUrl}/api/academico/bitacora/${id}/`);
+        const response = await apiFetch(`${baseUrl}/api/academico/bitacora/${id}/`);
         const result = await response.json();
         if (result.status === 'success') {
           setLogData(result.data);
@@ -120,7 +121,7 @@ export default function ImportLog() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {errorRecords.map((error, index) => (
+              {errorRecords.map((error: any, index: number) => (
                 <tr
                   key={index}
                   className={`${index % 2 === 0 ? 'bg-white' : 'bg-[#F5F5F5]'} bg-[#FDECEA]`}

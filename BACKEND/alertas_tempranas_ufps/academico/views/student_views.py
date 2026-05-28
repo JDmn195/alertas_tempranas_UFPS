@@ -6,6 +6,8 @@ from django.views.decorators.csrf import csrf_exempt
 
 from academico.models import Estudiante, Nota, Materia
 from alertas.models import Alerta, Regla
+from usuarios.decorators import requiere_rol
+
 
 
 def calcular_nivel_riesgo(estudiante, promedio=None, reglas=None):
@@ -133,6 +135,7 @@ def _calcular_historial_promedios(estudiante):
 
 @csrf_exempt
 @require_GET
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def listar_estudiantes(request):
     """
     GET /api/academico/students/
@@ -157,6 +160,12 @@ def listar_estudiantes(request):
 
     # ── Consulta base ────────────────────────────────────────────────────────
     qs = Estudiante.objects.all()
+
+    # Filtro RBAC según rol del usuario (HU-27)
+    if request.usuario.rol == 'DOCENTE':
+        # Docente solo ve estudiantes que estén en sus cursos
+        estudiantes_ids = Nota.objects.filter(curso__docente__usuario=request.usuario).values_list('estudiante_id', flat=True).distinct()
+        qs = qs.filter(codigo__in=estudiantes_ids)
 
     # Búsqueda por nombre o código
     if search:
@@ -225,6 +234,7 @@ def listar_estudiantes(request):
 
 @csrf_exempt
 @require_GET
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def obtener_detalle_estudiante(request, codigo):
     """
     GET /api/academico/students/<codigo>/
@@ -233,6 +243,15 @@ def obtener_detalle_estudiante(request, codigo):
     try:
         e = Estudiante.objects.get(codigo=codigo)
         
+        # Filtro RBAC según rol del usuario (HU-27)
+        if request.usuario.rol == 'DOCENTE':
+            # Verificar si el docente tiene acceso a este estudiante
+            tiene_acceso = Nota.objects.filter(estudiante=e, curso__docente__usuario=request.usuario).exists()
+            if not tiene_acceso:
+                from usuarios.utils import registrar_auditoria
+                registrar_auditoria(request.usuario, 'ACCESO_DENEGADO', f"Docente intentó acceder al detalle del estudiante {codigo} sin tenerlo en sus cursos")
+                return JsonResponse({'error': 'Prohibido. No tiene acceso a los datos de este estudiante.'}, status=403)
+
         # Anotar conteo de alertas activas
         total_alertas = Alerta.objects.filter(estudiante=e, estado='activa').count()
         nivel = calcular_nivel_riesgo(e)

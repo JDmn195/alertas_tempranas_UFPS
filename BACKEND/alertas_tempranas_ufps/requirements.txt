@@ -17,3 +17,4 @@ dj-database-url
 supabase
 requests
 django-rest-framework
+PyJWT==2.8.0
