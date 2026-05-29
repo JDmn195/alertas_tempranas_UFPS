@@ -1,4 +1,5 @@
 import json
+import logging
 from django.http import JsonResponse
 from django.db import transaction
 from django.db.models import Q, Count
@@ -13,6 +14,8 @@ from alertas.services import NotificationService
 
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
+
+logger = logging.getLogger(__name__)
 
 def reprocesar_alertas_completas(estudiantes_qs=None, usuario=None):
     """
@@ -162,8 +165,7 @@ def generar_alertas(request):
             **resultado
         })
     except Exception as e:
-        import traceback
-        print(traceback.format_exc())
+        logger.error("Error inesperado en generar_alertas: %s", e, exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt

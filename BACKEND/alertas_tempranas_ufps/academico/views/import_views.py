@@ -7,12 +7,15 @@ import os
 import re
 import unicodedata
 import traceback
+import logging
 from datetime import date
 from django.conf import settings
 from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia, BitacoraImportacion
 from usuarios.models import Usuario
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
+
+logger = logging.getLogger(__name__)
 
 # ==============================================================================
 # VISTAS PARA LA IMPORTACIÓN DE DATOS ACADÉMICOS
@@ -231,7 +234,7 @@ def importar_estudiantes_dirplan(request):
                 estudiantes_qs = Estudiante.objects.filter(codigo__in=codigos_importados)
                 reprocesar_alertas_completas(estudiantes_qs, usuario=None)
             except Exception as ae:
-                print(f"Error en generación automática de alertas: {ae}")
+                logger.warning("Error en generación automática de alertas tras importar estudiantes: %s", ae, exc_info=True)
 
             _registrar_bitacora(request, file.name, 'ESTUDIANTES', processed_count, [], True)
             registrar_auditoria(
@@ -250,8 +253,9 @@ def importar_estudiantes_dirplan(request):
             })
 
         except Exception as e:
-            import traceback
-            print(traceback.format_exc())
+            logger.error("Error inesperado al importar estudiantes desde '%s': %s", 
+                         file.name if 'file' in locals() and hasattr(file, 'name') else 'archivo desconocido',
+                         e, exc_info=True)
             if 'file' in locals() and hasattr(file, 'name'):
                 _registrar_bitacora(request, file.name, 'ESTUDIANTES', 0, [{"mensaje": str(e)}], False)
             return JsonResponse({"status": "error", "message": str(e)}, status=500)
@@ -444,11 +448,14 @@ def importar_historial_academico(request):
             from alertas.views.alert_generation_views import reprocesar_alertas_completas
             reprocesar_alertas_completas(Estudiante.objects.filter(codigo=codigo_estudiante), usuario=None)
         except Exception as ae:
-            print(f"Error en generación automática de alertas: {ae}")
+            logger.warning("Error en generación automática de alertas tras importar historial de '%s': %s",
+                           codigo_estudiante, ae, exc_info=True)
 
         return JsonResponse({"status": "success", "creados": creados})
     except Exception as e:
-        traceback.print_exc()
+        logger.error("Error inesperado al importar historial académico desde '%s': %s",
+                     nombre_archivo if 'nombre_archivo' in locals() else 'archivo desconocido',
+                     e, exc_info=True)
         if 'nombre_archivo' in locals():
             _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', 0, [{"mensaje": str(e)}], False)
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
@@ -699,9 +706,9 @@ def importar_oferta_academica(request):
         })
 
     except Exception as e:
-
-        traceback.print_exc()
-
+        logger.error("Error inesperado al importar oferta académica desde '%s': %s",
+                     nombre_archivo if 'nombre_archivo' in locals() else 'archivo desconocido',
+                     e, exc_info=True)
         if 'nombre_archivo' in locals():
             _registrar_bitacora(request, nombre_archivo, 'OFERTA', 0, [{"mensaje": str(e)}], False)
         return JsonResponse({
