@@ -1,10 +1,13 @@
 import os
 import uuid
+import logging
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from supabase import create_client, Client
 from alertas.models import Intervencion, Evidencia
+
+logger = logging.getLogger(__name__)
 
 BUCKET = os.environ.get("SUPABASE_BUCKET_NAME", "evidencias")
 
@@ -31,7 +34,7 @@ def get_supabase() -> Client:
         _supabase_failed = False
         return _supabase_client
     except Exception as e:
-        print(f"Error al inicializar cliente Supabase: {e}")
+        logger.error("Error al inicializar cliente Supabase: %s", e, exc_info=True)
         _supabase_client = None  # Permitir reintento en la próxima petición
         return None
 
@@ -98,8 +101,8 @@ def upload_evidence(request, intervencion_id):
         }, status=201)
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.error("Error inesperado al subir evidencia para intervención %s: %s",
+                     intervencion_id, e, exc_info=True)
         return JsonResponse({'error': f'Error en el proceso de subida: {str(e)}'}, status=500)
 
 
@@ -158,7 +161,8 @@ def delete_evidence(request, evidencia_id):
                 file_path = evidencia.archivo_url.split(f"/{BUCKET}/")[-1]
                 supabase.storage.from_(BUCKET).remove([file_path])
         except Exception as e:
-            print(f"Error al eliminar de Supabase: {e}")
+            logger.warning("Error al eliminar archivo de Supabase (path derivado de '%s'): %s",
+                           evidencia.archivo_url, e, exc_info=True)
             # Continuamos para al menos borrar de la BD si Supabase falla (o el archivo ya no existe)
 
         evidencia.delete()
