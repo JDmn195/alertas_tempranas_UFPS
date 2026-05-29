@@ -240,3 +240,6 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Alertas Tempranas UFP
 
 # URL del Frontend (ajustar según el entorno)
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
+
+# Tamaño máximo de archivos de importación en MB (por defecto 10 MB)
+MAX_IMPORT_FILE_SIZE_MB = int(os.environ.get('MAX_IMPORT_FILE_SIZE_MB', 10))

@@ -17,6 +17,35 @@ from usuarios.utils import registrar_auditoria
 
 logger = logging.getLogger(__name__)
 
+# Tamaño máximo permitido para archivos de importación (configurable en settings).
+# Por defecto: 10 MB. Ajustar en settings.py con MAX_IMPORT_FILE_SIZE_MB.
+_MAX_MB = getattr(settings, 'MAX_IMPORT_FILE_SIZE_MB', 10)
+MAX_IMPORT_FILE_SIZE = _MAX_MB * 1024 * 1024  # bytes
+
+
+def _validar_tamano_archivo(archivo):
+    """
+    Devuelve un JsonResponse de error (status 413) si el archivo supera
+    MAX_IMPORT_FILE_SIZE, o None si el tamaño es aceptable.
+    """
+    if archivo.size > MAX_IMPORT_FILE_SIZE:
+        mb_recibido = archivo.size / (1024 * 1024)
+        logger.warning(
+            "Archivo rechazado por tamaño: '%s' (%.2f MB, límite %d MB)",
+            archivo.name, mb_recibido, _MAX_MB
+        )
+        return JsonResponse(
+            {
+                "status": "error",
+                "error": (
+                    f"El archivo '{archivo.name}' supera el tamaño máximo permitido "
+                    f"({_MAX_MB} MB). Tamaño recibido: {mb_recibido:.2f} MB."
+                ),
+            },
+            status=413,
+        )
+    return None
+
 # ==============================================================================
 # VISTAS PARA LA IMPORTACIÓN DE DATOS ACADÉMICOS
 # ==============================================================================
@@ -68,6 +97,9 @@ def importar_estudiantes_dirplan(request):
     """
     if request.method == 'POST' and request.FILES.get('file'):
         file = request.FILES['file']
+        error_tamano = _validar_tamano_archivo(file)
+        if error_tamano:
+            return error_tamano
         try:
             # Leer archivo según extensión
             if file.name.endswith('.xlsx'):
@@ -276,6 +308,10 @@ def importar_historial_academico(request):
     if not archivo:
         return JsonResponse({"error": "No se envió ningún archivo"}, status=400)
 
+    error_tamano = _validar_tamano_archivo(archivo)
+    if error_tamano:
+        return error_tamano
+
     nombre_archivo = archivo.name
     match = re.search(r'(\d{5,10})', nombre_archivo)
     if not match:
@@ -478,6 +514,10 @@ def importar_oferta_academica(request):
             {"error": "No se envió ningún archivo."},
             status=400
         )
+
+    error_tamano = _validar_tamano_archivo(archivo)
+    if error_tamano:
+        return error_tamano
 
     # VALIDAR EXTENSIÓN
     nombre_archivo = archivo.name
@@ -741,6 +781,10 @@ def importar_docentes(request):
             {"error": "No se envió ningún archivo."},
             status=400
         )
+
+    error_tamano = _validar_tamano_archivo(archivo)
+    if error_tamano:
+        return error_tamano
 
     extension = os.path.splitext(archivo.name)[1].lower()
     if extension not in ['.xlsx', '.xls']:
