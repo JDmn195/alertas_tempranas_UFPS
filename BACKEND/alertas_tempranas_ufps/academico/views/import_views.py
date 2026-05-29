@@ -46,6 +46,94 @@ def _validar_tamano_archivo(archivo):
         )
     return None
 
+
+def _validar_request_archivo(request, extensiones_permitidas=None):
+    """
+    Valida método POST, presencia del archivo, tamaño y extensión.
+    Devuelve (archivo, None) si todo es correcto, o (None, JsonResponse) con el error.
+    """
+    if request.method != 'POST':
+        return None, JsonResponse({"error": "Método no permitido. Use POST."}, status=405)
+
+    archivo = request.FILES.get('file')
+    if not archivo:
+        return None, JsonResponse({"error": "No se envió ningún archivo."}, status=400)
+
+    error_tamano = _validar_tamano_archivo(archivo)
+    if error_tamano:
+        return None, error_tamano
+
+    if extensiones_permitidas:
+        extension = os.path.splitext(archivo.name)[1].lower()
+        if extension not in extensiones_permitidas:
+            ext_str = ', '.join(extensiones_permitidas)
+            return None, JsonResponse(
+                {"error": f"Formato no soportado: '{extension}'. Se aceptan {ext_str}"},
+                status=400,
+            )
+
+    return archivo, None
+
+
+def _leer_dataframe(archivo, dtype=None):
+    """
+    Lee un archivo Excel o CSV en un DataFrame, limpia los nombres de columnas
+    y devuelve (df, None) o (None, JsonResponse) si la lectura falla.
+    """
+    extension = os.path.splitext(archivo.name)[1].lower()
+    try:
+        if extension == '.csv':
+            df = pd.read_csv(archivo, dtype=dtype or {})
+        else:
+            df = pd.read_excel(archivo, dtype=dtype or {})
+        df.columns = df.columns.str.strip()
+        return df, None
+    except Exception as e:
+        logger.warning("Error leyendo archivo '%s': %s", archivo.name, e, exc_info=True)
+        return None, JsonResponse({"error": f"Error leyendo archivo: {str(e)}"}, status=400)
+
+
+def _validar_columnas(df, columnas_requeridas, nombre_archivo, tipo_bitacora, request, nombre_formato):
+    """
+    Comprueba que df contenga todas las columnas requeridas.
+    Devuelve None si está bien, o un JsonResponse de error (400) si faltan columnas.
+    Registra la bitácora automáticamente en caso de error.
+    """
+    faltantes = [c for c in columnas_requeridas if c not in df.columns]
+    if faltantes:
+        err_msg = f"Faltan columnas requeridas: {', '.join(faltantes)}"
+        _registrar_bitacora(request, nombre_archivo, tipo_bitacora, 0, [{"mensaje": err_msg}], False)
+        return JsonResponse({
+            "status": "error",
+            "mensaje": f"El archivo no tiene el formato de {nombre_formato} esperado.",
+            "error": "Faltan columnas requeridas.",
+            "columnas_faltantes": faltantes,
+            "columnas_encontradas": list(df.columns),
+        }, status=400)
+    return None
+
+
+def _normalizar_codigo_docente(codigo_raw):
+    """
+    Limpia y normaliza un código de docente a 5 dígitos con ceros a la izquierda.
+    Devuelve None si el valor es vacío o inválido.
+    """
+    if pd.isna(codigo_raw):
+        return None
+    codigo = str(codigo_raw).strip().lstrip("'")
+    if not codigo or codigo.lower() == 'nan':
+        return None
+    # Eliminar parte decimal irrelevante (ej: "1234.0" → "1234")
+    if '.' in codigo:
+        parts = codigo.split('.')
+        if all(ch == '0' for ch in parts[1]):
+            codigo = parts[0]
+    try:
+        codigo = str(int(float(codigo))).zfill(5)
+    except (ValueError, TypeError):
+        codigo = codigo.zfill(5)
+    return codigo if codigo.lower() != 'nan' else None
+
 # ==============================================================================
 # VISTAS PARA LA IMPORTACIÓN DE DATOS ACADÉMICOS
 # ==============================================================================
@@ -333,19 +421,9 @@ def importar_historial_academico(request):
             'Periodo', 'Materia Base', 'Codigo Materia',
             'Nombre Materia', 'Tipo Nota', 'Definitiva', 'Creditos'
         ]
-        columnas_faltantes = [
-            col for col in columnas_requeridas if col not in df.columns
-        ]
-        if columnas_faltantes:
-            err_msg = f"Faltan columnas requeridas: {', '.join(columnas_faltantes)}"
-            _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', 0, [{"mensaje": err_msg}], False)
-            return JsonResponse({
-                "status": "error",
-                "mensaje": "El archivo no tiene el formato de Historial Académico esperado.",
-                "error": "Faltan columnas requeridas.",
-                "columnas_faltantes": columnas_faltantes,
-                "columnas_encontradas": list(df.columns)
-            }, status=400)
+        error = _validar_columnas(df, columnas_requeridas, nombre_archivo, 'HISTORIAL', request, 'Historial Académico')
+        if error:
+            return error
 
         errores = []
         filas_validas = []
@@ -499,88 +577,24 @@ def importar_historial_academico(request):
 
 @csrf_exempt
 @requiere_rol(['ADMINISTRADOR'])
-def importar_oferta_academica(request):   
-    # 1. VALIDAR MÉTODO
-    if request.method != 'POST':
-        return JsonResponse(
-            {"error": "Método no permitido. Use POST."},
-            status=405
-        )
+def importar_oferta_academica(request):
+    # 1. VALIDAR MÉTODO, ARCHIVO Y EXTENSIÓN
+    archivo, error = _validar_request_archivo(request, extensiones_permitidas=['.xlsx', '.xls', '.csv'])
+    if error:
+        return error
 
-    archivo = request.FILES.get('file')
-
-    if not archivo:
-        return JsonResponse(
-            {"error": "No se envió ningún archivo."},
-            status=400
-        )
-
-    error_tamano = _validar_tamano_archivo(archivo)
-    if error_tamano:
-        return error_tamano
-
-    # VALIDAR EXTENSIÓN
     nombre_archivo = archivo.name
-    extension = os.path.splitext(nombre_archivo)[1].lower()
-
-    if extension not in ['.xlsx', '.xls', '.csv']:
-        return JsonResponse(
-            {"error": f"Formato no soportado: {extension}"},
-            status=400
-        )
 
     # 2. LEER ARCHIVO
-    try:
-        if extension == '.csv':
-            df = pd.read_csv(
-                archivo,
-                dtype={
-                    'Materia': str,
-                    'Código Docente': str
-                }
-            )
-        else:
-            df = pd.read_excel(
-                archivo,
-                dtype={
-                    'Materia': str,
-                    'Código Docente': str
-                }
-            )
+    df, error = _leer_dataframe(archivo, dtype={'Materia': str, 'Código Docente': str})
+    if error:
+        return error
 
-    except Exception as e:
-        return JsonResponse(
-            {"error": f"Error leyendo archivo: {str(e)}"},
-            status=400
-        )
-
-    # LIMPIAR COLUMNAS
-    df.columns = df.columns.str.strip()
-
-    columnas_requeridas = [
-        'Materia',
-        'Nombre',
-        'Código Docente',
-        'Nombre Docente',
-        'Horario',
-        '# Matriculados'
-    ]
-
-    faltantes = [
-        c for c in columnas_requeridas
-        if c not in df.columns
-    ]
-
-    if faltantes:
-        err_msg = f"Faltan columnas requeridas: {', '.join(faltantes)}"
-        _registrar_bitacora(request, nombre_archivo, 'OFERTA', 0, [{"mensaje": err_msg}], False)
-        return JsonResponse({
-            "status": "error",
-            "mensaje": "El archivo no tiene el formato de Oferta Académica esperado.",
-            "error": "Faltan columnas requeridas.",
-            "columnas_faltantes": faltantes,
-            "columnas_encontradas": list(df.columns)
-        }, status=400)
+    # 3. VALIDAR COLUMNAS
+    columnas_requeridas = ['Materia', 'Nombre', 'Código Docente', 'Nombre Docente', 'Horario', '# Matriculados']
+    error = _validar_columnas(df, columnas_requeridas, nombre_archivo, 'OFERTA', request, 'Oferta Académica')
+    if error:
+        return error
 
     # ELIMINAR FILAS VACÍAS
     df = df.dropna(subset=['Materia'])
@@ -588,139 +602,70 @@ def importar_oferta_academica(request):
     errores = []
     registros_validos = []
 
-    # 3. VALIDAR FILAS
+    # 4. VALIDAR FILAS
     for index, row in df.iterrows():
-
         fila_num = index + 2
-
         codigo_materia_grupo = str(row['Materia']).strip()
 
-        # Separar base y grupo (ej: 1150114A)
-        # Identificamos la parte numérica inicial como 'base' y el resto como 'grupo'
         match = re.match(r'^(\d+)(.*)$', codigo_materia_grupo)
-
         if not match:
-            errores.append({
-                "fila": fila_num,
-                "campo": "Materia",
-                "valor": codigo_materia_grupo,
-                "mensaje": "Formato inválido."
-            })
+            errores.append({"fila": fila_num, "campo": "Materia", "valor": codigo_materia_grupo, "mensaje": "Formato inválido."})
             continue
 
         base_materia = match.group(1)
         grupo = match.group(2)
 
         if grupo == '':
-            errores.append({
-                "fila": fila_num,
-                "campo": "Grupo",
-                "valor": codigo_materia_grupo,
-                "mensaje": "No se encontró grupo."
-            })
+            errores.append({"fila": fila_num, "campo": "Grupo", "valor": codigo_materia_grupo, "mensaje": "No se encontró grupo."})
             continue
 
         nombre_materia = str(row['Nombre']).strip()
 
-        codigo_docente = str(row['Código Docente']).strip()
-        # Asegurar que el código tenga 5 dígitos (rellenar con ceros a la izquierda)
-        if codigo_docente and codigo_docente.lower() != 'nan':
-            if '.' in codigo_docente:
-                parts = codigo_docente.split('.')
-                if parts[1] == '0' or parts[1] == '00' or all(ch == '0' for ch in parts[1]):
-                    codigo_docente = parts[0]
-            try:
-                codigo_docente = str(int(float(codigo_docente))).zfill(5)
-            except (ValueError, TypeError):
-                codigo_docente = codigo_docente.zfill(5)
-        
-        if not codigo_docente or codigo_docente.lower() == 'nan':
+        codigo_docente = _normalizar_codigo_docente(row['Código Docente'])
+        if not codigo_docente:
             continue
-
-        nombre_docente = str(
-            row['Nombre Docente']
-        ).strip()
 
         horario = str(row['Horario']).strip()
 
-        matriculados_raw = row['# Matriculados']
-
         try:
-            matriculados = int(matriculados_raw)
+            matriculados = int(row['# Matriculados'])
         except (ValueError, TypeError):
             matriculados = 0
 
-        # VALIDAR DOCENTE
         try:
-            docente_obj = Docente.objects.get(
-                codigo=codigo_docente
-            )
-
+            docente_obj = Docente.objects.get(codigo=codigo_docente)
         except Docente.DoesNotExist:
-            errores.append({
-                "fila": fila_num,
-                "campo": "Código Docente",
-                "valor": codigo_docente,
-                "mensaje": "El docente no existe."
-            })
+            errores.append({"fila": fila_num, "campo": "Código Docente", "valor": codigo_docente, "mensaje": "El docente no existe."})
             continue
 
         registros_validos.append({
-            "base": base_materia,
-            "grupo": grupo,
-            "nombre": nombre_materia,
-            "docente": docente_obj,
-            "horario": horario,
-            "matriculados": matriculados
+            "base": base_materia, "grupo": grupo, "nombre": nombre_materia,
+            "docente": docente_obj, "horario": horario, "matriculados": matriculados,
         })
 
     # CANCELAR SI HAY ERRORES
     if errores:
         _registrar_bitacora(request, nombre_archivo, 'OFERTA', len(registros_validos), errores, False)
-        return JsonResponse({
-            "status": "error",
-            "mensaje": "Se encontraron errores.",
-            "total_errores": len(errores),
-            "errores": errores
-        }, status=400)
+        return JsonResponse({"status": "error", "mensaje": "Se encontraron errores.", "total_errores": len(errores), "errores": errores}, status=400)
 
-    # 4. GUARDAR
+    # 5. GUARDAR
     try:
-
-        materias_creadas = 0
-        materias_actualizadas = 0
-        cursos_creados = 0
-        cursos_actualizados = 0
+        materias_creadas = materias_actualizadas = cursos_creados = cursos_actualizados = 0
 
         with transaction.atomic():
-
             for fila in registros_validos:
-
-                # CREAR / ACTUALIZAR MATERIA
                 materia_obj, creada = Materia.objects.update_or_create(
-                    codigo=fila["base"],
-                    defaults={
-                        "nombre": fila["nombre"]
-                    }
+                    codigo=fila["base"], defaults={"nombre": fila["nombre"]}
                 )
-
                 if creada:
                     materias_creadas += 1
                 else:
                     materias_actualizadas += 1
 
-                # CREAR / ACTUALIZAR CURSO
                 curso_obj, created = Curso.objects.update_or_create(
-                    materia=materia_obj,
-                    grupo=fila["grupo"],
-                    defaults={
-                        "docente": fila["docente"],
-                        "horario": fila["horario"],
-                        "cantidad_matriculados":
-                            fila["matriculados"]
-                    }
+                    materia=materia_obj, grupo=fila["grupo"],
+                    defaults={"docente": fila["docente"], "horario": fila["horario"], "cantidad_matriculados": fila["matriculados"]},
                 )
-
                 if created:
                     cursos_creados += 1
                 else:
@@ -728,85 +673,43 @@ def importar_oferta_academica(request):
 
         _registrar_bitacora(request, nombre_archivo, 'OFERTA', len(registros_validos), [], True)
         registrar_auditoria(
-            request.usuario,
-            'IMPORTACION',
+            request.usuario, 'IMPORTACION',
             f"Importación de OFERTA ACADÉMICA exitosa: {len(registros_validos)} registros desde '{nombre_archivo}'."
         )
         return JsonResponse({
-
             "status": "success",
             "mensaje": "Relación de materias/oferta académica procesada correctamente.",
-
             "materias_creadas": materias_creadas,
             "materias_actualizadas": materias_actualizadas,
             "cursos_creados": cursos_creados,
             "cursos_actualizados": cursos_actualizados,
-            "total_procesado": len(registros_validos)
-
+            "total_procesado": len(registros_validos),
         })
 
     except Exception as e:
-        logger.error("Error inesperado al importar oferta académica desde '%s': %s",
-                     nombre_archivo if 'nombre_archivo' in locals() else 'archivo desconocido',
-                     e, exc_info=True)
-        if 'nombre_archivo' in locals():
-            _registrar_bitacora(request, nombre_archivo, 'OFERTA', 0, [{"mensaje": str(e)}], False)
-        return JsonResponse({
-            "status": "error",
-            "mensaje": str(e)
-        }, status=500)
+        logger.error("Error inesperado al importar oferta académica desde '%s': %s", nombre_archivo, e, exc_info=True)
+        _registrar_bitacora(request, nombre_archivo, 'OFERTA', 0, [{"mensaje": str(e)}], False)
+        return JsonResponse({"status": "error", "mensaje": str(e)}, status=500)
 
 
 @csrf_exempt
 @requiere_rol(['ADMINISTRADOR'])
 def importar_docentes(request):
-    """
-    
-    """
     from django.db import transaction
     from usuarios.models import Usuario
 
-    # ─────────────────────────────────────────────
-    # 1. VALIDAR MÉTODO Y ARCHIVO
-    # ─────────────────────────────────────────────
-    if request.method != 'POST':
-        return JsonResponse(
-            {"error": "Método no permitido. Se espera POST."},
-            status=405
-        )
+    # 1. VALIDAR MÉTODO, ARCHIVO Y EXTENSIÓN
+    archivo, error = _validar_request_archivo(request, extensiones_permitidas=['.xlsx', '.xls'])
+    if error:
+        return error
 
-    archivo = request.FILES.get('file')
-    if not archivo:
-        return JsonResponse(
-            {"error": "No se envió ningún archivo."},
-            status=400
-        )
+    # 2. LEER ARCHIVO
+    df, error = _leer_dataframe(archivo)
+    if error:
+        _registrar_bitacora(request, archivo.name, 'DOCENTES', 0, [{"mensaje": str(error.content)}], False)
+        return error
 
-    error_tamano = _validar_tamano_archivo(archivo)
-    if error_tamano:
-        return error_tamano
-
-    extension = os.path.splitext(archivo.name)[1].lower()
-    if extension not in ['.xlsx', '.xls']:
-        return JsonResponse(
-            {"error": f"Formato no soportado: '{extension}'. Se aceptan .xlsx, .xls"},
-            status=400
-        )
-
-    # ─────────────────────────────────────────────
-    # 2. LEER ARCHIVO Y VALIDAR FORMATO
-    # ────────────────────────────────────────────
-    try:
-        df = pd.read_excel(archivo)
-        df.columns = df.columns.str.strip()
-    except Exception as e:
-        _registrar_bitacora(request, archivo.name, 'DOCENTES', 0, [{"mensaje": f"Error al leer el archivo: {str(e)}"}], False)
-        return JsonResponse(
-            {"error": f"Error al leer el archivo: {str(e)}"},
-            status=400
-        )
-
-    # 1. Detectar columnas dinámicamente para tolerar caracteres especiales
+    # 3. DETECTAR COLUMNAS DINÁMICAMENTE (tolera caracteres especiales)
     col_codigo      = next((c for c in df.columns if 'Docente' in c and ('digo' in c or 'igo' in c)), None)
     col_nombre      = next((c for c in df.columns if 'Nombre' in c and 'Docente' in c), None)
     col_vinculacion = next((c for c in df.columns if 'Vinculaci' in c), None)
@@ -815,111 +718,68 @@ def importar_docentes(request):
     col_correo_i    = next((c for c in df.columns if 'Institucional' in c), None)
     col_celular     = next((c for c in df.columns if 'Celular' in c), None)
 
-    # 2. VALIDACIÓN DE FIRMA (Evitar confusión con Cursos o Historial)
-    # Si tiene la columna 'Materia', probablemente es un archivo de Cursos u Oferta Académica
-    es_otro_archivo = any(c for c in df.columns if 'Materia' in c or 'Horario' in c)
-
-    if es_otro_archivo:
+    # Validación de firma: evitar confusión con archivos de Cursos u Oferta Académica
+    if any(c for c in df.columns if 'Materia' in c or 'Horario' in c):
         err_msg = "El archivo parece ser un reporte de Cursos u Oferta Académica."
         _registrar_bitacora(request, archivo.name, 'DOCENTES', 0, [{"mensaje": err_msg}], False)
         return JsonResponse({
             "status": "error",
             "mensaje": err_msg,
-            "error": "Se detectó la columna 'Materia' o 'Horario', las cuales no pertenecen al formato de Docentes."
+            "error": "Se detectó la columna 'Materia' o 'Horario', las cuales no pertenecen al formato de Docentes.",
         }, status=400)
 
-    # 3. VERIFICAR COLUMNAS MÍNIMAS
     if not col_codigo or not col_nombre:
         err_msg = "No se encontraron las columnas de Código o Nombre del docente."
         _registrar_bitacora(request, archivo.name, 'DOCENTES', 0, [{"mensaje": err_msg}], False)
-        return JsonResponse({
-            "status": "error",
-            "mensaje": err_msg,
-            "encontradas": list(df.columns)
-        }, status=400)
+        return JsonResponse({"status": "error", "mensaje": err_msg, "encontradas": list(df.columns)}, status=400)
 
-    # ─────────────────────────────────────────────
-    # 3. PROCESAR CADA FILA
-    # ─────────────────────────────────────────────
-    creados          = 0
-    actualizados     = 0
-    usuarios_creados = 0
-    errores          = []
+    # 4. PROCESAR CADA FILA
+    creados = actualizados = usuarios_creados = 0
+    errores = []
 
     with transaction.atomic():
         for index, row in df.iterrows():
             fila_num = index + 2
 
-            # Limpiar memoria de queries cada 50 filas
             if index % 50 == 0:
                 reset_queries()
 
-            # ── Leer y limpiar código ──────────────────────────────────
-            codigo_raw = row.get(col_codigo)
-            if pd.isna(codigo_raw) or str(codigo_raw).strip() == '':
-                continue
-            
-            codigo = str(codigo_raw).strip().lstrip("'")
-            # Asegurar que el código tenga 5 dígitos (rellenar con ceros a la izquierda)
-            if codigo and codigo.lower() != 'nan':
-                if '.' in codigo:
-                    parts = codigo.split('.')
-                    if parts[1] == '0' or parts[1] == '00' or all(ch == '0' for ch in parts[1]):
-                        codigo = parts[0]
-                try:
-                    codigo = str(int(float(codigo))).zfill(5)
-                except (ValueError, TypeError):
-                    codigo = codigo.zfill(5)
-            
-            if not codigo or codigo.lower() == 'nan':
+            codigo = _normalizar_codigo_docente(row.get(col_codigo))
+            if not codigo:
                 continue
 
-            # ── Leer demás campos ──────────────────────────────────────
             nombre               = str(row.get(col_nombre, '')).strip()
             tipo_vinculacion     = str(row.get(col_vinculacion, 'DOCENTE CATEDRA')).strip() if col_vinculacion else 'DOCENTE CATEDRA'
             departamento_nombre  = str(row.get(col_depto, '')).strip() if col_depto else ''
-            correo_personal      = row.get(col_correo_p)  if col_correo_p  else None
-            correo_institucional = row.get(col_correo_i)  if col_correo_i  else None
-            celular              = row.get(col_celular)   if col_celular   else None 
-            
-            # Normalizar tipo de vinculación
+            correo_personal      = row.get(col_correo_p) if col_correo_p else None
+            correo_institucional = row.get(col_correo_i) if col_correo_i else None
+            celular              = row.get(col_celular)  if col_celular  else None
+
             if tipo_vinculacion not in ['DOCENTE PLANTA', 'DOCENTE CATEDRA']:
                 tipo_vinculacion = 'DOCENTE CATEDRA'
 
-            # Limpiar valores nulos
             correo_personal      = str(correo_personal).strip()      if correo_personal      is not None and not pd.isna(correo_personal)      else None
             correo_institucional = str(correo_institucional).strip() if correo_institucional is not None and not pd.isna(correo_institucional) else None
             celular              = str(celular).strip()              if celular              is not None and not pd.isna(celular)              else None
             departamento_nombre  = departamento_nombre if departamento_nombre and departamento_nombre != 'nan' else None
 
             try:
-                # ── 1. Crear o buscar Usuario ──────────────────────
                 correo_usuario = correo_institucional or correo_personal or f"{codigo}@ufps.edu.co"
-
                 usuario_obj, usuario_creado = Usuario.objects.get_or_create(
                     correo=correo_usuario,
-                    defaults={
-                        "nombre":     nombre,
-                        "rol":        "DOCENTE",
-                        "contrasena": codigo,
-                        "activo":     True,
-                    }
+                    defaults={"nombre": nombre, "rol": "DOCENTE", "contrasena": codigo, "activo": True},
                 )
                 if usuario_creado:
                     usuarios_creados += 1
 
-                # ── 2. Crear o actualizar Docente ──────────────────
                 _obj, creado = Docente.objects.update_or_create(
                     codigo=codigo,
                     defaults={
-                        "nombre":               nombre,
-                        "tipo_vinculacion":     tipo_vinculacion,
-                        "departamento":         departamento_nombre,
-                        "correo_personal":      correo_personal,
-                        "correo_institucional": correo_institucional,
-                        "celular":              celular,
-                        "usuario":              usuario_obj,
-                    }
+                        "nombre": nombre, "tipo_vinculacion": tipo_vinculacion,
+                        "departamento": departamento_nombre, "correo_personal": correo_personal,
+                        "correo_institucional": correo_institucional, "celular": celular,
+                        "usuario": usuario_obj,
+                    },
                 )
                 if creado:
                     creados += 1
@@ -929,14 +789,11 @@ def importar_docentes(request):
             except Exception as e:
                 errores.append({"fila": fila_num, "codigo": codigo, "error": str(e)})
 
-    # ─────────────────────────────────────────────
-    # 4. RETORNAR RESUMEN
-    # ─────────────────────────────────────────────
+    # 5. RETORNAR RESUMEN
     _registrar_bitacora(request, archivo.name, 'DOCENTES', creados + actualizados, errores, not errores)
     if not errores:
         registrar_auditoria(
-            request.usuario,
-            'IMPORTACION',
+            request.usuario, 'IMPORTACION',
             f"Importación de DOCENTES exitosa: {creados} creados, {actualizados} actualizados desde '{archivo.name}'."
         )
     return JsonResponse({
