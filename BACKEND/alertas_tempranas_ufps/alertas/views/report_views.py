@@ -24,7 +24,7 @@ def export_report_data(request):
             data = []
             for r in riesgos:
                 gpa = float(r.estudiante.promedio) if r.estudiante.promedio else 0.0
-                alerts_count = Alerta.objects.filter(estudiante=r.estudiante, estado__in=['activa', 'en_monitoreo', 'ACTIVA', 'EN_MONITOREO']).count()
+                alerts_count = Alerta.objects.filter(estudiante=r.estudiante, estado__in=['activa', 'active', 'en_seguimiento', 'atendida']).count()
                 data.append({
                     'code': r.estudiante.codigo,
                     'name': r.estudiante.nombre,
@@ -46,7 +46,7 @@ def export_report_data(request):
                         risk = 'ALTO'
                     elif gpa < 3.4:
                         risk = 'MEDIO'
-                    alerts_count = Alerta.objects.filter(estudiante=e, estado__in=['activa', 'en_monitoreo', 'ACTIVA', 'EN_MONITOREO']).count()
+                    alerts_count = Alerta.objects.filter(estudiante=e, estado__in=['activa', 'active', 'en_seguimiento', 'atendida']).count()
                     data.append({
                         'code': e.codigo,
                         'name': e.nombre,
@@ -67,7 +67,7 @@ def export_report_data(request):
                 est_lower = a.estado.lower()
                 if est_lower in ['activa', 'active']:
                     estado_friendly = 'Activa'
-                elif est_lower in ['en_monitoreo', 'monitoring', 'en seguimiento']:
+                elif est_lower in ['en_seguimiento', 'en_monitoreo', 'monitoring', 'en seguimiento']:
                     estado_friendly = 'En Seguimiento'
                 elif est_lower in ['atendida', 'resolved']:
                     estado_friendly = 'Atendida'

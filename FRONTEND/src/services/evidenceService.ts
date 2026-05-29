@@ -24,6 +24,7 @@ export interface IntervencionDetalle {
   estudiante_nombre: string;
   estudiante_codigo: string;
   resultado: string | null;
+  concluida: boolean;
 }
 
 export const evidenceService = {
@@ -38,7 +39,8 @@ export const evidenceService = {
         alerta_estado: data.alerta_estado,
         estudiante_nombre: data.estudiante_nombre,
         estudiante_codigo: data.estudiante_codigo,
-        resultado: data.resultado
+        resultado: data.resultado,
+        concluida: data.concluida ?? false,
       }
     };
   },

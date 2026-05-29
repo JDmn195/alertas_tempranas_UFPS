@@ -11,10 +11,16 @@ from alertas.models import Regla, Alerta, RiesgoEstudiante
 from academico.views.student_views import calcular_nivel_riesgo
 from alertas.services import NotificationService
 
-def reprocesar_alertas_completas(estudiantes_qs=None):
+from usuarios.decorators import requiere_rol
+from usuarios.utils import registrar_auditoria
+
+def reprocesar_alertas_completas(estudiantes_qs=None, usuario=None):
     """
     Función de servicio para (re)generar alertas y riesgos.
     Se puede llamar desde vistas de importación o manualmente.
+
+    - usuario: instancia de Usuario que dispara el proceso.
+               Si es None se registra como 'Sistema' en auditoría.
     """
     reglas = Regla.objects.filter(activo=True).order_by('-prioridad')
     if estudiantes_qs is None:
@@ -115,12 +121,28 @@ def reprocesar_alertas_completas(estudiantes_qs=None):
                 NotificationService.notificar_alerta(nueva_alerta)
                 nuevas_alertas += 1
 
-    return {
+    resultado = {
         'total_evaluados': estudiantes_qs.count(),
         'actualizados': actualizados,
         'nuevas_alertas': nuevas_alertas,
         'estudiantes_por_nivel': por_nivel
     }
+
+    # Registrar auditoría — usuario=None significa "Sistema"
+    if usuario:
+        origen = f"usuario '{usuario.nombre}' (ejecución manual)"
+    else:
+        origen = "Sistema (disparado automáticamente por importación de datos)"
+
+    registrar_auditoria(
+        usuario,
+        'GENERAR_ALERTAS',
+        f"Generación de alertas ejecutada por {origen}. "
+        f"Evaluados: {resultado['total_evaluados']}, "
+        f"nuevas alertas: {resultado['nuevas_alertas']}."
+    )
+
+    return resultado
 
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
@@ -133,14 +155,7 @@ def generar_alertas(request):
     POST /api/alertas/generar/
     """
     try:
-        resultado = reprocesar_alertas_completas()
-        
-        # Registrar auditoría de generación
-        registrar_auditoria(
-            request.usuario, 
-            'GENERAR_ALERTAS', 
-            f"Se ejecutó el reprocesamiento manual de alertas. Total evaluados: {resultado.get('total_evaluados', 0)}, nuevas alertas: {resultado.get('nuevas_alertas', 0)}"
-        )
+        resultado = reprocesar_alertas_completas(usuario=request.usuario)
         
         return JsonResponse({
             'mensaje': 'Proceso de generación completado',
@@ -177,7 +192,12 @@ def listar_alertas(request):
             total_qs = total_qs.none()
             
     if estado:
-        mapping = {'activa': ['activa', 'active'], 'en_monitoreo': ['en_monitoreo', 'monitoring'], 'atendida': ['atendida', 'atended'], 'cerrada': ['cerrada', 'closed']}
+        mapping = {
+            'activa': ['activa', 'active'],
+            'en_seguimiento': ['en_seguimiento'],
+            'atendida': ['atendida'],
+            'cerrada': ['cerrada', 'closed'],
+        }
         target_states = mapping.get(estado.lower(), [estado])
         qs = qs.filter(estado__in=target_states)
         
@@ -186,8 +206,8 @@ def listar_alertas(request):
         
     conteos = {
         'activa': total_qs.filter(estado__in=['activa', 'active']).count(),
-        'en_monitoreo': total_qs.filter(estado__in=['en_monitoreo', 'monitoring']).count(),
-        'atendida': total_qs.filter(estado__in=['atendida', 'atended']).count(),
+        'en_seguimiento': total_qs.filter(estado='en_seguimiento').count(),
+        'atendida': total_qs.filter(estado='atendida').count(),
         'cerrada': total_qs.filter(estado__in=['cerrada', 'closed']).count(),
     }
 

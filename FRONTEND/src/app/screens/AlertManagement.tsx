@@ -21,7 +21,7 @@ const RISK_CONFIG: Record<string, { label: string; variant: 'high' | 'medium' | 
 
 const tabMapping: Record<string, string> = {
   'Activas': 'activa',
-  'En Seguimiento': 'en_monitoreo',
+  'En Seguimiento': 'en_seguimiento',
   'Atendidas': 'atendida',
   'Cerradas': 'cerrada'
 };
@@ -45,11 +45,13 @@ interface Intervencion {
   observaciones: string;
   fecha: string;
   usuario: string;
+  resultado: string | null;
+  concluida: boolean;
 }
 
 interface Conteos {
   activa: number;
-  en_monitoreo: number;
+  en_seguimiento: number;
   atendida: number;
   cerrada: number;
 }
@@ -228,14 +230,31 @@ function ModalHistorial({
           {error && <p className="text-sm text-red-500 text-center">{error}</p>}
           {!loading && intervenciones.length === 0 && <p className="text-sm text-gray-500 text-center py-10">Sin intervenciones registradas</p>}
           {!loading && intervenciones.map((item) => (
-            <div key={item.id} className="border border-gray-200 rounded-lg p-4 mb-3">
+            <div key={item.id} className={`border rounded-lg p-4 mb-3 ${item.concluida ? 'border-green-200 bg-green-50/40' : 'border-gray-200'}`}>
               <div className="flex items-center justify-between mb-2">
-                <span className={`text-xs font-semibold px-2 py-1 rounded-full ${TIPO_COLOR[item.tipo] || 'bg-gray-100 text-gray-600'}`}>
-                  {TIPO_LABEL[item.tipo] || item.tipo}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${TIPO_COLOR[item.tipo] || 'bg-gray-100 text-gray-600'}`}>
+                    {TIPO_LABEL[item.tipo] || item.tipo}
+                  </span>
+                  {item.concluida ? (
+                    <span className="text-xs font-bold px-2 py-1 rounded-full bg-green-100 text-green-700 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Concluida
+                    </span>
+                  ) : (
+                    <span className="text-xs font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-700">
+                      En curso
+                    </span>
+                  )}
+                </div>
                 <span className="text-xs text-gray-400">{item.fecha}</span>
               </div>
               <p className="text-sm text-gray-700">{item.observaciones}</p>
+              {item.concluida && item.resultado && (
+                <div className="mt-2 pt-2 border-t border-green-100">
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">Resumen final</p>
+                  <p className="text-xs text-gray-600 italic">{item.resultado}</p>
+                </div>
+              )}
               <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
                 <p className="text-xs text-gray-400">Por: <span className="font-medium text-gray-600">{item.usuario}</span></p>
                 <Button 
@@ -263,7 +282,7 @@ export default function AlertManagement() {
   const [activeTab, setActiveTab] = useState('Activas');
   const [filterType, setFilterType] = useState('all');
   const [alertsList, setAlertsList] = useState<AlertItem[]>([]);
-  const [conteos, setConteos] = useState<Conteos>({ activa: 0, en_monitoreo: 0, atendida: 0, cerrada: 0 });
+  const [conteos, setConteos] = useState<Conteos>({ activa: 0, en_seguimiento: 0, atendida: 0, cerrada: 0 });
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -520,7 +539,8 @@ export default function AlertManagement() {
                             <span className="text-[10px] font-extrabold uppercase tracking-widest">Historial</span>
                           </Button>
                           
-                          {activeTab !== 'Atendidas' && activeTab !== 'Cerradas' && (
+                          {/* Activas y En Seguimiento: Intervenir + Cerrar */}
+                          {(activeTab === 'Activas' || activeTab === 'En Seguimiento') && (
                             <>
                               <Button 
                                 size="sm" 
@@ -536,6 +556,28 @@ export default function AlertManagement() {
                                 onClick={() => { if(window.confirm('¿Seguro que deseas cerrar esta alerta?')) handleCerrarAlerta(alert.id); }}
                               >
                                 <X className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+
+                          {/* Atendidas: puede intervenir de nuevo + cerrar */}
+                          {activeTab === 'Atendidas' && (
+                            <>
+                              <Button 
+                                size="sm" 
+                                className="h-9 px-5 bg-[#C8102E] text-white hover:bg-red-700 shadow-md shadow-red-100 rounded-xl flex-1 lg:flex-none"
+                                onClick={() => { setSelectedAlert(alert); setShowModal(true); }}
+                              >
+                                <span className="text-[10px] font-extrabold uppercase tracking-widest">Intervenir</span>
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-9 px-4 border-gray-200 text-gray-500 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-xl flex-1 lg:flex-none"
+                                onClick={() => { if(window.confirm('¿Cerrar esta alerta? Ya no se podrán registrar más intervenciones.')) handleCerrarAlerta(alert.id); }}
+                              >
+                                <X className="w-3.5 h-3.5 mr-2" />
+                                <span className="text-[10px] font-extrabold uppercase tracking-widest">Cerrar Alerta</span>
                               </Button>
                             </>
                           )}

@@ -6,18 +6,34 @@ from django.views.decorators.http import require_http_methods
 from supabase import create_client, Client
 from alertas.models import Intervencion, Evidencia
 
-# Configuración Supabase desde variables de entorno
-URL = os.environ.get("SUPABASE_URL")
-KEY = os.environ.get("SUPABASE_KEY")
 BUCKET = os.environ.get("SUPABASE_BUCKET_NAME", "evidencias")
 
-# Inicializar cliente si las variables existen
-supabase: Client = None
-if URL and KEY:
+# Cliente lazy: se inicializa la primera vez que se necesita
+_supabase_client: Client = None
+_supabase_failed: bool = False  # True solo si ya intentó y falló
+
+def get_supabase() -> Client:
+    """Devuelve el cliente Supabase, inicializándolo si es necesario.
+    Reintenta siempre que no haya un cliente válido."""
+    global _supabase_client, _supabase_failed
+
+    if _supabase_client is not None:
+        return _supabase_client
+
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_KEY")
+
+    if not url or not key:
+        return None
+
     try:
-        supabase = create_client(URL, KEY)
+        _supabase_client = create_client(url, key)
+        _supabase_failed = False
+        return _supabase_client
     except Exception as e:
         print(f"Error al inicializar cliente Supabase: {e}")
+        _supabase_client = None  # Permitir reintento en la próxima petición
+        return None
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -26,6 +42,7 @@ def upload_evidence(request, intervencion_id):
     POST /api/alertas/intervenciones/<id>/evidencias/upload/
     Recibe un archivo vía form-data (key: 'file')
     """
+    supabase = get_supabase()
     if not supabase:
         return JsonResponse({'error': 'Configuración de Supabase no encontrada'}, status=500)
 
@@ -81,6 +98,8 @@ def upload_evidence(request, intervencion_id):
         }, status=201)
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return JsonResponse({'error': f'Error en el proceso de subida: {str(e)}'}, status=500)
 
 
@@ -111,6 +130,7 @@ def list_evidence(request, intervencion_id):
         'estudiante_nombre': intervencion.alerta.estudiante.nombre,
         'estudiante_codigo': intervencion.alerta.estudiante.codigo,
         'resultado': intervencion.resultado,
+        'concluida': intervencion.concluida,
         'total': len(data),
         'evidencias': data
     })
@@ -123,6 +143,7 @@ def delete_evidence(request, evidencia_id):
     DELETE /api/alertas/evidencias/<id>/
     Elimina el registro de la BD y del Storage.
     """
+    supabase = get_supabase()
     if not supabase:
         return JsonResponse({'error': 'Configuración de Supabase no encontrada'}, status=500)
 

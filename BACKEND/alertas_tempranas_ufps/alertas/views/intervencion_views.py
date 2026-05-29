@@ -8,7 +8,34 @@ from usuarios.models import Usuario
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
 
-ESTADOS_PERMITIDOS = ['activa', 'en_monitoreo', 'ACTIVA', 'EN_MONITOREO', 'active', 'monitoring']
+# Alertas cerradas no permiten nuevas intervenciones
+ESTADOS_NO_PERMITIDOS = ['cerrada', 'closed']
+
+
+def recalcular_estado_alerta(alerta):
+    """
+    Recalcula y guarda el estado de la alerta según sus intervenciones:
+    - Sin intervenciones           → 'activa'
+    - Al menos una sin concluir    → 'en_seguimiento'
+    - Todas concluidas (≥1)        → 'atendida'
+    - Cerrada manualmente          → 'cerrada'  (no se toca)
+    """
+    if alerta.estado == 'cerrada':
+        return alerta.estado
+
+    intervenciones = Intervencion.objects.filter(alerta=alerta)
+    total = intervenciones.count()
+
+    if total == 0:
+        nuevo_estado = 'activa'
+    elif intervenciones.filter(concluida=False).exists():
+        nuevo_estado = 'en_seguimiento'
+    else:
+        nuevo_estado = 'atendida'
+
+    alerta.estado = nuevo_estado
+    alerta.save()
+    return nuevo_estado
 
 
 @csrf_exempt
@@ -34,8 +61,8 @@ def registrar_intervencion(request, alerta_id):
     except Alerta.DoesNotExist:
         return JsonResponse({'error': 'Alerta no encontrada'}, status=404)
 
-    # Validar estado de la alerta
-    if alerta.estado not in ESTADOS_PERMITIDOS:
+    # Validar estado de la alerta — solo las cerradas bloquean nuevas intervenciones
+    if alerta.estado.lower() in ESTADOS_NO_PERMITIDOS:
         return JsonResponse(
             {'error': 'No se pueden registrar intervenciones en alertas cerradas.'},
             status=400
@@ -91,10 +118,8 @@ def registrar_intervencion(request, alerta_id):
         f"Registrada intervención '{tipo}' para la alerta ID {alerta.id} del estudiante {alerta.estudiante.codigo}."
     )
 
-    # Automatización de estados: Si está activa, pasar a en_monitoreo
-    if alerta.estado.lower() in ['activa', 'active']:
-        alerta.estado = 'en_monitoreo'
-        alerta.save()
+    # Recalcular estado de la alerta
+    recalcular_estado_alerta(alerta)
 
     return JsonResponse({
         'mensaje': 'Intervención registrada exitosamente',
@@ -106,6 +131,7 @@ def registrar_intervencion(request, alerta_id):
             'observaciones': intervencion.observaciones,
             'evidencia':    intervencion.evidencia,
             'resultado':    intervencion.resultado,
+            'concluida':    intervencion.concluida,
             'fecha':        intervencion.fecha.strftime('%Y-%m-%d %H:%M'),
         }
     }, status=201)
@@ -134,6 +160,7 @@ def listar_intervenciones(request, alerta_id):
             'observaciones': i.observaciones,
             'evidencia':     i.evidencia,
             'resultado':     i.resultado,
+            'concluida':     i.concluida,
             'fecha':         i.fecha.strftime('%Y-%m-%d %H:%M'),
             'usuario':       i.usuario.nombre,
             'usuario_rol':   i.usuario.rol,
@@ -228,12 +255,17 @@ def eliminar_anotacion(request, anotacion_id):
 def concluir_intervencion(request, intervencion_id):
     """
     POST /api/alertas/intervenciones/<id>/concluir/
-    Recibe un 'resultado' (resumen), actualiza la intervención y cierra la alerta.
+    Marca la intervención como concluida y recalcula el estado de la alerta:
+    - Si quedan intervenciones sin concluir → 'en_seguimiento'
+    - Si todas están concluidas             → 'atendida'
     """
     try:
         intervencion = Intervencion.objects.get(id=intervencion_id)
     except Intervencion.DoesNotExist:
         return JsonResponse({'error': 'Intervención no encontrada'}, status=404)
+
+    if intervencion.concluida:
+        return JsonResponse({'error': 'Esta intervención ya fue concluida'}, status=400)
 
     try:
         body = json.loads(request.body)
@@ -244,21 +276,24 @@ def concluir_intervencion(request, intervencion_id):
     if not resultado:
         return JsonResponse({'error': 'El resumen final (resultado) es obligatorio'}, status=400)
 
-    # Actualizar intervención
+    # Marcar intervención como concluida
     intervencion.resultado = resultado
+    intervencion.concluida = True
     intervencion.save()
 
-    # Cambiar estado de la alerta a 'atendida'
+    # Recalcular estado de la alerta
     alerta = intervencion.alerta
-    alerta.estado = 'atendida'
-    alerta.save()
+    nuevo_estado = recalcular_estado_alerta(alerta)
 
-    # Registrar auditoría de conclusión de intervención
+    # Registrar auditoría
     registrar_auditoria(
         request.usuario,
         'CONCLUIR_INTERVENCION',
-        f"Concluida intervención ID {intervencion.id} de tipo '{intervencion.tipo}' para alerta ID {alerta.id}. Alerta marcada como atendida."
+        f"Concluida intervención ID {intervencion.id} de tipo '{intervencion.tipo}' para alerta ID {alerta.id}. Estado alerta: {nuevo_estado}."
     )
 
-    return JsonResponse({'mensaje': 'Intervención concluida y alerta marcada como atendida'})
-
+    return JsonResponse({
+        'mensaje': 'Intervención concluida correctamente',
+        'estado_alerta': nuevo_estado,
+    })
+
