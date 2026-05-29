@@ -17,6 +17,21 @@ from usuarios.utils import registrar_auditoria
 # ==============================================================================
 # VISTAS PARA LA IMPORTACIÓN DE DATOS ACADÉMICOS
 # ==============================================================================
+#
+# NOTA DE SEGURIDAD — @csrf_exempt
+# ─────────────────────────────────
+# Todas las vistas de este módulo usan @csrf_exempt porque esta API es
+# stateless: la autenticación se realiza exclusivamente mediante JWT en el
+# header "Authorization: Bearer <token>", no mediante cookies de sesión.
+#
+# La protección CSRF de Django está diseñada para ataques que explotan
+# cookies de sesión. Un atacante que intente un CSRF desde otro origen
+# no puede leer ni inyectar el header Authorization, por lo que el riesgo
+# que CSRF mitiga no existe en este contexto.
+#
+# La autenticación y autorización real la provee el decorador @requiere_rol,
+# que valida y decodifica el JWT en cada petición.
+# ==============================================================================
 
 def _registrar_bitacora(request, archivo_nombre, tipo, total_procesados, errores, exitoso):
     # Leer usuario del JWT (inyectado por el decorador) o del POST body como fallback
@@ -60,9 +75,10 @@ def importar_estudiantes_dirplan(request):
                     file.seek(0)
                     sep = ';' if ';' in first_line else ','
                     df = pd.read_csv(file, sep=sep)
-                except:
+                except (UnicodeDecodeError, ValueError):
+                    # Fallback: intentar con encoding latin-1 o separador por defecto
                     file.seek(0)
-                    df = pd.read_csv(file)
+                    df = pd.read_csv(file, encoding='latin-1')
             else:
                 return JsonResponse({"error": "Formato no soportado. Use .xlsx o .csv"}, status=400)
 
@@ -132,7 +148,7 @@ def importar_estudiantes_dirplan(request):
                     if not s: return None
                     if '-' in s: s = s.split('-')[0]
                     return int(float(s))
-                except:
+                except (ValueError, TypeError):
                     return None
 
             estudiantes_objs = []
@@ -171,7 +187,7 @@ def importar_estudiantes_dirplan(request):
                     try:
                         val_prom = str(row[c_prom]).replace(',', '.')
                         est_data['promedio'] = float(val_prom) if not pd.isna(row[c_prom]) else None
-                    except:
+                    except (ValueError, TypeError):
                         est_data['promedio'] = None
                 else:
                     est_data['promedio'] = None
@@ -188,7 +204,8 @@ def importar_estudiantes_dirplan(request):
                             if anio and sem:
                                 mes = 2 if sem == 1 else 8
                                 est_data['ingreso'] = date(anio, mes, 1)
-                        except: pass
+                        except (ValueError, IndexError):
+                            pass  # Formato de ingreso no reconocido, se deja como None
 
                 estudiantes_objs.append(Estudiante(**est_data))
 
@@ -342,7 +359,7 @@ def importar_historial_academico(request):
                 creditos_raw = row.get('Creditos')
                 try:
                     creditos_val = int(float(creditos_raw)) if not pd.isna(creditos_raw) else None
-                except:
+                except (ValueError, TypeError):
                     creditos_val = None
 
                 # Obtener o crear la materia base
@@ -388,8 +405,8 @@ def importar_historial_academico(request):
             nota_raw = row.get('Definitiva')
             try:
                 nota = float(nota_raw)
-                if not (0.0 <= nota <= 5.0): raise ValueError
-            except:
+                if not (0.0 <= nota <= 5.0): raise ValueError(f"Nota fuera de rango: {nota_raw}")
+            except (ValueError, TypeError):
                 errores.append({"fila": fila_num, "campo": "Definitiva", "mensaje": f"Nota '{nota_raw}' inválida."})
                 continue
 
@@ -567,7 +584,7 @@ def importar_oferta_academica(request):
                     codigo_docente = parts[0]
             try:
                 codigo_docente = str(int(float(codigo_docente))).zfill(5)
-            except:
+            except (ValueError, TypeError):
                 codigo_docente = codigo_docente.zfill(5)
         
         if not codigo_docente or codigo_docente.lower() == 'nan':
@@ -583,7 +600,7 @@ def importar_oferta_academica(request):
 
         try:
             matriculados = int(matriculados_raw)
-        except:
+        except (ValueError, TypeError):
             matriculados = 0
 
         # VALIDAR DOCENTE
@@ -800,7 +817,7 @@ def importar_docentes(request):
                         codigo = parts[0]
                 try:
                     codigo = str(int(float(codigo))).zfill(5)
-                except:
+                except (ValueError, TypeError):
                     codigo = codigo.zfill(5)
             
             if not codigo or codigo.lower() == 'nan':

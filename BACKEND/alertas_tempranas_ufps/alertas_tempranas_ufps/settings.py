@@ -72,7 +72,13 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = DEBUG  # En producción, define CORS_ALLOWED_ORIGINS en .env
+
+# Lista de orígenes permitidos en producción.
+# Ejemplo en .env: CORS_ALLOWED_ORIGINS=https://tu-frontend.com,https://otro-origen.com
+_cors_origins = os.environ.get('CORS_ALLOWED_ORIGINS', '')
+if _cors_origins:
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_origins.split(',') if o.strip()]
 
 ROOT_URLCONF = 'alertas_tempranas_ufps.urls'
 
