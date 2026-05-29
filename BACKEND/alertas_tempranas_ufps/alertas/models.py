@@ -92,6 +92,7 @@ class Intervencion(models.Model):
     observaciones = models.TextField(null=True, blank=True)
     evidencia = models.CharField(max_length=300, null=True, blank=True)
     resultado = models.CharField(max_length=100, null=True, blank=True)
+    concluida = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'intervencion'

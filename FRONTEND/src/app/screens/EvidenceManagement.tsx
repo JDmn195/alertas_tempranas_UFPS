@@ -76,7 +76,7 @@ export default function EvidenceManagement() {
     loadAnotaciones();
   }, [loadEvidencias, loadAnotaciones]);
 
-  const isClosed = intervencionInfo?.alerta_estado.toLowerCase() === 'cerrada' || intervencionInfo?.alerta_estado.toLowerCase() === 'atendida';
+  const isClosed = intervencionInfo?.alerta_estado.toLowerCase() === 'cerrada';
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -156,8 +156,8 @@ export default function EvidenceManagement() {
     try {
       await evidenceService.concluirIntervencion(id, resumenFinal.trim());
       setShowConcludeModal(false);
-      setSuccessMsg('Intervención concluida y alerta marcada como atendida.');
-      loadEvidencias(); // Recargar para actualizar el estado a atendido
+      setSuccessMsg('Intervención concluida correctamente.');
+      loadEvidencias(); // Recargar para actualizar el estado
     } catch (err: any) {
       setError(err.message || 'Error al concluir la intervención');
     } finally {
@@ -197,6 +197,10 @@ export default function EvidenceManagement() {
                 <span className="text-xs font-bold bg-gray-200 text-gray-600 px-2 py-1 rounded-full flex items-center gap-1">
                   <Lock className="w-3 h-3" /> ALERTA CERRADA
                 </span>
+              ) : intervencionInfo?.alerta_estado.toLowerCase() === 'atendida' ? (
+                <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3" /> ATENDIDA
+                </span>
               ) : (
                 <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> ACTIVA
@@ -207,7 +211,7 @@ export default function EvidenceManagement() {
         </div>
       </div>
 
-      {isClosed && intervencionInfo?.resultado && (
+      {intervencionInfo?.resultado && (
         <div className="bg-gray-800 text-white rounded-2xl p-6 shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10">
             <CheckCircle className="w-24 h-24" />
@@ -282,7 +286,7 @@ export default function EvidenceManagement() {
             </div>
           )}
 
-          {!isClosed && (
+          {!isClosed && !intervencionInfo?.concluida && (
             <button
               onClick={() => setShowConcludeModal(true)}
               className="w-full py-4 bg-gray-900 hover:bg-black text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
@@ -441,7 +445,7 @@ export default function EvidenceManagement() {
                 Concluir Intervención
               </h3>
               <p className="text-sm text-gray-500 mt-2">
-                Escribe un resumen final. Al confirmar, la alerta pasará a estado cerrado y no se podrán agregar más evidencias ni observaciones.
+                Escribe un resumen final de esta intervención. Al confirmar, la intervención quedará marcada como concluida. Si todas las intervenciones de la alerta están concluidas, la alerta pasará a estado "Atendida".
               </p>
             </div>
             
