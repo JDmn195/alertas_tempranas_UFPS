@@ -4,7 +4,7 @@ from .views.intervencion_views import registrar_intervencion, listar_intervencio
 from .views.evidence_views import upload_evidence, list_evidence, delete_evidence
 from .views.alert_generation_views import generar_alertas, listar_alertas, cerrar_alerta
 from .views import notification_views
-from .views.report_views import export_report_data
+from .views.report_views import export_report_data, exportar_reporte
 
 urlpatterns = [
     path('', listar_alertas, name='listar-alertas'),
@@ -21,6 +21,9 @@ urlpatterns = [
     path('intervenciones/<int:intervencion_id>/evidencias/', list_evidence, name='listar-evidencias'),
     path('intervenciones/<int:intervencion_id>/evidencias/upload/', upload_evidence, name='subir-evidencia'),
     path('evidencias/<int:evidencia_id>/', delete_evidence, name='eliminar-evidencia'),
+    
+    # Exportación de reportes (debe ir ANTES de reportes/ para evitar conflicto de matching)
+    path('reportes/exportar/', exportar_reporte, name='exportar-reporte'),
     
     # Reportes académicos para visualización
     path('reportes/', export_report_data, name='export-report-data'),

@@ -15,6 +15,7 @@ from .views import (
     teacher_course_students,
 )
 from .views.bitacora_views import listar_bitacoras, detalle_bitacora
+from .views.indicator_views import director_indicadores
 
 urlpatterns = [
     path('students/',                           listar_estudiantes,             name='list-students'),
@@ -32,4 +33,5 @@ urlpatterns = [
     path('teacher/course/<int:curso_id>/students/', teacher_course_students,     name='teacher-course-students'),
     path('bitacora/',                           listar_bitacoras,               name='list-bitacoras'),
     path('bitacora/<int:id>/',                  detalle_bitacora,               name='detail-bitacora'),
+    path('indicadores/',                        director_indicadores,           name='director-indicadores'),
 ]

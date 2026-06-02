@@ -35,7 +35,6 @@ export default function ExportReports() {
   const [dateFrom, setDateFrom] = useState('2026-01-01');
   const [dateTo, setDateTo] = useState('2026-06-30');
   const [selectedRisk, setSelectedRisk] = useState('');
-  const [selectedProgram, setSelectedProgram] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [format, setFormat] = useState<'pdf' | 'excel'>('pdf');
   const [isAccordionOpen, setIsAccordionOpen] = useState(false);
@@ -269,12 +268,7 @@ export default function ExportReports() {
         if (itemRisk !== mappedRisk && itemRisk !== apiRisk) return false;
       }
 
-      // 3. Filtro por Programa
-      if (selectedProgram && item.program !== selectedProgram) {
-        return false;
-      }
-
-      // 4. Filtro por fecha (rango)
+      // 3. Filtro por fecha (rango)
       if (item.date) {
         const itemDate = new Date(item.date);
         const fromDate = new Date(dateFrom);
@@ -286,7 +280,7 @@ export default function ExportReports() {
 
       return true;
     });
-  }, [liveData, activeReport, searchTerm, selectedRisk, selectedProgram, dateFrom, dateTo]);
+  }, [liveData, activeReport, searchTerm, selectedRisk, dateFrom, dateTo]);
 
   return (
     <div className="space-y-6">
@@ -358,24 +352,6 @@ export default function ExportReports() {
             </select>
           </div>
 
-          {/* Programa */}
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[#C8102E]">
-              Programa <span className="text-gray-400 font-normal">(Opcional)</span>
-            </label>
-            <select
-              value={selectedProgram}
-              onChange={(e) => setSelectedProgram(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-gray-700"
-            >
-              <option value="">Todos los Programas</option>
-              <option value="systems">Ingeniería de Sistemas</option>
-              <option value="industrial">Ingeniería Industrial</option>
-              <option value="civil">Ingeniería Civil</option>
-              <option value="mechanical">Ingeniería Mecánica</option>
-            </select>
-          </div>
-
           {/* Formato de Exportación */}
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-[#C8102E]">Formato de Exportación</label>
@@ -408,7 +384,17 @@ export default function ExportReports() {
           </div>
 
           {/* Botón principal */}
-          <Button fullWidth size="lg" className="w-full font-bold shadow-sm">
+          <Button fullWidth size="lg" className="w-full font-bold shadow-sm" onClick={() => {
+            const baseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+            const params = new URLSearchParams({
+              tipo: selectedReportId,
+              formato: format,
+              fecha_desde: dateFrom,
+              fecha_hasta: dateTo,
+              ...(selectedRisk && { riesgo: selectedRisk }),
+            });
+            window.location.href = `${baseUrl}/api/alertas/reportes/exportar/?${params.toString()}`;
+          }}>
             <Download className="w-4 h-4 mr-2" />
             Generar y Descargar
           </Button>
@@ -621,6 +607,34 @@ export default function ExportReports() {
             </div>
 
 
+            {/* Footer del modal con botón de exportación */}
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDetailOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Cerrar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const baseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+                  const params = new URLSearchParams({
+                    tipo: selectedReportId,
+                    formato: format,
+                    fecha_desde: dateFrom,
+                    fecha_hasta: dateTo,
+                    ...(selectedRisk && { riesgo: selectedRisk }),
+                  });
+                  window.location.href = `${baseUrl}/api/alertas/reportes/exportar/?${params.toString()}`;
+                }}
+                className="px-4 py-2 text-sm font-bold text-white bg-[#C8102E] rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Exportar
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,4 +1,5 @@
 import json
+import threading
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
@@ -9,13 +10,23 @@ from usuarios.models import Usuario
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
 
+
+def _recalcular_en_background(usuario):
+    """Lanza reprocesar_alertas_completas en un hilo separado para no bloquear la respuesta."""
+    from alertas.views.alert_generation_views import reprocesar_alertas_completas
+    try:
+        reprocesar_alertas_completas(usuario=usuario)
+    except Exception:
+        pass  # Errores en background no deben afectar la respuesta al usuario
+
+
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 @requiere_rol(['ADMINISTRADOR', 'DIRECTOR', 'BIENESTAR'])
 def listar_crear_reglas(request):
     """
     GET: Lista todas las reglas.
-    POST: Crea una nueva regla (Solo DIRECTOR o BIENESTAR).
+    POST: Crea una nueva regla y recalcula el riesgo de todos los estudiantes.
     """
     if request.method == "GET":
         reglas = Regla.objects.all().order_by('-activo', 'tipo')
@@ -35,7 +46,6 @@ def listar_crear_reglas(request):
     elif request.method == "POST":
         try:
             body = json.loads(request.body)
-
             regla = Regla.objects.create(
                 nombre=body.get('nombre'),
                 tipo=body.get('tipo', 'PROMEDIO'),
@@ -46,7 +56,18 @@ def listar_crear_reglas(request):
                 descripcion=body.get('descripcion', '')
             )
             registrar_auditoria(request.usuario, 'CREAR_REGLA', f"Regla '{regla.nombre}' creada.")
-            return JsonResponse({'id': regla.id, 'mensaje': 'Regla creada exitosamente'}, status=201)
+
+            # Recalcular riesgo en background
+            threading.Thread(
+                target=_recalcular_en_background,
+                args=(request.usuario,),
+                daemon=True
+            ).start()
+
+            return JsonResponse({
+                'id': regla.id,
+                'mensaje': 'Regla creada exitosamente. El riesgo de los estudiantes se está recalculando.'
+            }, status=201)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
 
@@ -57,8 +78,8 @@ def listar_crear_reglas(request):
 def detalle_regla(request, pk):
     """
     GET: Obtiene detalle de una regla.
-    PUT: Actualiza una regla.
-    DELETE: Elimina una regla.
+    PUT: Actualiza/activa/desactiva una regla y recalcula el riesgo de todos los estudiantes.
+    DELETE: Elimina una regla (solo si no tiene alertas asociadas).
     """
     regla = get_object_or_404(Regla, pk=pk)
 
@@ -87,15 +108,30 @@ def detalle_regla(request, pk):
             regla.activo = body.get('activo', regla.activo)
             regla.descripcion = body.get('descripcion', regla.descripcion)
             regla.save()
-            
+
             if estado_anterior is True and regla.activo is False:
-                registrar_auditoria(request.usuario, 'DESACTIVAR_REGLA', f"Regla '{regla.nombre}' desactivada.")
+                accion = 'DESACTIVAR_REGLA'
+                msg_audit = f"Regla '{regla.nombre}' desactivada."
+                msg_resp  = 'Regla desactivada exitosamente. El riesgo de los estudiantes se está recalculando.'
             elif estado_anterior is False and regla.activo is True:
-                registrar_auditoria(request.usuario, 'ACTIVAR_REGLA', f"Regla '{regla.nombre}' activada.")
+                accion = 'ACTIVAR_REGLA'
+                msg_audit = f"Regla '{regla.nombre}' activada."
+                msg_resp  = 'Regla activada exitosamente. El riesgo de los estudiantes se está recalculando.'
             else:
-                registrar_auditoria(request.usuario, 'MODIFICAR_REGLA', f"Regla '{regla.nombre}' modificada.")
-                
-            return JsonResponse({'mensaje': 'Regla actualizada exitosamente'})
+                accion = 'MODIFICAR_REGLA'
+                msg_audit = f"Regla '{regla.nombre}' modificada."
+                msg_resp  = 'Regla actualizada exitosamente. El riesgo de los estudiantes se está recalculando.'
+
+            registrar_auditoria(request.usuario, accion, msg_audit)
+
+            # Recalcular riesgo en background
+            threading.Thread(
+                target=_recalcular_en_background,
+                args=(request.usuario,),
+                daemon=True
+            ).start()
+
+            return JsonResponse({'mensaje': msg_resp})
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
 
