@@ -186,34 +186,56 @@ def listar_estudiantes(request):
     )
 
     # Obtener todos para poder filtrar por nivel de riesgo calculado
-    # (el nivel se calcula sobre el campo promedio, no con una expresión DB)
+    # Optimizado: calcula nivel_riesgo solo con el promedio (sin queries extra por estudiante)
+    # Las reglas de REPROBACION/ATRASO requieren queries individuales — se omiten aquí
+    # para mantener O(1) queries totales. El perfil individual sí las calcula.
+    reglas_promedio = [r for r in Regla.objects.filter(activo=True, tipo='PROMEDIO')]
+
     estudiantes_raw = qs.values(
         'codigo', 'nombre', 'semestre', 'promedio',
         'estado_matricula', 'total_alertas',
     )
 
     # ── Construcción de resultados con nivel de riesgo ────────────────────────
-    reglas_activas = list(Regla.objects.filter(activo=True))
+    orden_niveles = {'high': 3, 'medium': 2, 'low': 1}
+
+    def _nivel_por_promedio(promedio_val):
+        if promedio_val is None:
+            return 'unknown'
+        nivel_actual = 'low'
+        valor_max = 0
+        for regla in reglas_promedio:
+            try:
+                v = float(promedio_val)
+                u = float(regla.valor_umbral)
+                aplica = (
+                    (regla.operador == '<'  and v < u) or
+                    (regla.operador == '>'  and v > u) or
+                    (regla.operador == '<=' and v <= u) or
+                    (regla.operador == '>=' and v >= u) or
+                    (regla.operador == '==' and v == u)
+                )
+            except Exception:
+                continue
+            if aplica and orden_niveles.get(regla.nivel, 0) > valor_max:
+                nivel_actual = regla.nivel
+                valor_max = orden_niveles[regla.nivel]
+        return nivel_actual
+
     results = []
     for e in estudiantes_raw:
-        # Creamos un objeto dummy o pasamos datos para evitar queries extra por estudiante si es posible
-        # Pero calcular_nivel_riesgo podría necesitar queries para REPROBACION/ATRASO
-        # Para optimizar, en el futuro se podrían anotar estos valores en el QS base.
-        
-        est_obj = Estudiante(codigo=e['codigo'], nombre=e['nombre'], semestre=e['semestre'], promedio=e['promedio'])
-        nivel = calcular_nivel_riesgo(est_obj, e['promedio'], reglas_activas)
+        nivel = _nivel_por_promedio(e['promedio'])
 
-        # Aplicar filtro de riesgo en Python (evita expr complejas en SQL)
         if risk and risk != nivel:
             continue
 
         results.append({
-            'codigo':          e['codigo'],
-            'nombre':          e['nombre'],
-            'semestre':        e['semestre'],
-            'promedio':        float(e['promedio']) if e['promedio'] is not None else None,
-            'nivel_riesgo':    nivel,
-            'alertas_activas': e['total_alertas'],
+            'codigo':           e['codigo'],
+            'nombre':           e['nombre'],
+            'semestre':         e['semestre'],
+            'promedio':         float(e['promedio']) if e['promedio'] is not None else None,
+            'nivel_riesgo':     nivel,
+            'alertas_activas':  e['total_alertas'],
             'estado_matricula': e['estado_matricula'],
         })
 

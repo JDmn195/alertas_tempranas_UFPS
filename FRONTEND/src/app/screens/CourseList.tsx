@@ -85,8 +85,9 @@ export default function CourseList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [estadoFilter, setEstadoFilter] = useState('');
-  const [periodoAnio, setPeriodoAnio] = useState('2025');
+  const [periodoAnio, setPeriodoAnio] = useState('todos');
   const [periodoSemestre, setPeriodoSemestre] = useState('1');
+  const [advertencia, setAdvertencia] = useState<string | null>(null);
 
   // Detalle de curso modal states
   const [selectedCourseDetail, setSelectedCourseDetail] = useState<number | null>(null);
@@ -182,6 +183,7 @@ export default function CourseList() {
       setCourses(data.results);
       setTotal(data.total);
       setPages(data.pages);
+      setAdvertencia((data as any).advertencia || null);
     } catch {
       setError('No se pudo conectar con el servidor. Verifica que el backend esté activo.');
       setCourses([]);
@@ -193,11 +195,14 @@ export default function CourseList() {
   const fetchAllForCharts = useCallback(async () => {
     try {
       const params = new URLSearchParams({
-        page: '1', page_size: '200',
+        page: '1', page_size: '500',
         usuario_id: String(usuarioId),
         periodo_anio: periodoAnio,
         periodo_semestre: periodoSemestre,
       });
+      if (periodoAnio === 'todos') {
+        params.set('periodo_anio', 'todos');
+      }
       const res = await apiFetch(`${API_BASE}/courses/indicators/?${params.toString()}`);
       if (!res.ok) return;
       const data: ApiResponse = await res.json();
@@ -218,6 +223,14 @@ export default function CourseList() {
           Matrícula, tasa de reprobación y tendencia para identificar cursos críticos
         </p>
       </div>
+
+      {/* Banner de advertencia de periodo */}
+      {advertencia && (
+        <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-sm text-amber-700">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-500" />
+          <span>{advertencia}</span>
+        </div>
+      )}
 
       {/* Tarjetas resumen */}
       <div className="grid grid-cols-3 gap-4">
@@ -309,15 +322,18 @@ export default function CourseList() {
           </div>
           <select value={periodoAnio} onChange={(e) => { setPeriodoAnio(e.target.value); setCurrentPage(1); }}
             className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm">
+            <option value="todos">Todos los periodos</option>
             <option value="2024">2024</option>
             <option value="2025">2025</option>
             <option value="2026">2026</option>
           </select>
-          <select value={periodoSemestre} onChange={(e) => { setPeriodoSemestre(e.target.value); setCurrentPage(1); }}
-            className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm">
-            <option value="1">Semestre 1</option>
-            <option value="2">Semestre 2</option>
-          </select>
+          {periodoAnio !== 'todos' && (
+            <select value={periodoSemestre} onChange={(e) => { setPeriodoSemestre(e.target.value); setCurrentPage(1); }}
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm">
+              <option value="1">Semestre 1</option>
+              <option value="2">Semestre 2</option>
+            </select>
+          )}
           <select value={estadoFilter} onChange={(e) => { setEstadoFilter(e.target.value); setCurrentPage(1); }}
             className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm">
             <option value="">Todos los cursos</option>
