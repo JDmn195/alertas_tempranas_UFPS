@@ -1,4 +1,5 @@
 import json
+import logging
 from django.http import JsonResponse
 from django.db import transaction
 from django.db.models import Q, Count, Avg
@@ -13,6 +14,8 @@ from alertas.services import NotificationService
 
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
+
+logger = logging.getLogger(__name__)
 
 
 def _calcular_nivel_para_periodo(estudiante, periodo, reglas, semestre_en_periodo=None):
@@ -88,8 +91,6 @@ def _calcular_nivel_para_periodo(estudiante, periodo, reglas, semestre_en_period
                 nivel_actual = regla.nivel
                 valor_max_nivel = orden_niveles[regla.nivel]
             reglas_aplicadas.append({'id': regla.id, 'nombre': regla.nombre, 'nivel': regla.nivel, 'valor': val})
-
-    return nivel_actual, reglas_aplicadas, ppa
 
     return nivel_actual, reglas_aplicadas, ppa
 
@@ -438,8 +439,7 @@ def generar_alertas(request):
             **resultado
         })
     except Exception as e:
-        import traceback
-        print(traceback.format_exc())
+        logger.error("Error inesperado en generar_alertas: %s", e, exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 
 

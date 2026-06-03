@@ -303,7 +303,7 @@ export default function AdminDashboard() {
               <span className="font-semibold block mb-1">Nota sobre Validación de Calidad</span>
               <p className="text-gray-600">
                 El sistema aplicará reglas de calidad automáticas antes de consolidar la información.
-                Cualquier inconsistencia será reportada en el historial de importación para su corrección. Tamaño máximo: 50MB.
+                Cualquier inconsistencia será reportada en el historial de importación para su corrección. Tamaño máximo: {import.meta.env.VITE_MAX_IMPORT_FILE_SIZE_MB ?? 10}MB.
               </p>
             </div>
           </div>
