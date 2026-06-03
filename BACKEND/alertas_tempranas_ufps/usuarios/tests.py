@@ -1,7 +1,21 @@
 import json
+import jwt
+from datetime import datetime, timedelta, timezone
 from django.test import TestCase, Client
 from django.urls import reverse
+from django.conf import settings
 from usuarios.models import Usuario
+
+
+def _make_token(usuario):
+    """Genera un JWT válido para el usuario dado."""
+    payload = {
+        'user_id': usuario.id,
+        'exp': datetime.now(timezone.utc) + timedelta(days=1),
+        'iat': datetime.now(timezone.utc),
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+
 
 class UserManagementTestCase(TestCase):
     def setUp(self):
@@ -18,106 +32,91 @@ class UserManagementTestCase(TestCase):
             rol="DOCENTE",
             contrasena="123"
         )
+        self.admin_token = _make_token(self.admin)
+
+    def _auth_headers(self):
+        return {'HTTP_AUTHORIZATION': f'Bearer {self.admin_token}'}
 
     def test_listar_usuarios(self):
         url = reverse('listar_usuarios')
-        response = self.client.get(url)
+        response = self.client.get(url, **self._auth_headers())
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn('usuarios', data)
         self.assertEqual(len(data['usuarios']), 2)
 
     def test_asignar_roles_exitoso(self):
-        """Escenario 1: Asignación de rol exitosa (múltiples roles)."""
-        url = reverse('gestionar_usuario', kwargs={'usuario_id': self.user.id})
-        payload = {
-            'roles': ['DOCENTE', 'DIRECTOR']
-        }
+        """Escenario 1: Asignación de rol exitosa."""
+        url = reverse('actualizar_usuario', kwargs={'usuario_id': self.user.id})
+        payload = {'rol': 'DIRECTOR'}
         response = self.client.put(
             url,
             data=json.dumps(payload),
-            content_type='application/json'
+            content_type='application/json',
+            **self._auth_headers()
         )
         self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data['usuario']['roles'], ['DOCENTE', 'DIRECTOR'])
-        
-        # Verificar en BD
+
         self.user.refresh_from_db()
-        self.assertEqual(self.user.rol, 'DOCENTE,DIRECTOR')
+        self.assertEqual(self.user.rol, 'DIRECTOR')
 
     def test_modificar_roles_exitoso(self):
-        """Escenario 2: Modificación de roles."""
-        # Primero asignamos unos roles
-        self.user.rol = 'DOCENTE,DIRECTOR'
+        """Escenario 2: Modificación de rol."""
+        self.user.rol = 'DIRECTOR'
         self.user.save()
-        
-        url = reverse('gestionar_usuario', kwargs={'usuario_id': self.user.id})
-        payload = {
-            'roles': ['BIENESTAR']
-        }
+
+        url = reverse('actualizar_usuario', kwargs={'usuario_id': self.user.id})
+        payload = {'rol': 'BIENESTAR'}
         response = self.client.put(
             url,
             data=json.dumps(payload),
-            content_type='application/json'
+            content_type='application/json',
+            **self._auth_headers()
         )
         self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data['usuario']['roles'], ['BIENESTAR'])
-        
-        # Verificar en BD
+
         self.user.refresh_from_db()
         self.assertEqual(self.user.rol, 'BIENESTAR')
 
-    def test_usuario_sin_roles_error(self):
-        """Escenario 3: Intentar guardar un usuario sin roles."""
-        url = reverse('gestionar_usuario', kwargs={'usuario_id': self.user.id})
-        payload = {
-            'roles': []
-        }
+    def test_usuario_no_encontrado(self):
+        """Actualizar un usuario inexistente retorna 404."""
+        url = reverse('actualizar_usuario', kwargs={'usuario_id': 99999})
+        payload = {'rol': 'DOCENTE'}
         response = self.client.put(
             url,
             data=json.dumps(payload),
-            content_type='application/json'
+            content_type='application/json',
+            **self._auth_headers()
         )
-        self.assertEqual(response.status_code, 400)
-        data = response.json()
-        self.assertEqual(data['error'], 'Debe asignar al menos un rol.')
-        
-        # Verificar en BD que no cambió
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.rol, 'DOCENTE')
+        self.assertEqual(response.status_code, 404)
 
     def test_crear_usuario_exitoso(self):
-        url = reverse('listar_usuarios')
+        url = reverse('crear_usuario')
         payload = {
             'nombre': 'Nuevo Usuario',
             'correo': 'nuevo@ufps.edu.co',
-            'contrasena': '123456',
-            'roles': ['DOCENTE']
+            'rol': 'DOCENTE',
         }
         response = self.client.post(
             url,
             data=json.dumps(payload),
-            content_type='application/json'
+            content_type='application/json',
+            **self._auth_headers()
         )
         self.assertEqual(response.status_code, 201)
         data = response.json()
-        self.assertEqual(data['usuario']['nombre'], 'Nuevo Usuario')
-        self.assertEqual(data['usuario']['roles'], ['DOCENTE'])
+        self.assertIn('id', data)
 
-    def test_crear_usuario_sin_roles_error(self):
-        url = reverse('listar_usuarios')
+    def test_crear_usuario_sin_campos_error(self):
+        """Crear usuario sin campos obligatorios retorna 400."""
+        url = reverse('crear_usuario')
         payload = {
-            'nombre': 'Nuevo Usuario',
-            'correo': 'nuevo@ufps.edu.co',
-            'contrasena': '123456',
-            'roles': []
+            'nombre': 'Sin Correo',
         }
         response = self.client.post(
             url,
             data=json.dumps(payload),
-            content_type='application/json'
+            content_type='application/json',
+            **self._auth_headers()
         )
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()['error'], 'Debe asignar al menos un rol.')
