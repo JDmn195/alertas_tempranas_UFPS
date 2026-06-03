@@ -14,15 +14,25 @@ def calcular_nivel_riesgo(estudiante, promedio=None, reglas=None):
     """
     Calcula el nivel de riesgo de un estudiante basado en las reglas activas.
     Si no se pasan reglas, se consultan las activas de la BD.
+
+    Retorna 'unknown' solo si el estudiante no tiene promedio ni notas
+    registradas (no hay datos suficientes para evaluar ninguna regla).
+
+    Si el estudiante no tiene notas, solo se evalúan reglas de PROMEDIO
+    para evitar que el atraso calculado sobre materias sin historial
+    dispare un nivel de riesgo incorrecto.
     """
     if promedio is None and hasattr(estudiante, 'promedio'):
         promedio = estudiante.promedio
-    
-    if promedio is None:
-        return 'unknown'
 
     if reglas is None:
-        reglas = Regla.objects.filter(activo=True)
+        reglas = list(Regla.objects.filter(activo=True))
+
+    tiene_notas = Nota.objects.filter(estudiante=estudiante).exists()
+
+    # Sin promedio y sin notas: no hay datos suficientes para evaluar
+    if promedio is None and not tiene_notas:
+        return 'unknown'
 
     # Ordenamos por nivel de severidad para retornar el más alto que aplique
     # high > medium > low
@@ -35,16 +45,29 @@ def calcular_nivel_riesgo(estudiante, promedio=None, reglas=None):
         valor_comparar = 0
 
         if regla.tipo == 'PROMEDIO':
+            if promedio is None:
+                continue  # No evaluar reglas de promedio si no hay promedio
             valor_comparar = float(promedio)
         elif regla.tipo == 'REPROBACION':
-            # Conteo de reprobadas en el último periodo registrado
-            # (Simplificación: todas las reprobadas del histórico)
+            if not tiene_notas:
+                continue  # Sin notas, REPROBACION = 0 pero no es dato real
             valor_comparar = Nota.objects.filter(estudiante=estudiante, definitiva__lt=3.0).count()
         elif regla.tipo == 'ATRASO':
-            # Nueva lógica: materias de semestres anteriores no aprobadas
-            from academico.models import Materia
-            aprobadas_ids = Nota.objects.filter(estudiante=estudiante, definitiva__gte=3.0).values_list('curso__materia_id', flat=True)
-            valor_comparar = Materia.objects.filter(semestre__lt=estudiante.semestre).exclude(codigo__in=aprobadas_ids).count()
+            if not tiene_notas:
+                continue  # Sin notas, el atraso calculado sería espurio
+            aprobadas_materia_ids = set(
+                Nota.objects.filter(
+                    estudiante=estudiante, definitiva__gte=3.0
+                ).values_list('curso__materia_id', flat=True)
+            )
+            from academico.models import EquivalenciaMateria
+            equiv_satisfechas = EquivalenciaMateria.objects.filter(
+                materia_equivalente_id__in=aprobadas_materia_ids
+            ).values_list('materia_pensum_id', flat=True)
+            aprobadas_ids = aprobadas_materia_ids | set(equiv_satisfechas)
+            valor_comparar = Materia.objects.filter(
+                semestre__lt=estudiante.semestre
+            ).exclude(codigo__in=aprobadas_ids).exclude(tipo__icontains='electiva').count()
 
         # Evaluación de la condición
         try:
@@ -181,7 +204,7 @@ def listar_estudiantes(request):
     qs = qs.annotate(
         total_alertas=Count(
             'alerta',
-            filter=Q(alerta__estado='activa'),
+            filter=~Q(alerta__estado__in=['cerrada', 'closed']),
         )
     )
 
@@ -275,8 +298,25 @@ def obtener_detalle_estudiante(request, codigo):
                 return JsonResponse({'error': 'Prohibido. No tiene acceso a los datos de este estudiante.'}, status=403)
 
         # Anotar conteo de alertas activas
-        total_alertas = Alerta.objects.filter(estudiante=e, estado='activa').count()
-        nivel = calcular_nivel_riesgo(e)
+        total_alertas = Alerta.objects.filter(
+            estudiante=e
+        ).exclude(estado__in=['cerrada', 'closed']).count()
+        # Fix 2.1/2.6: usar el nivel de riesgo del periodo más reciente calculado (RiesgoEstudiantePeriodo)
+        # Si no hay registro por periodo, caer al snapshot RiesgoEstudiante
+        nivel = 'unknown'
+        try:
+            ultimo_riesgo_periodo = (
+                e.riesgos_por_periodo
+                .select_related('periodo')
+                .order_by('-periodo__anio', '-periodo__semestre')
+                .first()
+            )
+            if ultimo_riesgo_periodo:
+                nivel = ultimo_riesgo_periodo.nivel_riesgo
+            else:
+                nivel = e.riesgo.nivel_riesgo
+        except Exception:
+            nivel = calcular_nivel_riesgo(e)
 
         return JsonResponse({
             'codigo':              e.codigo,
@@ -357,10 +397,24 @@ def obtener_indicadores_estudiante(request, codigo):
         
     # 7. Promedios y Evolución
     datos_promedio = _calcular_historial_promedios(estudiante)
-    
-    # 8. Alertas Activas
-    alertas_activas = Alerta.objects.filter(estudiante=estudiante, estado='activa').count()
-        
+
+    # 8. Alertas Activas (todo excepto cerradas)
+    alertas_activas = Alerta.objects.filter(
+        estudiante=estudiante
+    ).exclude(estado__in=['cerrada', 'closed']).count()
+
+    # 9. Evolución del riesgo por periodo (2.5)
+    from alertas.models import RiesgoEstudiantePeriodo
+    riesgo_evolucion = [
+        {
+            'periodo': f"{r.periodo.anio}-{r.periodo.semestre}",
+            'nivel_riesgo': r.nivel_riesgo,
+        }
+        for r in RiesgoEstudiantePeriodo.objects.filter(
+            estudiante=estudiante
+        ).select_related('periodo').order_by('periodo__anio', 'periodo__semestre')
+    ]
+
     return JsonResponse({
         'codigo': codigo,
         'indicadores': {
@@ -373,7 +427,8 @@ def obtener_indicadores_estudiante(request, codigo):
             'promedio_acumulado': datos_promedio['promedio_acumulado'],
             'tendencia': datos_promedio['tendencia'],
             'evolucion': datos_promedio['evolucion'],
-            'alertas_activas': alertas_activas
+            'alertas_activas': alertas_activas,
+            'riesgo_evolucion': riesgo_evolucion,
         }
     })
 

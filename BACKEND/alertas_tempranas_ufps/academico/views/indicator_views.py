@@ -1,10 +1,10 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import csrf_exempt
-from django.db.models import Q, Count, Avg
+from django.db.models import Q, Count, Avg, Subquery, OuterRef
 
 from academico.models import Curso, Nota, Periodo, Estudiante
-from alertas.models import RiesgoEstudiante, Alerta, Regla
+from alertas.models import RiesgoEstudiante, RiesgoEstudiantePeriodo, Alerta, Regla
 from usuarios.models import Usuario
 
 # Umbral para marcar un curso como crítico (configurable aquí)
@@ -93,102 +93,6 @@ def _calcular_indicadores_curso_global(curso):
         'tasa_no_presentados':   tasa_no_presentados,
         'tendencia_puntos':      None,
         'tendencia_descripcion': 'Acumulado de todos los periodos',
-        'estado':                estado,
-        'es_critico':            estado == 'CRÍTICO',
-    }
-
-
-    """
-    Calcula todos los indicadores de un curso en un periodo dado.
-
-    Indicadores calculados:
-    - matriculados        : estudiantes con nota registrada en el periodo
-    - reprobados          : definitiva < 3.0 (y no es null)
-    - tasa_reprobacion    : (reprobados / matriculados) × 100
-    - promedio_curso      : promedio ponderado de definitivas del grupo
-    - zona_riesgo         : estudiantes con 2.5 <= definitiva <= 2.9
-    - no_presentados      : estudiantes con definitiva = null
-    - tasa_no_presentados : (no_presentados / matriculados) × 100
-    - tendencia_puntos    : diferencia de tasa_reprobacion vs periodo anterior
-    - tendencia_descripcion
-    - estado              : CRÍTICO / EN OBSERVACIÓN / ESTABLE
-    - es_critico          : bool
-    """
-    notas = Nota.objects.filter(curso=curso, periodo=periodo)
-    matriculados = notas.count()
-
-    if matriculados == 0:
-        return {
-            'matriculados':          0,
-            'reprobados':            0,
-            'tasa_reprobacion':      0.0,
-            'promedio_curso':        None,
-            'zona_riesgo':           0,
-            'no_presentados':        0,
-            'tasa_no_presentados':   0.0,
-            'tendencia_puntos':      None,
-            'tendencia_descripcion': 'Sin datos para este periodo',
-            'estado':                'SIN DATOS',
-            'es_critico':            False,
-        }
-
-    # Notas con definitiva registrada (no null)
-    notas_con_nota = notas.exclude(definitiva__isnull=True)
-
-    reprobados      = notas_con_nota.filter(definitiva__lt=3.0).count()
-    no_presentados  = notas.filter(definitiva__isnull=True).count()
-    zona_riesgo     = notas_con_nota.filter(
-                        definitiva__gte=UMBRAL_ZONA_RIESGO_MIN,
-                        definitiva__lte=UMBRAL_ZONA_RIESGO_MAX
-                    ).count()
-
-    # Promedio del curso (solo sobre quienes tienen nota)
-    suma_notas = sum(
-        float(n.definitiva)
-        for n in notas_con_nota
-        if n.definitiva is not None
-    )
-    total_con_nota = notas_con_nota.count()
-    promedio_curso = round(suma_notas / total_con_nota, 2) if total_con_nota > 0 else None
-
-    tasa_reprobacion    = round((reprobados / matriculados) * 100, 2)
-    tasa_no_presentados = round((no_presentados / matriculados) * 100, 2)
-
-    # ── Tendencia vs periodo anterior ────────────────────────────────────────
-    tendencia_puntos      = None
-    tendencia_descripcion = 'Sin datos anteriores para calcular tendencia'
-
-    if periodo_anterior:
-        notas_ant = Nota.objects.filter(curso=curso, periodo=periodo_anterior)
-        matriculados_ant = notas_ant.count()
-        if matriculados_ant > 0:
-            reprobados_ant  = notas_ant.exclude(definitiva__isnull=True).filter(definitiva__lt=3.0).count()
-            tasa_ant        = round((reprobados_ant / matriculados_ant) * 100, 2)
-            tendencia_puntos = round(tasa_reprobacion - tasa_ant, 2)
-            signo = '+' if tendencia_puntos > 0 else ''
-            tendencia_descripcion = (
-                f'{signo}{tendencia_puntos}% respecto al periodo anterior '
-                f'({periodo_anterior.anio}-{periodo_anterior.semestre})'
-            )
-
-    # ── Estado del curso ─────────────────────────────────────────────────────
-    if tasa_reprobacion >= UMBRAL_CRITICO:
-        estado = 'CRÍTICO'
-    elif tasa_reprobacion >= UMBRAL_OBSERVACION:
-        estado = 'EN OBSERVACIÓN'
-    else:
-        estado = 'ESTABLE'
-
-    return {
-        'matriculados':          matriculados,
-        'reprobados':            reprobados,
-        'tasa_reprobacion':      tasa_reprobacion,
-        'promedio_curso':        promedio_curso,
-        'zona_riesgo':           zona_riesgo,
-        'no_presentados':        no_presentados,
-        'tasa_no_presentados':   tasa_no_presentados,
-        'tendencia_puntos':      tendencia_puntos,
-        'tendencia_descripcion': tendencia_descripcion,
         'estado':                estado,
         'es_critico':            estado == 'CRÍTICO',
     }
@@ -489,9 +393,28 @@ def director_indicadores(request):
         ).count()
 
         # ── KPI 2: Porcentaje en riesgo ───────────────────────────────────────
-        en_riesgo = RiesgoEstudiante.objects.filter(
-            nivel_riesgo__in=['high', 'medium']
-        ).count()
+        # Combina ambas fuentes igual que la distribución por semestre.
+        _periodo_max_id_sq = (
+            RiesgoEstudiantePeriodo.objects
+            .filter(estudiante_id=OuterRef('estudiante_id'))
+            .order_by('-periodo__anio', '-periodo__semestre')
+            .values('id')[:1]
+        )
+        # Estudiantes con RiesgoEstudiantePeriodo en riesgo
+        ids_en_riesgo_con_periodo = set(
+            RiesgoEstudiantePeriodo.objects
+            .filter(id=Subquery(_periodo_max_id_sq))
+            .filter(nivel_riesgo__in=['high', 'medium'])
+            .values_list('estudiante_id', flat=True)
+        )
+        # Estudiantes sin RiesgoEstudiantePeriodo pero con snapshot en riesgo
+        ids_en_riesgo_sin_periodo = set(
+            RiesgoEstudiante.objects
+            .exclude(estudiante_id__in=ids_en_riesgo_con_periodo)
+            .filter(nivel_riesgo__in=['high', 'medium'])
+            .values_list('estudiante_id', flat=True)
+        )
+        en_riesgo = len(ids_en_riesgo_con_periodo) + len(ids_en_riesgo_sin_periodo)
         porcentaje_riesgo = round((en_riesgo / total_activos * 100), 2) if total_activos > 0 else 0.0
 
         # ── KPI 3: Total alertas activas ─────────────────────────────────────
@@ -531,15 +454,49 @@ def director_indicadores(request):
 
         cursos_criticos_list.sort(key=lambda x: x['failureRate'], reverse=True)
 
-        # ── Distribución de riesgo por semestre: una query con values ────────
+        # ── Distribución de riesgo por semestre ──────────────────────────────
+        # Fuente 1: estudiantes CON historial de notas → usar el nivel del
+        # RiesgoEstudiantePeriodo más reciente (más preciso).
+        # Fuente 2: estudiantes SIN notas → usar RiesgoEstudiante (snapshot).
+        # Combinamos ambas para no dejar fuera a los estudiantes recién importados.
+
+        periodo_max_id_sq = (
+            RiesgoEstudiantePeriodo.objects
+            .filter(estudiante_id=OuterRef('estudiante_id'))
+            .order_by('-periodo__anio', '-periodo__semestre')
+            .values('id')[:1]
+        )
+
+        # Estudiantes con RiesgoEstudiantePeriodo
+        estudiantes_con_periodo = set(
+            RiesgoEstudiantePeriodo.objects
+            .filter(id=Subquery(periodo_max_id_sq))
+            .values_list('estudiante_id', flat=True)
+        )
+
+        dist_map = defaultdict(lambda: {'low': 0, 'medium': 0, 'high': 0})
+
+        # Fuente 1: nivel del periodo más reciente
         dist_raw = (
-            RiesgoEstudiante.objects
+            RiesgoEstudiantePeriodo.objects
+            .filter(id=Subquery(periodo_max_id_sq))
             .filter(nivel_riesgo__in=['low', 'medium', 'high'])
             .values('nivel_riesgo', 'estudiante__semestre')
             .annotate(total=Count('id'))
         )
-        dist_map = defaultdict(lambda: {'low': 0, 'medium': 0, 'high': 0})
         for row in dist_raw:
+            sem = row['estudiante__semestre']
+            dist_map[sem][row['nivel_riesgo']] += row['total']
+
+        # Fuente 2: snapshot de estudiantes sin RiesgoEstudiantePeriodo
+        dist_snapshot = (
+            RiesgoEstudiante.objects
+            .exclude(estudiante_id__in=estudiantes_con_periodo)
+            .filter(nivel_riesgo__in=['low', 'medium', 'high'])
+            .values('nivel_riesgo', 'estudiante__semestre')
+            .annotate(total=Count('id'))
+        )
+        for row in dist_snapshot:
             sem = row['estudiante__semestre']
             dist_map[sem][row['nivel_riesgo']] += row['total']
 

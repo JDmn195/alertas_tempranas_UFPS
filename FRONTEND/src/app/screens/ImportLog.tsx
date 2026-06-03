@@ -66,7 +66,7 @@ export default function ImportLog() {
           Detalles de Importación - {logData.archivo_nombre}
         </h1>
 
-        <div className="grid grid-cols-4 gap-6">
+        <div className="grid grid-cols-5 gap-6">
           <div>
             <p className="text-sm text-gray-500 mb-1">Total Procesado</p>
             <p className="text-2xl font-bold text-gray-900">{logData.total_procesados.toLocaleString()}</p>
@@ -75,7 +75,7 @@ export default function ImportLog() {
             <p className="text-sm text-gray-500 mb-1">Exitosos</p>
             <div className="flex items-center gap-2">
                <CheckCircle className="w-5 h-5 text-green-600" />
-               <p className="text-2xl font-bold text-green-600">{(logData.total_procesados - logData.total_errores).toLocaleString()}</p>
+               <p className="text-2xl font-bold text-green-600">{Math.max(0, logData.total_procesados - logData.total_errores).toLocaleString()}</p>
             </div>
           </div>
           <div>
@@ -89,6 +89,10 @@ export default function ImportLog() {
             <p className="text-sm text-gray-500 mb-1">Fecha de Importación</p>
             <p className="text-lg font-semibold text-gray-900">{logData.fecha.split(' ')[0]}</p>
             <p className="text-sm text-gray-500">{logData.fecha.split(' ')[1]}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 mb-1">Realizado por</p>
+            <p className="text-lg font-semibold text-gray-900">{logData.usuario || 'Desconocido'}</p>
           </div>
         </div>
       </div>

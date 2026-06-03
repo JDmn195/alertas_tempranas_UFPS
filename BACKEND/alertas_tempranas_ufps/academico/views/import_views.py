@@ -10,7 +10,7 @@ import traceback
 import logging
 from datetime import date
 from django.conf import settings
-from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia, BitacoraImportacion
+from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia, BitacoraImportacion, EquivalenciaMateria
 from usuarios.models import Usuario
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
@@ -163,13 +163,18 @@ def _registrar_bitacora(request, archivo_nombre, tipo, total_procesados, errores
                 usuario = Usuario.objects.get(id=usuario_id)
             except Usuario.DoesNotExist:
                 pass
-    
+
+    num_errores = len(errores) if isinstance(errores, list) else 0
+    # Fix 1.1: total_procesados debe ser 0 cuando la importación falla completamente
+    # (evita que "exitosos = total_procesados - errores" dé negativo en el frontend)
+    procesados_real = total_procesados if exitoso else max(0, total_procesados)
+
     BitacoraImportacion.objects.create(
         usuario=usuario,
         archivo_nombre=archivo_nombre,
         tipo=tipo,
-        total_procesados=total_procesados,
-        total_errores=len(errores) if isinstance(errores, list) else 0,
+        total_procesados=procesados_real,
+        total_errores=num_errores,
         detalles_errores=errores if isinstance(errores, list) else [],
         exitoso=exitoso
     )
@@ -346,13 +351,39 @@ def importar_estudiantes_dirplan(request):
                         update_fields=update_fields
                     )
                     processed_count = len(estudiantes_objs)
-            
+
+                    # Fix 1.4: Para los estudiantes que tienen notas registradas,
+                    # recalcular el promedio a partir de sus notas reales.
+                    # Los que no tienen notas conservan el promedio del archivo.
+                    from django.db.models import Avg as _Avg
+                    from django.db.models import OuterRef, Subquery
+                    codigos_importados = [est.codigo for est in estudiantes_objs]
+                    # Obtener promedios calculados desde notas para los estudiantes importados
+                    notas_con_prom = (
+                        Nota.objects
+                        .filter(estudiante_id__in=codigos_importados)
+                        .exclude(definitiva__isnull=True)
+                        .values('estudiante_id')
+                        .annotate(ppa=_Avg('definitiva'))
+                    )
+                    for row in notas_con_prom:
+                        Estudiante.objects.filter(codigo=row['estudiante_id']).update(
+                            promedio=round(row['ppa'], 2)
+                        )
+
             # AUTOMATIZACIÓN: Generar alertas para los estudiantes procesados
+            # Fix 1.2: se ejecuta en background para no demorar la respuesta HTTP
             try:
                 from alertas.views.alert_generation_views import reprocesar_alertas_completas
+                import threading
                 codigos_importados = [est.codigo for est in estudiantes_objs]
-                estudiantes_qs = Estudiante.objects.filter(codigo__in=codigos_importados)
-                reprocesar_alertas_completas(estudiantes_qs, usuario=None)
+                def _generar_alertas_bg():
+                    try:
+                        qs = Estudiante.objects.filter(codigo__in=codigos_importados)
+                        reprocesar_alertas_completas(qs, usuario=None)
+                    except Exception as bg_err:
+                        print(f"[BG] Error en generación automática de alertas: {bg_err}")
+                threading.Thread(target=_generar_alertas_bg, daemon=True).start()
             except Exception as ae:
                 logger.warning("Error en generación automática de alertas tras importar estudiantes: %s", ae, exc_info=True)
 
@@ -457,13 +488,29 @@ def importar_historial_academico(request):
                 errores.append({"fila": fila_num, "campo": "Codigo Materia", "mensaje": "Código vacío."})
                 continue
 
-            match_codigo = re.match(r'^(\d+)(.*)$', codigo_materia)
-            if match_codigo:
-                base_materia = match_codigo.group(1)
-                grupo_str = match_codigo.group(2).strip('- ').upper()
+            # Materia Base es el código limpio sin grupo (puede venir como número en Excel)
+            materia_base_raw = row.get('Materia Base', '')
+            if not pd.isna(materia_base_raw) and str(materia_base_raw).strip():
+                # Limpiar: quitar decimales si pandas lo leyó como float (ej: 1155101.0 → "1155101")
+                try:
+                    base_materia = str(int(float(str(materia_base_raw).strip())))
+                except (ValueError, TypeError):
+                    base_materia = str(materia_base_raw).strip()
             else:
-                base_materia = codigo_materia
-                grupo_str = ''
+                # Fallback: extraer parte numérica de Codigo Materia
+                match_codigo = re.match(r'^(\d+)(.*)$', codigo_materia)
+                base_materia = match_codigo.group(1) if match_codigo else codigo_materia
+
+            # Extraer grupo desde Codigo Materia eliminando el prefijo numérico base
+            # Ej: "1155101A" con base "1155101" → grupo "A"
+            grupo_str = ''
+            if codigo_materia.startswith(base_materia):
+                grupo_str = codigo_materia[len(base_materia):].strip('- ').upper()
+            else:
+                # Fallback regex si el codigo no empieza exactamente con base
+                match_codigo = re.match(r'^(\d+)(.*)$', codigo_materia)
+                if match_codigo:
+                    grupo_str = match_codigo.group(2).strip('- ').upper()
 
             curso_obj = None
             if grupo_str:
@@ -472,7 +519,9 @@ def importar_historial_academico(request):
                 curso_obj = Curso.objects.filter(materia__codigo=base_materia).first()
             
             if not curso_obj:
-                # Si el curso no existe, se crea automáticamente a partir de la materia
+                # Si el curso no existe, se crea automáticamente a partir de la materia.
+                # Antes de crear una materia nueva, verificar si existe una del pensum
+                # con el mismo nombre normalizado → registrar equivalencia automática.
                 nombre_materia = str(row.get('Nombre Materia', '')).strip()
                 creditos_raw = row.get('Creditos')
                 try:
@@ -480,15 +529,40 @@ def importar_historial_academico(request):
                 except (ValueError, TypeError):
                     creditos_val = None
 
-                # Obtener o crear la materia base
-                materia_obj, _ = Materia.objects.get_or_create(
+                def _normalizar(s):
+                    """Normaliza un nombre: minúsculas, sin tildes, sin espacios extra."""
+                    s = s.strip().lower()
+                    s = ''.join(
+                        c for c in unicodedata.normalize('NFD', s)
+                        if unicodedata.category(c) != 'Mn'
+                    )
+                    return ' '.join(s.split())
+
+                nombre_norm = _normalizar(nombre_materia)
+
+                # Buscar materia del pensum (con semestre asignado) con mismo nombre normalizado
+                materia_pensum_equiv = None
+                for m in Materia.objects.filter(semestre__isnull=False):
+                    if _normalizar(m.nombre) == nombre_norm and m.codigo != base_materia:
+                        materia_pensum_equiv = m
+                        break
+
+                # Obtener o crear la materia con el código del historial
+                materia_obj, creada = Materia.objects.get_or_create(
                     codigo=base_materia,
                     defaults={
                         "nombre": nombre_materia,
                         "creditos": creditos_val,
-                        "tipo": "linea"  # Por defecto
+                        "tipo": "linea"
                     }
                 )
+
+                # Si encontramos una materia del pensum equivalente, registrar la relación
+                if materia_pensum_equiv:
+                    EquivalenciaMateria.objects.get_or_create(
+                        materia_pensum=materia_pensum_equiv,
+                        materia_equivalente=materia_obj
+                    )
 
                 # Obtener o crear docente por defecto para satisfacer el FK obligatorio
                 default_user, _ = Usuario.objects.get_or_create(
@@ -541,14 +615,35 @@ def importar_historial_academico(request):
 
         creados = 0
         with transaction.atomic():
-            for fila in filas_validas:
-                Nota.objects.update_or_create(
+            # Bulk upsert de notas — una sola query en lugar de N update_or_create
+            nota_objs = [
+                Nota(
                     estudiante=fila["estudiante"],
                     curso=fila["curso"],
                     periodo=fila["periodo"],
-                    defaults={"definitiva": fila["definitiva"]}
+                    definitiva=fila["definitiva"],
                 )
-                creados += 1
+                for fila in filas_validas
+            ]
+            Nota.objects.bulk_create(
+                nota_objs,
+                batch_size=500,
+                update_conflicts=True,
+                unique_fields=['estudiante_id', 'curso_id', 'periodo_id'],
+                update_fields=['definitiva'],
+            )
+            creados = len(nota_objs)
+
+            # Fix 1.4: actualizar promedio del estudiante desde sus notas reales
+            from django.db.models import Avg as _Avg
+            ppa_result = Nota.objects.filter(
+                estudiante=estudiante
+            ).exclude(definitiva__isnull=True).aggregate(ppa=_Avg('definitiva'))
+            if ppa_result['ppa'] is not None:
+                Estudiante.objects.filter(codigo=estudiante.codigo).update(
+                    promedio=round(ppa_result['ppa'], 2)
+                )
+                estudiante.refresh_from_db()
 
         _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', creados, [], True)
         registrar_auditoria(
@@ -556,11 +651,23 @@ def importar_historial_academico(request):
             'IMPORTACION',
             f"Importación de HISTORIAL exitosa: {creados} notas registradas desde '{nombre_archivo}'."
         )
-        
-        # AUTOMATIZACIÓN: Recalcular alertas tras importar historial
+
+        # Recalcular riesgo por periodo tras importar historial
+        # Fix 1.2: se ejecuta en background para no demorar la respuesta HTTP
         try:
-            from alertas.views.alert_generation_views import reprocesar_alertas_completas
-            reprocesar_alertas_completas(Estudiante.objects.filter(codigo=codigo_estudiante), usuario=None)
+            from alertas.views.alert_generation_views import calcular_y_guardar_riesgo_por_periodos, reprocesar_alertas_completas
+            import threading
+            _codigo = codigo_estudiante
+            _est = estudiante
+            def _recalcular_bg():
+                try:
+                    calcular_y_guardar_riesgo_por_periodos(_est)
+                    reprocesar_alertas_completas(
+                        Estudiante.objects.filter(codigo=_codigo), usuario=None
+                    )
+                except Exception as bg_err:
+                    print(f"[BG] Error en recálculo automático de riesgo/alertas: {bg_err}")
+            threading.Thread(target=_recalcular_bg, daemon=True).start()
         except Exception as ae:
             logger.warning("Error en generación automática de alertas tras importar historial de '%s': %s",
                            codigo_estudiante, ae, exc_info=True)

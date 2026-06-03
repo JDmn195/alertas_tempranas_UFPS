@@ -11,11 +11,21 @@ from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
 
 
-def _recalcular_en_background(usuario):
-    """Lanza reprocesar_alertas_completas en un hilo separado para no bloquear la respuesta."""
+def _recalcular_en_background(usuario, regla_id=None):
+    """
+    Lanza reprocesar_alertas_completas en un hilo separado para no bloquear la respuesta.
+    Fix 3.3: si se pasa regla_id, solo reprocesa alertas de esa regla.
+    """
     from alertas.views.alert_generation_views import reprocesar_alertas_completas
+    from alertas.models import Regla as _Regla
     try:
-        reprocesar_alertas_completas(usuario=usuario)
+        regla_obj = None
+        if regla_id:
+            try:
+                regla_obj = _Regla.objects.get(pk=regla_id)
+            except _Regla.DoesNotExist:
+                pass
+        reprocesar_alertas_completas(usuario=usuario, regla_especifica=regla_obj)
     except Exception:
         pass  # Errores en background no deben afectar la respuesta al usuario
 
@@ -57,10 +67,10 @@ def listar_crear_reglas(request):
             )
             registrar_auditoria(request.usuario, 'CREAR_REGLA', f"Regla '{regla.nombre}' creada.")
 
-            # Recalcular riesgo en background
+            # Recalcular riesgo en background — Fix 3.3: solo para esta regla
             threading.Thread(
                 target=_recalcular_en_background,
-                args=(request.usuario,),
+                args=(request.usuario, regla.id),
                 daemon=True
             ).start()
 
@@ -124,10 +134,10 @@ def detalle_regla(request, pk):
 
             registrar_auditoria(request.usuario, accion, msg_audit)
 
-            # Recalcular riesgo en background
+            # Recalcular riesgo en background — Fix 3.3: solo para esta regla
             threading.Thread(
                 target=_recalcular_en_background,
-                args=(request.usuario,),
+                args=(request.usuario, regla.id),
                 daemon=True
             ).start()
 

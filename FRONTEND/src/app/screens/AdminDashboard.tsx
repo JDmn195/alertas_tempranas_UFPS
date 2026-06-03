@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router';
-import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, FileText, AlertCircle, CheckCircle, Database, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { apiFetch } from '../../services/apiFetch';
@@ -13,6 +13,12 @@ export default function AdminDashboard() {
   const [responseMessage, setResponseMessage] = useState<string>('');
   const [responseErrors, setResponseErrors] = useState<any[]>([]);
   const [importHistory, setImportHistory] = useState<any[]>([]);
+
+  // ── Migración de RiesgoEstudiantePeriodo ──────────────────────────────────
+  const [migrando, setMigrando]         = useState(false);
+  const [migResult, setMigResult]       = useState<{
+    ok: boolean; mensaje: string; procesados?: number; periodos_creados?: number;
+  } | null>(null);
 
   const fetchHistory = async () => {
     try {
@@ -127,6 +133,39 @@ export default function AdminDashboard() {
   ) => {
     if (e.target.files && e.target.files[0]) {
       uploadFile(e.target.files[0]);
+    }
+  };
+
+  const handleMigrarRiesgo = async () => {
+    if (!window.confirm(
+      '¿Poblar RiesgoEstudiantePeriodo con los datos históricos?\n\n' +
+      'Esto recalcula el nivel de riesgo por periodo para todos los estudiantes ' +
+      'que no tienen registros de periodo. El proceso puede tardar unos minutos.'
+    )) return;
+
+    setMigrando(true);
+    setMigResult(null);
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const res = await apiFetch(
+        `${baseUrl}/api/alertas/migrar-riesgo-periodos/?solo_vacios=true`,
+        { method: 'POST' }
+      );
+      const data = await res.json();
+      if (res.ok) {
+        setMigResult({
+          ok: true,
+          mensaje: data.mensaje,
+          procesados: data.procesados,
+          periodos_creados: data.periodos_creados,
+        });
+      } else {
+        setMigResult({ ok: false, mensaje: data.error || 'Error desconocido' });
+      }
+    } catch (err) {
+      setMigResult({ ok: false, mensaje: 'No se pudo conectar con el servidor.' });
+    } finally {
+      setMigrando(false);
     }
   };
 
@@ -270,6 +309,7 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+      
 
       {/* Import history */}
       <div className="bg-white rounded-lg border border-gray-200">
@@ -295,6 +335,9 @@ export default function AdminDashboard() {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                   Errores
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                  Realizado por
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                   Estado
@@ -324,6 +367,9 @@ export default function AdminDashboard() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {record.total_errores}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
+                    {record.usuario || 'Desconocido'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {record.exitoso ? (

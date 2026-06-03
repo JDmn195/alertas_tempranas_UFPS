@@ -78,6 +78,43 @@ class RiesgoEstudiante(models.Model):
         return f"{self.estudiante.codigo} - {self.nivel_riesgo}"
 
 
+class RiesgoEstudiantePeriodo(models.Model):
+    """
+    Historial del nivel de riesgo de un estudiante por periodo académico.
+    Permite ver la evolución del riesgo a lo largo del tiempo.
+    """
+    NIVEL_CHOICES = [
+        ('high', 'Alto'),
+        ('medium', 'Medio'),
+        ('low', 'Bajo'),
+        ('unknown', 'Sin Dato'),
+    ]
+
+    estudiante = models.ForeignKey(
+        'academico.Estudiante',
+        on_delete=models.CASCADE,
+        related_name='riesgos_por_periodo'
+    )
+    periodo = models.ForeignKey(
+        'academico.Periodo',
+        on_delete=models.PROTECT,
+        related_name='riesgos_estudiantes'
+    )
+    nivel_riesgo = models.CharField(max_length=20, choices=NIVEL_CHOICES, default='unknown')
+    fecha_calculo = models.DateTimeField(auto_now=True)
+    reglas_aplicadas = models.JSONField(default=list)
+
+    class Meta:
+        db_table = 'riesgo_estudiante_periodo'
+        unique_together = ('estudiante', 'periodo')
+        verbose_name = 'Riesgo Estudiante por Periodo'
+        verbose_name_plural = 'Riesgos Estudiantes por Periodo'
+        ordering = ['periodo__anio', 'periodo__semestre']
+
+    def __str__(self):
+        return f"{self.estudiante.codigo} - {self.periodo} - {self.nivel_riesgo}"
+
+
 class Intervencion(models.Model):
     TIPO_CHOICES = [
         ('TUTORIA', 'Tutoría'),

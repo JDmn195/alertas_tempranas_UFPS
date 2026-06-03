@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { apiFetch } from '../../services/apiFetch';
 
 // ─── Interfaces y Configuraciones ─────────────────────────────────────────────
 interface ColumnConfig {
@@ -50,7 +51,7 @@ export default function ExportReports() {
       setFetchError('');
       try {
         const baseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
-        const res = await fetch(`${baseUrl}/api/alertas/reportes/?tipo=${selectedReportId}`);
+        const res = await apiFetch(`${baseUrl}/api/alertas/reportes/?tipo=${selectedReportId}`);
         if (!res.ok) throw new Error(`Error ${res.status}`);
         const json = await res.json();
         setLiveData(json.data || []);
@@ -384,7 +385,7 @@ export default function ExportReports() {
           </div>
 
           {/* Botón principal */}
-          <Button fullWidth size="lg" className="w-full font-bold shadow-sm" onClick={() => {
+          <Button fullWidth size="lg" className="w-full font-bold shadow-sm" onClick={async () => {
             const baseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
             const params = new URLSearchParams({
               tipo: selectedReportId,
@@ -393,7 +394,21 @@ export default function ExportReports() {
               fecha_hasta: dateTo,
               ...(selectedRisk && { riesgo: selectedRisk }),
             });
-            window.location.href = `${baseUrl}/api/alertas/reportes/exportar/?${params.toString()}`;
+            try {
+              const res = await apiFetch(`${baseUrl}/api/alertas/reportes/exportar/?${params.toString()}`);
+              if (!res.ok) throw new Error(`Error ${res.status}`);
+              const blob = await res.blob();
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `reporte-${selectedReportId}-${dateFrom}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              URL.revokeObjectURL(url);
+            } catch (err) {
+              console.error('Error al descargar reporte:', err);
+            }
           }}>
             <Download className="w-4 h-4 mr-2" />
             Generar y Descargar

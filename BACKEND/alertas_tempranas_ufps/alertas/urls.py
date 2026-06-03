@@ -2,7 +2,7 @@ from django.urls import path
 from .views import rule_views
 from .views.intervencion_views import registrar_intervencion, listar_intervenciones, gestionar_anotaciones, eliminar_anotacion, concluir_intervencion
 from .views.evidence_views import upload_evidence, list_evidence, delete_evidence
-from .views.alert_generation_views import generar_alertas, listar_alertas, cerrar_alerta
+from .views.alert_generation_views import generar_alertas, listar_alertas, cerrar_alerta, reevaluar_alertas, migrar_riesgo_periodos, recalcular_riesgo_estudiante
 from .views import notification_views
 from .views.report_views import export_report_data, exportar_reporte
 
@@ -11,6 +11,9 @@ urlpatterns = [
     path('reglas/', rule_views.listar_crear_reglas, name='listar_crear_reglas'),
     path('reglas/<int:pk>/', rule_views.detalle_regla, name='detalle_regla'),
     path('generar/', generar_alertas, name='generar-alertas'),
+    path('reevaluar/', reevaluar_alertas, name='reevaluar-alertas'),
+    path('migrar-riesgo-periodos/', migrar_riesgo_periodos, name='migrar-riesgo-periodos'),
+    path('estudiantes/<str:codigo>/recalcular/', recalcular_riesgo_estudiante, name='recalcular-riesgo-estudiante'),
     path('<int:alerta_id>/cerrar/', cerrar_alerta, name='cerrar-alerta'),
     path('<int:alerta_id>/intervenciones/', listar_intervenciones,  name='listar-intervenciones'),
     path('<int:alerta_id>/intervenciones/registrar/', registrar_intervencion, name='registrar-intervencion'),
