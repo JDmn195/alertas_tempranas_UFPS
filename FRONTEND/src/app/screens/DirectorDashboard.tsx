@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Users, TrendingUp, AlertCircle, BookX } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Users, TrendingUp, AlertCircle, BookX, RefreshCw } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -50,29 +50,33 @@ export default function DirectorDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false); // 5.1
+
+  const fetchIndicadores = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError(false);
+    try {
+      const baseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+      const res = await apiFetch(`${baseUrl}/api/academico/indicadores/`);
+      if (!res.ok) {
+        const errBody = await res.text();
+        throw new Error(`HTTP ${res.status}: ${errBody}`);
+      }
+      const json: DashboardData = await res.json();
+      setData(json);
+    } catch (err) {
+      console.error('Error al cargar indicadores del director:', err);
+      setError(true);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchIndicadores = async () => {
-      setLoading(true);
-      setError(false);
-      try {
-        const baseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
-        const res = await apiFetch(`${baseUrl}/api/academico/indicadores/`);
-        if (!res.ok) {
-          const errBody = await res.text();
-          throw new Error(`HTTP ${res.status}: ${errBody}`);
-        }
-        const json: DashboardData = await res.json();
-        setData(json);
-      } catch (err) {
-        console.error('Error al cargar indicadores del director:', err);
-        setError(true);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchIndicadores();
-  }, []);
+  }, [fetchIndicadores]);
 
   // ── Helpers de renderizado ────────────────────────────────────────────────
 
@@ -88,19 +92,30 @@ export default function DirectorDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
-      <div className="border-l-4 border-[#C8102E] pl-4">
-        <h1 className="text-2xl font-bold text-gray-900">Panel Estratégico</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Analíticas académicas e indicadores de riesgo - Programa de Ingeniería de Sistemas
-        </p>
+      {/* Page header — 5.1: botón actualizar */}
+      <div className="flex items-center justify-between">
+        <div className="border-l-4 border-[#C8102E] pl-4">
+          <h1 className="text-2xl font-bold text-gray-900">Panel Estratégico</h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Analíticas académicas e indicadores de riesgo - Programa de Ingeniería de Sistemas
+          </p>
+        </div>
+        <button
+          onClick={() => fetchIndicadores(true)}
+          disabled={loading || refreshing}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[#C8102E] bg-white border border-[#C8102E]/20 rounded-xl hover:bg-red-50 hover:border-[#C8102E]/40 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Actualizar datos del panel"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Actualizando...' : 'Actualizar datos'}
+        </button>
       </div>
 
       {/* Banner de error de conexión */}
       {error && (
         <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-sm text-amber-700">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <span>No se pudo conectar al servidor. Verifique que el backend esté en ejecución en <code className="font-mono text-xs bg-amber-100 px-1 rounded">localhost:8000</code>.</span>
+          <div>No se pudo conectar al servidor. Verifique que el backend esté en ejecución en <code className="font-mono text-xs bg-amber-100 px-1 rounded">localhost:8000</code>.</div>
         </div>
       )}
 
@@ -110,40 +125,40 @@ export default function DirectorDashboard() {
           <div className="flex items-start justify-between mb-4">
             <Users className="w-8 h-8 opacity-90" />
           </div>
-          <p className="text-3xl font-bold mb-1">
+          <div className="text-3xl font-bold mb-1">
             {kpiValue(data?.total_estudiantes_activos)}
-          </p>
-          <p className="text-sm opacity-90">Total de Estudiantes Activos</p>
+          </div>
+          <div className="text-sm opacity-90">Total de Estudiantes Activos</div>
         </div>
 
         <div className="bg-[#C8102E] text-white rounded-lg p-6">
           <div className="flex items-start justify-between mb-4">
             <TrendingUp className="w-8 h-8 opacity-90" />
           </div>
-          <p className="text-3xl font-bold mb-1">
+          <div className="text-3xl font-bold mb-1">
             {kpiValue(data?.porcentaje_riesgo, (v) => `${v.toFixed(1)}%`)}
-          </p>
-          <p className="text-sm opacity-90">Estudiantes en Riesgo</p>
+          </div>
+          <div className="text-sm opacity-90">Estudiantes en Riesgo</div>
         </div>
 
         <div className="bg-[#C8102E] text-white rounded-lg p-6">
           <div className="flex items-start justify-between mb-4">
             <AlertCircle className="w-8 h-8 opacity-90" />
           </div>
-          <p className="text-3xl font-bold mb-1">
+          <div className="text-3xl font-bold mb-1">
             {kpiValue(data?.alertas_activas)}
-          </p>
-          <p className="text-sm opacity-90">Total Alertas Activas</p>
+          </div>
+          <div className="text-sm opacity-90">Total Alertas Activas</div>
         </div>
 
         <div className="bg-[#C8102E] text-white rounded-lg p-6">
           <div className="flex items-start justify-between mb-4">
             <BookX className="w-8 h-8 opacity-90" />
           </div>
-          <p className="text-3xl font-bold mb-1">
+          <div className="text-3xl font-bold mb-1">
             {kpiValue(data?.cursos_alta_reprobacion)}
-          </p>
-          <p className="text-sm opacity-90">Cursos Críticos (≥30% Reprobación)</p>
+          </div>
+          <div className="text-sm opacity-90">Cursos Críticos (≥30% Reprobación)</div>
         </div>
       </div>
 

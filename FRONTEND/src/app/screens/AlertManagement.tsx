@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
-import { X, ClipboardList, CheckCircle2, AlertTriangle, Filter, ExternalLink, RefreshCw, ChevronRight } from 'lucide-react';
+import { X, ClipboardList, CheckCircle2, AlertTriangle, Filter, ExternalLink, RefreshCw, ChevronRight, Search, ShieldCheck } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 
 const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas`;
@@ -281,10 +281,12 @@ function ModalHistorial({
 export default function AlertManagement() {
   const [activeTab, setActiveTab] = useState('Activas');
   const [filterType, setFilterType] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');          // 3.1
   const [alertsList, setAlertsList] = useState<AlertItem[]>([]);
   const [conteos, setConteos] = useState<Conteos>({ activa: 0, en_seguimiento: 0, atendida: 0, cerrada: 0 });
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [reevaluating, setReevaluating] = useState(false);     // 3.6
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [expandedStudents, setExpandedStudents] = useState<Record<string, boolean>>({});
 
@@ -293,12 +295,22 @@ export default function AlertManagement() {
   const [showHistory, setShowHistory] = useState(false);
 
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // 4.2: pre-cargar búsqueda desde URL (?search=nombre) al montar
+  useEffect(() => {
+    const urlSearch = searchParams.get('search');
+    if (urlSearch) setSearchQuery(urlSearch);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
     try {
       const stateParam = tabMapping[activeTab];
-      const res = await apiFetch(`${API_BASE}/?estado=${stateParam}&tipo_regla=${filterType}`);
+      // 3.1: enviar parámetro search al backend
+      const searchParam = searchQuery.trim() ? `&search=${encodeURIComponent(searchQuery.trim())}` : '';
+      const res = await apiFetch(`${API_BASE}/?estado=${stateParam}&tipo_regla=${filterType}${searchParam}`);
       const data = await res.json();
       setAlertsList(data.alertas);
       setConteos(data.conteos);
@@ -307,7 +319,7 @@ export default function AlertManagement() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, filterType]);
+  }, [activeTab, filterType, searchQuery]);
 
   useEffect(() => {
     fetchAlerts();
@@ -330,6 +342,24 @@ export default function AlertManagement() {
     }
   };
 
+  // Fix 3.6: handler para reevaluar alertas abiertas
+  const handleReevaluarAlertas = async () => {
+    setReevaluating(true);
+    try {
+      const res = await apiFetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas/reevaluar/`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      setSuccessMsg(data.mensaje || `Reevaluación completada: ${data.cerradas_automaticamente} alertas cerradas.`);
+      fetchAlerts();
+      setTimeout(() => setSuccessMsg(null), 6000);
+    } catch (err) {
+      alert('Error al reevaluar alertas');
+    } finally {
+      setReevaluating(false);
+    }
+  };
+
   const handleCerrarAlerta = async (id: string | number) => {
     try {
       await apiFetch(`${API_BASE}/${id}/cerrar/`, { method: 'POST' });
@@ -346,11 +376,14 @@ export default function AlertManagement() {
   };
 
   // Agrupar alertas por estudiante
-  const groupedAlerts = alertsList.reduce((acc: Record<string, any>, alert) => {
+  const ORDEN_RIESGO: Record<string, number> = { high: 0, medium: 1, low: 2, unknown: 3 };
+
+  const groupedAlerts = alertsList.reduce((acc: Record<string, any>, alert: any) => {
     if (!acc[alert.studentCode]) {
       acc[alert.studentCode] = {
         studentName: alert.studentName,
         studentCode: alert.studentCode,
+        studentRiskLevel: alert.studentRiskLevel ?? alert.riskLevel,
         alerts: []
       };
     }
@@ -358,7 +391,9 @@ export default function AlertManagement() {
     return acc;
   }, {});
 
-  const studentGroups = Object.values(groupedAlerts);
+  const studentGroups = Object.values(groupedAlerts).sort((a: any, b: any) =>
+    (ORDEN_RIESGO[a.studentRiskLevel] ?? 3) - (ORDEN_RIESGO[b.studentRiskLevel] ?? 3)
+  );
 
   return (
     <div className="space-y-6 pb-20 max-w-7xl mx-auto px-4 sm:px-6">
@@ -383,30 +418,60 @@ export default function AlertManagement() {
           <p className="text-sm text-gray-500 font-medium">Monitoreo y seguimiento del riesgo académico estudiantil.</p>
         </div>
         
-        <div className="flex items-center gap-3 bg-white p-1.5 rounded-2xl border border-gray-200 shadow-sm">
-          <div className="flex items-center gap-2 px-3 border-r border-gray-100">
-            <Filter className="w-4 h-4 text-gray-400" />
-            <select 
-              value={filterType} 
-              onChange={(e) => setFilterType(e.target.value)}
-              className="text-xs font-bold text-gray-700 border-none focus:ring-0 bg-transparent cursor-pointer uppercase"
-            >
-              <option value="all">TODOS LOS TIPOS</option>
-              <option value="PROMEDIO">PROMEDIO</option>
-              <option value="REPROBACION">REPROBACIÓN</option>
-              <option value="ATRASO">ATRASO</option>
-            </select>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Fix 3.1: Buscador por nombre de estudiante */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar estudiante..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-4 py-2 text-xs font-medium border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] w-52 shadow-sm"
+            />
           </div>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={handleGenerateAlerts} 
-            disabled={generating}
-            className="text-[#C8102E] hover:bg-red-50 gap-2 h-9 px-4 rounded-xl"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${generating ? 'animate-spin' : ''}`} />
-            <span className="text-[11px] font-extrabold uppercase tracking-widest">{generating ? 'Procesando...' : 'Actualizar'}</span>
-          </Button>
+
+          <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-gray-200 shadow-sm">
+            <div className="flex items-center gap-2 px-3 border-r border-gray-100">
+              <Filter className="w-4 h-4 text-gray-400" />
+              <select 
+                value={filterType} 
+                onChange={(e) => setFilterType(e.target.value)}
+                className="text-xs font-bold text-gray-700 border-none focus:ring-0 bg-transparent cursor-pointer uppercase"
+              >
+                <option value="all">TODOS LOS TIPOS</option>
+                <option value="PROMEDIO">PROMEDIO</option>
+                <option value="REPROBACION">REPROBACIÓN</option>
+                <option value="ATRASO">ATRASO</option>
+              </select>
+            </div>
+
+            {/* Fix 3.6: botón Reevaluar alertas */}
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleReevaluarAlertas} 
+              disabled={reevaluating || generating}
+              className="text-emerald-600 hover:bg-emerald-50 gap-2 h-9 px-4 rounded-xl"
+              title="Reevalúa todas las alertas abiertas y cierra las que ya no aplican"
+            >
+              <ShieldCheck className={`w-3.5 h-3.5 ${reevaluating ? 'animate-pulse' : ''}`} />
+              <span className="text-[11px] font-extrabold uppercase tracking-widest">
+                {reevaluating ? 'Reevaluando...' : 'Reevaluar alertas'}
+              </span>
+            </Button>
+
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleGenerateAlerts} 
+              disabled={generating || reevaluating}
+              className="text-[#C8102E] hover:bg-red-50 gap-2 h-9 px-4 rounded-xl"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${generating ? 'animate-spin' : ''}`} />
+              <span className="text-[11px] font-extrabold uppercase tracking-widest">{generating ? 'Procesando...' : 'Actualizar'}</span>
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -477,6 +542,11 @@ export default function AlertManagement() {
                     <Badge variant="gray" size="sm" className="text-[9px] font-extrabold px-2 py-0.5">
                       {group.alerts.length} {group.alerts.length === 1 ? 'ALERTA' : 'ALERTAS'}
                     </Badge>
+                    {RISK_CONFIG[group.studentRiskLevel] && (
+                      <Badge variant={RISK_CONFIG[group.studentRiskLevel].variant} size="sm" className="text-[9px] font-extrabold px-2 py-0.5">
+                        RIESGO {RISK_CONFIG[group.studentRiskLevel].label}
+                      </Badge>
+                    )}
                   </div>
                   <ChevronRight className={`w-5 h-5 text-gray-300 transition-all duration-300 ${expandedStudents[group.studentCode] ? 'rotate-90 text-[#C8102E]' : 'group-hover:text-gray-400'}`} />
                 </div>

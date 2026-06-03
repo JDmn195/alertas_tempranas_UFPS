@@ -106,11 +106,43 @@ class Nota(models.Model):
 
     class Meta:
         db_table = 'nota'
+        unique_together = ('estudiante', 'curso', 'periodo')
         verbose_name = 'Nota'
         verbose_name_plural = 'Notas'
 
     def __str__(self):
         return f"{self.estudiante.codigo} | {self.curso} | {self.definitiva}"
+
+
+class EquivalenciaMateria(models.Model):
+    """
+    Define que una materia del pensum puede ser reemplazada por otra
+    materia equivalente (ej: de otra carrera o pensum anterior).
+    Si el estudiante aprobó `materia_equivalente`, se considera que
+    cumplió el requisito de `materia_pensum` para el cálculo de atraso.
+    La relación es direccional: materia_pensum ← materia_equivalente.
+    """
+    materia_pensum = models.ForeignKey(
+        Materia,
+        on_delete=models.CASCADE,
+        related_name='equivalencias_entrantes',
+        help_text='Materia del pensum que se considera cumplida.'
+    )
+    materia_equivalente = models.ForeignKey(
+        Materia,
+        on_delete=models.CASCADE,
+        related_name='equivalencias_salientes',
+        help_text='Materia aprobada que satisface el requisito.'
+    )
+
+    class Meta:
+        db_table = 'equivalencia_materia'
+        unique_together = ('materia_pensum', 'materia_equivalente')
+        verbose_name = 'Equivalencia de Materia'
+        verbose_name_plural = 'Equivalencias de Materias'
+
+    def __str__(self):
+        return f"{self.materia_equivalente.codigo} equivale a {self.materia_pensum.codigo}"
 
 
 class BitacoraImportacion(models.Model):

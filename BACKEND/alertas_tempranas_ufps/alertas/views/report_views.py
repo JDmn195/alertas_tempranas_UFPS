@@ -4,52 +4,132 @@ from io import BytesIO
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from django.db.models import Count, Avg, Q
 
-from alertas.models import Alerta, Intervencion, RiesgoEstudiante
+from alertas.models import Alerta, Intervencion, RiesgoEstudiante, RiesgoEstudiantePeriodo
 from academico.models import Estudiante, Curso, Nota
+
+
+def _get_docente_filter(request):
+    """
+    Fix 6.1: Si el usuario autenticado es DOCENTE, retorna el conjunto de
+    IDs de estudiantes que le pertenecen. Si es otro rol, retorna None
+    (sin restricción).
+    """
+    usuario = getattr(request, 'usuario', None)
+    if not usuario:
+        return None
+    if usuario.rol != 'DOCENTE':
+        return None
+    try:
+        docente = usuario.docente
+        ids_cursos = list(Curso.objects.filter(docente=docente).values_list('id', flat=True))
+        return list(
+            Nota.objects.filter(curso__in=ids_cursos)
+            .values_list('estudiante_id', flat=True)
+            .distinct()
+        )
+    except Exception:
+        return []  # Docente sin cursos → lista vacía (no ve nada)
+
+
+def _get_docente_cursos(request):
+    """
+    Fix 6.1: Retorna los IDs de cursos del docente, o None si no aplica.
+    """
+    usuario = getattr(request, 'usuario', None)
+    if not usuario or usuario.rol != 'DOCENTE':
+        return None
+    try:
+        docente = usuario.docente
+        return list(Curso.objects.filter(docente=docente).values_list('id', flat=True))
+    except Exception:
+        return []
 
 
 # ─── Lógica de consulta desacoplada del request ───────────────────────────────
 
-def _get_report_data(tipo):
+def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
     """
     Retorna la lista de registros para el tipo de reporte indicado.
-    No depende del request — puede ser llamada desde cualquier vista.
+    Fix 6.1: si estudiantes_ids no es None, filtra solo esos estudiantes.
+             si cursos_ids no es None, filtra solo esos cursos.
     """
     if tipo == 'riesgo-estudiantil':
-        riesgos = RiesgoEstudiante.objects.all().select_related('estudiante')
+        # Combina RiesgoEstudiantePeriodo (más reciente) + RiesgoEstudiante (fallback)
+        # igual que en el panel estratégico
+        from django.db.models import Subquery as _SQ, OuterRef as _OR
+
+        ultimo_id_sq = (
+            RiesgoEstudiantePeriodo.objects
+            .filter(estudiante_id=_OR('estudiante_id'))
+            .order_by('-periodo__anio', '-periodo__semestre')
+            .values('id')[:1]
+        )
+        riesgos_qs = (
+            RiesgoEstudiantePeriodo.objects
+            .filter(id=_SQ(ultimo_id_sq))
+            .select_related('estudiante')
+        )
+        if estudiantes_ids is not None:
+            riesgos_qs = riesgos_qs.filter(estudiante_id__in=estudiantes_ids)
+
+        # Estudiantes ya cubiertos por RiesgoEstudiantePeriodo
+        ids_con_periodo = set(riesgos_qs.values_list('estudiante_id', flat=True))
+
+        # Complemento: RiesgoEstudiante para los que no tienen periodo
+        riesgos_snap = RiesgoEstudiante.objects.exclude(
+            estudiante_id__in=ids_con_periodo
+        ).select_related('estudiante')
+        if estudiantes_ids is not None:
+            riesgos_snap = riesgos_snap.filter(estudiante_id__in=estudiantes_ids)
+
+        # Alertas en una sola query
+        todos_ids = list(ids_con_periodo) + list(
+            riesgos_snap.values_list('estudiante_id', flat=True)
+        )
+        alertas_map = dict(
+            Alerta.objects
+            .filter(estudiante_id__in=todos_ids)
+            .exclude(estado__in=['cerrada', 'closed'])
+            .values('estudiante_id')
+            .annotate(total=Count('id'))
+            .values_list('estudiante_id', 'total')
+        )
+
         data = []
-        for r in riesgos:
+        for r in riesgos_qs:
             gpa = float(r.estudiante.promedio) if r.estudiante.promedio else 0.0
-            alerts_count = Alerta.objects.filter(
-                estudiante=r.estudiante,
-                estado__in=['activa', 'active', 'en_seguimiento', 'atendida']
-            ).count()
             data.append({
-                'code': r.estudiante.codigo,
-                'name': r.estudiante.nombre,
+                'code':     r.estudiante.codigo,
+                'name':     r.estudiante.nombre,
                 'semester': r.estudiante.semestre,
-                'gpa': gpa,
-                'alerts': alerts_count,
-                'risk': r.nivel_riesgo.upper(),
-                'program': 'systems',
-                'date': r.fecha_calculo.strftime('%Y-%m-%d'),
+                'gpa':      gpa,
+                'alerts':   alertas_map.get(r.estudiante_id, 0),
+                'risk':     r.nivel_riesgo.upper(),
+                'program':  'systems',
+                'date':     r.fecha_calculo.strftime('%Y-%m-%d'),
             })
-        if not data:
-            for e in Estudiante.objects.all()[:15]:
-                gpa = float(e.promedio) if e.promedio else 0.0
-                risk = 'ALTO' if gpa < 3.0 else 'MEDIO' if gpa < 3.4 else 'BAJO'
-                alerts_count = Alerta.objects.filter(
-                    estudiante=e, estado__in=['activa', 'active', 'en_seguimiento', 'atendida']
-                ).count()
-                data.append({'code': e.codigo, 'name': e.nombre, 'semester': e.semestre,
-                             'gpa': gpa, 'alerts': alerts_count, 'risk': risk,
-                             'program': 'systems', 'date': '2026-05-20'})
+        for r in riesgos_snap:
+            gpa = float(r.estudiante.promedio) if r.estudiante.promedio else 0.0
+            data.append({
+                'code':     r.estudiante.codigo,
+                'name':     r.estudiante.nombre,
+                'semester': r.estudiante.semestre,
+                'gpa':      gpa,
+                'alerts':   alertas_map.get(r.estudiante_id, 0),
+                'risk':     r.nivel_riesgo.upper(),
+                'program':  'systems',
+                'date':     r.fecha_calculo.strftime('%Y-%m-%d'),
+            })
         return data
 
     elif tipo == 'resumen-alertas':
+        qs = Alerta.objects.all().select_related('estudiante', 'regla')
+        if estudiantes_ids is not None:
+            qs = qs.filter(estudiante_id__in=estudiantes_ids)
         data = []
-        for a in Alerta.objects.all().select_related('estudiante', 'regla'):
+        for a in qs:
             est = a.estado.lower()
             if est in ['activa', 'active']:
                 estado_friendly = 'Activa'
@@ -72,9 +152,14 @@ def _get_report_data(tipo):
         return data
 
     elif tipo == 'rendimiento-academico':
+        qs = Estudiante.objects.all()
+        if estudiantes_ids is not None:
+            qs = qs.filter(codigo__in=estudiantes_ids)
         data = []
-        for e in Estudiante.objects.all()[:20]:
+        for e in qs:
             notas = Nota.objects.filter(estudiante=e)
+            if cursos_ids is not None:
+                notas = notas.filter(curso__in=cursos_ids)
             passed = notas.filter(definitiva__gte=3.0).count()
             failed = notas.filter(definitiva__lt=3.0).count()
             credits = sum(
@@ -91,8 +176,11 @@ def _get_report_data(tipo):
         return data
 
     elif tipo == 'reprobacion-cursos':
+        qs = Curso.objects.all().select_related('materia', 'docente')
+        if cursos_ids is not None:
+            qs = qs.filter(id__in=cursos_ids)
         data = []
-        for c in Curso.objects.all().select_related('materia', 'docente'):
+        for c in qs:
             notas = Nota.objects.filter(curso=c)
             enrolled = notas.count() or 40
             failedCount = notas.filter(definitiva__lt=3.0).count()
@@ -107,8 +195,11 @@ def _get_report_data(tipo):
         return data
 
     elif tipo == 'seguimiento-intervenciones':
+        qs = Intervencion.objects.all().select_related('alerta__estudiante', 'usuario').order_by('-fecha')
+        if estudiantes_ids is not None:
+            qs = qs.filter(alerta__estudiante_id__in=estudiantes_ids)
         data = []
-        for i in Intervencion.objects.all().select_related('alerta__estudiante', 'usuario').order_by('-fecha'):
+        for i in qs:
             tipo_friendly = {'CITACION': 'Citación', 'REMISION': 'Remisión'}.get(i.tipo, 'Tutoría')
             result_friendly = i.resultado or 'Pendiente'
             if result_friendly.lower() == 'satisfactorio':
@@ -130,13 +221,32 @@ def _get_report_data(tipo):
 
     elif tipo == 'analisis-cohortes':
         estudiantes = Estudiante.objects.all()
+        if estudiantes_ids is not None:
+            estudiantes = estudiantes.filter(codigo__in=estudiantes_ids)
         total_est = estudiantes.count() or 200
         con_promedio = estudiantes.filter(promedio__isnull=False)
         promedio_global = (
             sum(float(e.promedio) for e in con_promedio) / con_promedio.count()
             if con_promedio.count() > 0 else 3.0
         )
-        total_alertas = Alerta.objects.count()
+        alertas_qs = Alerta.objects.all()
+        if estudiantes_ids is not None:
+            alertas_qs = alertas_qs.filter(estudiante_id__in=estudiantes_ids)
+        total_alertas = alertas_qs.count()
+        riesgo_qs_periodo = RiesgoEstudiantePeriodo.objects
+        if estudiantes_ids is not None:
+            riesgo_qs_periodo = riesgo_qs_periodo.filter(estudiante_id__in=estudiantes_ids)
+        # Nivel del periodo más reciente por estudiante
+        from django.db.models import Subquery as _SQ2, OuterRef as _OR2
+        ult_id_sq2 = (
+            RiesgoEstudiantePeriodo.objects
+            .filter(estudiante_id=_OR2('estudiante_id'))
+            .order_by('-periodo__anio', '-periodo__semestre')
+            .values('id')[:1]
+        )
+        riesgo_qs_actual = RiesgoEstudiantePeriodo.objects.filter(id=_SQ2(ult_id_sq2))
+        if estudiantes_ids is not None:
+            riesgo_qs_actual = riesgo_qs_actual.filter(estudiante_id__in=estudiantes_ids)
         return [
             {'cohort': 'Periodo 2025-1', 'totalStudents': total_est - 15,
              'averageGpa': round(promedio_global + 0.1, 2), 'highRisk': 15, 'mediumRisk': 30,
@@ -148,27 +258,32 @@ def _get_report_data(tipo):
              'program': 'systems', 'risk': 'ALTO', 'date': '2025-12-15'},
             {'cohort': 'Periodo 2026-1', 'totalStudents': total_est,
              'averageGpa': round(promedio_global, 2),
-             'highRisk': RiesgoEstudiante.objects.filter(nivel_riesgo='high').count() or 8,
-             'mediumRisk': RiesgoEstudiante.objects.filter(nivel_riesgo='medium').count() or 12,
-             'lowRisk': RiesgoEstudiante.objects.filter(nivel_riesgo='low').count() or 80,
+             'highRisk':   riesgo_qs_actual.filter(nivel_riesgo='high').count() or 8,
+             'mediumRisk': riesgo_qs_actual.filter(nivel_riesgo='medium').count() or 12,
+             'lowRisk':    riesgo_qs_actual.filter(nivel_riesgo='low').count() or 80,
              'totalAlerts': total_alertas, 'program': 'systems', 'risk': 'ALTO', 'date': '2026-05-20'},
         ]
 
     raise ValueError(f'Tipo de reporte inválido: {tipo}')
 
 
+from usuarios.decorators import requiere_rol
+
 # ─── Vista: datos JSON para vista previa ──────────────────────────────────────
 
 @csrf_exempt
 @require_http_methods(["GET"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def export_report_data(request):
     """
     GET /api/alertas/reportes/?tipo=<tipo_reporte>
-    Sirve los datos reales para la vista previa de reportes del frontend.
+    Fix 6.1: Si el usuario es DOCENTE filtra solo sus datos.
     """
     tipo = request.GET.get('tipo', 'riesgo-estudiantil')
+    estudiantes_ids = _get_docente_filter(request)
+    cursos_ids = _get_docente_cursos(request)
     try:
-        data = _get_report_data(tipo)
+        data = _get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids)
         return JsonResponse({'data': data})
     except ValueError as e:
         return JsonResponse({'error': str(e)}, status=400)
@@ -180,10 +295,11 @@ def export_report_data(request):
 
 @csrf_exempt
 @require_http_methods(["GET"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def exportar_reporte(request):
     """
     GET /api/alertas/reportes/exportar/
-    Genera y descarga un reporte en PDF o Excel.
+    Fix 6.1: Si el usuario es DOCENTE filtra solo sus datos.
     """
     tipo        = request.GET.get('tipo', 'riesgo-estudiantil')
     formato     = request.GET.get('formato', 'pdf').lower()
@@ -195,8 +311,11 @@ def exportar_reporte(request):
     if formato not in ('pdf', 'excel'):
         return JsonResponse({'error': 'formato inválido. Use pdf o excel.'}, status=400)
 
+    estudiantes_ids = _get_docente_filter(request)
+    cursos_ids = _get_docente_cursos(request)
+
     try:
-        data_list = _get_report_data(tipo)
+        data_list = _get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids)
     except ValueError as e:
         return JsonResponse({'error': str(e)}, status=400)
     except Exception as e:

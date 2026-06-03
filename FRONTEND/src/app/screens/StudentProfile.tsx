@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router';
+import { useParams, Link, useNavigate } from 'react-router';
 import {
   ArrowLeft,
   User,
@@ -22,7 +22,9 @@ import {
   ChevronDown,
   ChevronUp,
   History,
-  TrendingUp as TrendingUpIcon,
+  X,
+  ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -187,6 +189,11 @@ interface TendenciaData {
   direccion: 'up' | 'down' | 'stable';
 }
 
+interface RiesgoEvolucionItem {
+  periodo: string;
+  nivel_riesgo: 'high' | 'medium' | 'low' | 'unknown';
+}
+
 interface IndicadoresData {
   aprobadas: number;
   reprobadas: number;
@@ -197,9 +204,120 @@ interface IndicadoresData {
   tendencia: TendenciaData;
   evolucion: EvolucionData[];
   alertas_activas: number;
+  riesgo_evolucion: RiesgoEvolucionItem[];
 }
 
-function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; loading: boolean }) {
+// ─── Modal Materias Reprobadas (4.3) ─────────────────────────────────────────
+function ModalMateriasReprobadas({
+  historial,
+  onClose,
+}: {
+  historial: HistorialPeriodo[] | null;
+  onClose: () => void;
+}) {
+  // Aplanar todas las materias reprobadas con su periodo
+  const reprobadas: { materia: string; codigo: string; nota: number; periodo: string }[] = [];
+  (historial ?? []).forEach((p) => {
+    p.materias.forEach((m) => {
+      if (m.nota_final < 3.0) {
+        reprobadas.push({
+          materia: m.materia,
+          codigo: m.codigo,
+          nota: m.nota_final,
+          periodo: p.periodo,
+        });
+      }
+    });
+  });
+
+  // Agrupar por materia
+  const agrupadas: Record<string, typeof reprobadas> = {};
+  reprobadas.forEach((r) => {
+    if (!agrupadas[r.materia]) agrupadas[r.materia] = [];
+    agrupadas[r.materia].push(r);
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 z-10 max-h-[80vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-orange-50 rounded-t-2xl">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
+              <Activity className="w-4 h-4 text-orange-600" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900">Materias Reprobadas</h2>
+              <p className="text-xs text-gray-500">{reprobadas.length} registros en el historial</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Contenido */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {reprobadas.length === 0 ? (
+            <div className="text-center py-12">
+              <CheckCircle2 className="w-12 h-12 text-green-300 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-gray-500">Sin materias reprobadas</p>
+              <p className="text-xs text-gray-400 mt-1">El estudiante no tiene pérdidas registradas.</p>
+            </div>
+          ) : (
+            Object.entries(agrupadas).map(([nombre, intentos]) => (
+              <div key={nombre} className="border border-orange-100 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 bg-orange-50/60">
+                  <div>
+                    <p className="text-xs font-bold text-gray-800">{nombre}</p>
+                    <p className="text-[10px] text-gray-400 font-mono mt-0.5">{intentos[0].codigo}</p>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
+                    {intentos.length} {intentos.length === 1 ? 'vez' : 'veces'}
+                  </span>
+                </div>
+                <div className="divide-y divide-orange-50">
+                  {intentos.map((it, i) => (
+                    <div key={i} className="flex items-center justify-between px-4 py-2.5 bg-white">
+                      <span className="text-xs text-gray-500 font-mono">{it.periodo}</span>
+                      <span className="font-mono text-sm font-bold px-2.5 py-1 rounded-lg bg-red-50 text-red-700 border border-red-100">
+                        {it.nota.toFixed(1)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="px-6 py-3 border-t border-gray-100 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-xs font-bold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IndicadoresSection({
+  data,
+  loading,
+  studentName,
+  historial,
+}: {
+  data: IndicadoresData | null;
+  loading: boolean;
+  studentName?: string;
+  historial?: HistorialPeriodo[] | null;
+}) {
+  const navigate = useNavigate();
+  const [showReprobadas, setShowReprobadas] = useState(false); // 4.3
   const indicadores = [
     {
       icon: BarChart2,
@@ -207,6 +325,7 @@ function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; l
       sublabel: 'Sobre escala de 0 a 5',
       color: 'blue',
       value: data?.promedio_acumulado ? data.promedio_acumulado.toFixed(2) : null,
+      onClick: undefined as (() => void) | undefined,
     },
     {
       icon: data?.tendencia?.direccion === 'down' ? TrendingDown : TrendingUp,
@@ -219,13 +338,18 @@ function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; l
           {data.tendencia.porcentaje}%
         </div>
       ) : null,
+      onClick: undefined as (() => void) | undefined,
     },
     {
       icon: AlertTriangle,
       label: 'Alertas Activas',
-      sublabel: 'Alertas sin resolver',
+      sublabel: 'Ver en gestión de alertas',    // 4.2
       color: 'red',
       value: data?.alertas_activas ?? 0,
+      // 4.2: navegar a alertas buscando por nombre
+      onClick: studentName
+        ? () => navigate(`/dashboard/alerts?search=${encodeURIComponent(studentName)}`)
+        : undefined,
     },
     {
       icon: CheckCircle2,
@@ -233,13 +357,15 @@ function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; l
       sublabel: 'Total acumulado',
       color: 'green',
       value: data?.aprobadas,
+      onClick: undefined as (() => void) | undefined,
     },
     {
       icon: Activity,
       label: 'Materias Reprobadas',
-      sublabel: 'Total acumulado',
+      sublabel: 'Clic para ver detalle',        // 4.3
       color: 'orange',
       value: data?.reprobadas,
+      onClick: () => setShowReprobadas(true),    // 4.3
     },
     {
       icon: Clock,
@@ -247,6 +373,7 @@ function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; l
       sublabel: 'Sobre total del pensum',
       color: 'teal',
       value: data ? `${data.creditos_cursados} créditos | ${data.porcentaje_progreso}%` : null,
+      onClick: undefined as (() => void) | undefined,
     },
   ];
 
@@ -261,6 +388,14 @@ function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; l
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+      {/* Modal materias reprobadas — 4.3 */}
+      {showReprobadas && (
+        <ModalMateriasReprobadas
+          historial={historial ?? null}
+          onClose={() => setShowReprobadas(false)}
+        />
+      )}
+
       {/* Header de sección */}
       <div className="bg-gray-800 px-6 py-4 flex items-center gap-3">
         <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
@@ -282,10 +417,15 @@ function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; l
       {/* Grid de indicadores */}
       <div className="p-6">
         <div className="grid grid-cols-3 gap-4">
-          {indicadores.map(({ icon: Icon, label, sublabel, color, value }) => (
+          {indicadores.map(({ icon: Icon, label, sublabel, color, value, onClick }) => (
             <div
               key={label}
-              className={`rounded-xl border ${colorMap[color].split(' ').slice(0,2).join(' ')} p-4 flex flex-col items-center text-center gap-2`}
+              onClick={!loading && onClick ? onClick : undefined}
+              className={`rounded-xl border ${colorMap[color].split(' ').slice(0,2).join(' ')} p-4 flex flex-col items-center text-center gap-2 transition-all ${
+                !loading && onClick
+                  ? 'cursor-pointer hover:shadow-md hover:scale-[1.02] active:scale-[0.98]'
+                  : ''
+              }`}
             >
               <div className={`w-10 h-10 rounded-full ${colorMap[color].split(' ').slice(0,2).join(' ')} flex items-center justify-center`}>
                 <Icon className={`w-5 h-5 ${colorMap[color].split(' ').slice(2).join(' ')}`} />
@@ -304,6 +444,11 @@ function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; l
                 <p className="text-xs font-semibold text-gray-600">{label}</p>
                 <p className="text-xs text-gray-400">{sublabel}</p>
               </div>
+
+              {/* Indicador visual de interactividad */}
+              {!loading && onClick && (
+                <ExternalLink className="w-3 h-3 text-gray-300 mt-auto" />
+              )}
             </div>
           ))}
         </div>
@@ -401,6 +546,92 @@ function IndicadoresSection({ data, loading }: { data: IndicadoresData | null; l
           </div>
         </div>
       </div>
+
+      {/* Gráfica de evolución de riesgo por periodo */}
+      {data?.riesgo_evolucion && data.riesgo_evolucion.length > 0 && (
+        <div className="px-6 pb-6">
+          <div className="bg-gray-50 rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-[#C8102E]" />
+              Evolución del Nivel de Riesgo por Periodo
+            </h3>
+            {/* Gráfica de línea con niveles numéricos */}
+            <div className="mb-4">
+              <ResponsiveContainer width="100%" height={160}>
+                <LineChart
+                  data={data.riesgo_evolucion.map(item => ({
+                    periodo: item.periodo,
+                    valor: item.nivel_riesgo === 'high' ? 3 : item.nivel_riesgo === 'medium' ? 2 : item.nivel_riesgo === 'low' ? 1 : 0,
+                    nivel: item.nivel_riesgo,
+                  }))}
+                  margin={{ top: 10, right: 10, left: -30, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                  <XAxis
+                    dataKey="periodo"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
+                    dy={8}
+                  />
+                  <YAxis
+                    domain={[0, 3]}
+                    ticks={[1, 2, 3]}
+                    tickFormatter={(v) => v === 3 ? 'Alto' : v === 2 ? 'Medio' : v === 1 ? 'Bajo' : ''}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
+                  />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }}
+                    formatter={(value: number) => {
+                      const labels: Record<number, string> = { 3: 'Alto', 2: 'Medio', 1: 'Bajo', 0: 'Sin dato' };
+                      return [labels[value] ?? value, 'Nivel de riesgo'];
+                    }}
+                  />
+                  <ReferenceLine y={3} stroke="#fca5a5" strokeDasharray="4 4" strokeWidth={1} />
+                  <ReferenceLine y={2} stroke="#fcd34d" strokeDasharray="4 4" strokeWidth={1} />
+                  <Line
+                    type="stepAfter"
+                    dataKey="valor"
+                    stroke="#C8102E"
+                    strokeWidth={2.5}
+                    dot={(props: any) => {
+                      const { cx, cy, payload, index } = props;
+                      const colors: Record<string, string> = { high: '#C8102E', medium: '#f59e0b', low: '#22c55e', unknown: '#9ca3af' };
+                      return <circle key={index} cx={cx} cy={cy} r={5} fill={colors[payload.nivel] ?? '#9ca3af'} stroke="#fff" strokeWidth={2} />;
+                    }}
+                    activeDot={{ r: 7 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            {/* Leyenda de periodos con colores */}
+            <div className="space-y-1.5">
+              {data.riesgo_evolucion.map((item, idx) => {
+                const riesgoColors = {
+                  high: { bg: 'bg-red-100', text: 'text-red-700', bar: 'bg-red-500', label: 'Alto', width: '100%' },
+                  medium: { bg: 'bg-amber-100', text: 'text-amber-700', bar: 'bg-amber-400', label: 'Medio', width: '66%' },
+                  low: { bg: 'bg-green-100', text: 'text-green-700', bar: 'bg-green-500', label: 'Bajo', width: '33%' },
+                  unknown: { bg: 'bg-gray-100', text: 'text-gray-500', bar: 'bg-gray-300', label: 'Sin dato', width: '10%' },
+                };
+                const c = riesgoColors[item.nivel_riesgo] ?? riesgoColors.unknown;
+                return (
+                  <div key={idx} className="flex items-center gap-3">
+                    <span className="text-xs font-mono text-gray-500 w-16 flex-shrink-0">{item.periodo}</span>
+                    <div className="flex-1 bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                      <div className={`${c.bar} h-2.5 rounded-full transition-all`} style={{ width: c.width }} />
+                    </div>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${c.bg} ${c.text} w-16 text-center flex-shrink-0`}>
+                      {c.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -642,8 +873,148 @@ export interface Intervencion {
 }
 
 function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | null; loading: boolean }) {
+  const navigate = useNavigate();
+  const [selected, setSelected] = useState<Intervencion | null>(null); // 4.1
+
+  const TIPO_LABEL: Record<string, string> = {
+    TUTORIA: 'Tutoría', CITACION: 'Citación', REMISION: 'Remisión',
+  };
+  const TIPO_COLOR: Record<string, string> = {
+    TUTORIA: 'bg-blue-100 text-blue-700',
+    CITACION: 'bg-yellow-100 text-yellow-700',
+    REMISION: 'bg-purple-100 text-purple-700',
+  };
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+      {/* Panel lateral de detalle — 4.1 */}
+      {selected && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setSelected(null)} />
+          <div className="relative z-10 w-full max-w-md bg-white shadow-2xl flex flex-col h-full overflow-y-auto">
+            {/* Header del panel */}
+            <div className="bg-red-800 px-6 py-4 flex items-center justify-between sticky top-0">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-white" />
+                <div>
+                  <h2 className="text-sm font-bold text-white">Detalle de Intervención</h2>
+                  <p className="text-[10px] text-red-200">#{selected.id}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelected(null)}
+                className="text-white/80 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Contenido del panel */}
+            <div className="p-6 space-y-5 flex-1">
+              {/* Tipo y fecha */}
+              <div className="flex items-center justify-between">
+                <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${TIPO_COLOR[selected.tipo] ?? 'bg-gray-100 text-gray-600'}`}>
+                  {TIPO_LABEL[selected.tipo] ?? selected.tipo}
+                </span>
+                <span className="text-xs font-mono text-gray-400">{selected.fecha}</span>
+              </div>
+
+              {/* Causa de la alerta */}
+              <div className="bg-red-50 border border-red-100 rounded-xl p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-red-400 mb-1">Causa de la Alerta</p>
+                <p className="text-sm font-semibold text-red-800">
+                  {selected.alerta_causa}
+                  <span className="ml-2 text-xs font-mono text-red-400">(Alerta #{selected.alerta_id})</span>
+                </p>
+                <span className={`mt-2 inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  selected.alerta_estado === 'activa' || selected.alerta_estado === 'active'
+                    ? 'bg-red-100 text-red-700'
+                    : selected.alerta_estado === 'cerrada' || selected.alerta_estado === 'closed'
+                    ? 'bg-gray-100 text-gray-600'
+                    : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {selected.alerta_estado}
+                </span>
+              </div>
+
+              {/* Atendido por */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Atendido por</p>
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500">
+                    {selected.usuario.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">{selected.usuario}</p>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                      selected.usuario_rol === 'BIENESTAR' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {selected.usuario_rol}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Observaciones */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Observaciones</p>
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                  <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
+                    {selected.observaciones}
+                  </p>
+                </div>
+              </div>
+
+              {/* Resultado */}
+              {selected.resultado && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-green-600 mb-2">Resultado / Conclusión</p>
+                  <div className="bg-green-50 rounded-xl p-4 border border-green-100">
+                    <p className="text-sm text-green-800 font-medium leading-relaxed">
+                      {selected.resultado}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Evidencia */}
+              {selected.evidencia && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Evidencia adjunta</p>
+                  <a
+                    href={selected.evidencia}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-xs text-[#C8102E] font-semibold bg-red-50 border border-red-100 px-4 py-2.5 rounded-xl hover:bg-red-100 transition-colors"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Ver documento adjunto
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex gap-3">
+              <button
+                onClick={() => navigate(`/dashboard/intervenciones/${selected.id}/evidencias`)}
+                className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-[#C8102E] rounded-xl hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Ver Evidencias
+              </button>
+              <button
+                onClick={() => setSelected(null)}
+                className="flex-1 px-4 py-2.5 text-sm font-bold text-gray-600 border border-gray-200 rounded-xl hover:bg-white transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header de sección */}
       <div className="bg-red-800 px-6 py-4 flex items-center gap-3">
         <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
@@ -687,74 +1058,40 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
                 {/* Dot/Indicator */}
                 <div className="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full border-2 border-white bg-[#C8102E] shadow-sm" />
 
-                <div className="bg-gray-50/50 rounded-xl p-5 border border-gray-150 hover:border-red-200 hover:bg-white transition-all duration-200 shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b border-gray-100">
+                {/* Tarjeta clickeable — 4.1 */}
+                <button
+                  onClick={() => setSelected(intervencion)}
+                  className="w-full text-left bg-gray-50/50 rounded-xl p-5 border border-gray-200 hover:border-red-200 hover:bg-white hover:shadow-md transition-all duration-200 shadow-sm group"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-gray-800">
-                        {intervencion.tipo}
+                      <span className="text-sm font-bold text-gray-800 group-hover:text-[#C8102E] transition-colors">
+                        {TIPO_LABEL[intervencion.tipo] ?? intervencion.tipo}
                       </span>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                        intervencion.usuario_rol === 'BIENESTAR' 
-                          ? 'bg-purple-100 text-purple-700' 
+                        intervencion.usuario_rol === 'BIENESTAR'
+                          ? 'bg-purple-100 text-purple-700'
                           : 'bg-blue-100 text-blue-700'
                       }`}>
                         {intervencion.usuario_rol}
                       </span>
                     </div>
-                    <span className="text-xs text-gray-400 font-mono font-medium">
-                      {intervencion.fecha}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-3">
-                      <div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Atendido por</span>
-                        <span className="text-xs font-semibold text-gray-700">{intervencion.usuario}</span>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Causa de la Alerta</span>
-                        <span className="text-xs font-medium text-gray-600 bg-red-50/50 border border-red-100 px-2 py-0.5 rounded mt-1 inline-block">
-                          {intervencion.alerta_causa} (Alerta #{intervencion.alerta_id})
-                        </span>
-                      </div>
-
-                      {intervencion.evidencia && (
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Evidencia</span>
-                          <a 
-                            href={intervencion.evidencia} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="text-xs text-[#C8102E] underline hover:no-underline font-semibold mt-1 inline-flex items-center gap-1"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            Ver documento adjunto
-                          </a>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-3">
-                      <div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Detalle de la intervención (Observaciones)</span>
-                        <p className="text-xs text-gray-600 whitespace-pre-line mt-1 bg-white p-2.5 rounded-lg border border-gray-100 leading-relaxed font-medium">
-                          {intervencion.observaciones}
-                        </p>
-                      </div>
-
-                      {intervencion.resultado && (
-                        <div className="bg-green-50/70 border border-green-150 rounded-lg p-3">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-green-700 block">Resultado / Conclusión</span>
-                          <p className="text-xs text-green-800 mt-1 font-semibold leading-relaxed">
-                            {intervencion.resultado}
-                          </p>
-                        </div>
-                      )}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400 font-mono">{intervencion.fecha}</span>
+                      <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-[#C8102E] transition-colors" />
                     </div>
                   </div>
-                </div>
+                  <p className="text-xs text-gray-500 line-clamp-2 text-left">
+                    <span className="font-semibold text-gray-600">Alerta: </span>
+                    {intervencion.alerta_causa}
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-1 text-left">
+                    Por: <span className="font-medium text-gray-600">{intervencion.usuario}</span>
+                    {intervencion.resultado && (
+                      <span className="ml-2 text-green-500 font-bold">· Con resultado</span>
+                    )}
+                  </p>
+                </button>
               </div>
             ))}
           </div>
@@ -773,6 +1110,8 @@ export default function StudentProfile() {
   const [intervenciones, setIntervenciones] = useState<Intervencion[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcMsg, setRecalcMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -821,6 +1160,40 @@ export default function StudentProfile() {
     if (id) fetchData();
   }, [id]);
 
+  const handleRecalcular = async () => {
+    if (!id) return;
+    setRecalculating(true);
+    setRecalcMsg(null);
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const res = await apiFetch(`${baseUrl}/api/alertas/estudiantes/${id}/recalcular/`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al recalcular');
+
+      // Refrescar datos del perfil e indicadores con los nuevos valores
+      const [studentRes, indicatorsRes] = await Promise.all([
+        apiFetch(`${baseUrl}/api/academico/students/${id}/`),
+        apiFetch(`${baseUrl}/api/academico/students/${id}/indicators/`),
+      ]);
+      if (studentRes.ok) setStudent(await studentRes.json());
+      if (indicatorsRes.ok) {
+        const d = await indicatorsRes.json();
+        setIndicadores(d.indicadores);
+      }
+
+      const nivelLabel: Record<string, string> = { high: 'Alto', medium: 'Medio', low: 'Bajo', unknown: 'Desconocido' };
+      setRecalcMsg(`Datos actualizados. Nivel de riesgo: ${nivelLabel[data.nivel_riesgo] ?? data.nivel_riesgo}`);
+      setTimeout(() => setRecalcMsg(null), 5000);
+    } catch (err: any) {
+      setRecalcMsg(`Error: ${err.message}`);
+      setTimeout(() => setRecalcMsg(null), 5000);
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
@@ -857,11 +1230,36 @@ export default function StudentProfile() {
             Volver a Estudiantes
           </Button>
         </Link>
-        <div className="flex items-center gap-2 text-xs text-gray-400">
-          <Hash className="w-3 h-3" />
-          <span>ID: {id}</span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRecalcular}
+            disabled={recalculating || loading}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[#C8102E] bg-white border border-[#C8102E]/20 rounded-xl hover:bg-red-50 hover:border-[#C8102E]/40 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Recalcula el promedio desde las notas y actualiza el nivel de riesgo"
+          >
+            <RefreshCw className={`w-4 h-4 ${recalculating ? 'animate-spin' : ''}`} />
+            {recalculating ? 'Actualizando...' : 'Actualizar riesgo'}
+          </button>
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <Hash className="w-3 h-3" />
+            <span>ID: {id}</span>
+          </div>
         </div>
       </div>
+
+      {/* Mensaje de resultado del recálculo */}
+      {recalcMsg && (
+        <div className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold border ${
+          recalcMsg.startsWith('Error')
+            ? 'bg-red-50 border-red-200 text-red-700'
+            : 'bg-green-50 border-green-200 text-green-700'
+        }`}>
+          {recalcMsg.startsWith('Error')
+            ? <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            : <CheckCircle2 className="w-4 h-4 flex-shrink-0" />}
+          {recalcMsg}
+        </div>
+      )}
 
       {/* Header del estudiante */}
       <div className="bg-gradient-to-r from-[#C8102E] to-[#a00d25] text-white rounded-xl p-6 shadow-md">
@@ -903,7 +1301,7 @@ export default function StudentProfile() {
       <FichaAcademica student={student} />
 
       {/* ── Bloque 2: Indicadores ────────────────────────────────────────── */}
-      <IndicadoresSection data={indicadores} loading={loading} />
+      <IndicadoresSection data={indicadores} loading={loading} studentName={student.nombre} historial={historial} />
 
       {/* ── Bloque 3: Historial Académico ────────────────────────────────── */}
       <HistorialAcademico data={historial} loading={loading} />
