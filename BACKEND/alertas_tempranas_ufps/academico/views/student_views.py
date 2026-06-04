@@ -222,6 +222,54 @@ def listar_estudiantes(request):
     # ── Construcción de resultados con nivel de riesgo ────────────────────────
     orden_niveles = {'high': 3, 'medium': 2, 'low': 1}
 
+    # Cargar el nivel de riesgo más reciente desde RiesgoEstudiantePeriodo para
+    # todos los estudiantes en una sola query, con fallback a RiesgoEstudiante.
+    from alertas.models import RiesgoEstudiantePeriodo as _REP, RiesgoEstudiante as _RE
+    from django.db.models import Subquery as _SQ, OuterRef as _OR
+
+    _ultimo_id_sq = (
+        _REP.objects
+        .filter(estudiante_id=_OR('estudiante_id'))
+        .order_by('-periodo__anio', '-periodo__semestre')
+        .values('id')[:1]
+    )
+    # Mapa codigo_estudiante → nivel_riesgo desde el periodo más reciente
+    nivel_periodo_map = dict(
+        _REP.objects
+        .filter(id=_SQ(_ultimo_id_sq))
+        .values_list('estudiante_id', 'nivel_riesgo')
+    )
+    # Mapa codigo_estudiante → nivel_riesgo desde snapshot (fallback)
+    nivel_snap_map = dict(
+        _RE.objects.values_list('estudiante_id', 'nivel_riesgo')
+    )
+
+    # Calcular PPA real desde notas para todos los estudiantes de la página
+    # (solo promedio ponderado por créditos; sin N+1: una sola query agregada)
+    from django.db.models import Sum as _Sum, Avg as _Avg, F as _F
+    from decimal import Decimal
+
+    def _ppa_desde_notas(codigos):
+        """Devuelve dict codigo → ppa calculado desde notas."""
+        from academico.models import Nota as _Nota
+        rows = (
+            _Nota.objects
+            .filter(estudiante_id__in=codigos, definitiva__isnull=False)
+            .values('estudiante_id')
+            .annotate(
+                puntos=_Sum(_F('definitiva') * _F('curso__materia__creditos')),
+                creditos=_Sum('curso__materia__creditos'),
+            )
+        )
+        result = {}
+        for r in rows:
+            if r['creditos']:
+                result[r['estudiante_id']] = round(float(r['puntos']) / float(r['creditos']), 2)
+        return result
+
+    codigos_pagina = [e['codigo'] for e in estudiantes_raw]
+    ppa_map = _ppa_desde_notas(codigos_pagina)
+
     def _nivel_por_promedio(promedio_val):
         if promedio_val is None:
             return 'unknown'
@@ -247,16 +295,26 @@ def listar_estudiantes(request):
 
     results = []
     for e in estudiantes_raw:
-        nivel = _nivel_por_promedio(e['promedio'])
+        codigo = e['codigo']
+
+        # Nivel de riesgo: usar el más reciente de RiesgoEstudiantePeriodo,
+        # con fallback a RiesgoEstudiante snapshot, y como último recurso
+        # calcular desde el PPA real.
+        ppa_real = ppa_map.get(codigo)
+        nivel = (
+            nivel_periodo_map.get(codigo)
+            or nivel_snap_map.get(codigo)
+            or _nivel_por_promedio(ppa_real if ppa_real is not None else e['promedio'])
+        )
 
         if risk and risk != nivel:
             continue
 
         results.append({
-            'codigo':           e['codigo'],
+            'codigo':           codigo,
             'nombre':           e['nombre'],
             'semestre':         e['semestre'],
-            'promedio':         float(e['promedio']) if e['promedio'] is not None else None,
+            'promedio':         ppa_real if ppa_real is not None else (float(e['promedio']) if e['promedio'] is not None else None),
             'nivel_riesgo':     nivel,
             'alertas_activas':  e['total_alertas'],
             'estado_matricula': e['estado_matricula'],
@@ -318,6 +376,19 @@ def obtener_detalle_estudiante(request, codigo):
         except Exception:
             nivel = calcular_nivel_riesgo(e)
 
+        # Calcular PPA real desde notas (promedio ponderado por créditos)
+        from django.db.models import Sum as _DSum, F as _DF
+        _row = Nota.objects.filter(
+            estudiante=e, definitiva__isnull=False
+        ).aggregate(
+            puntos=_DSum(_DF('definitiva') * _DF('curso__materia__creditos')),
+            creditos=_DSum('curso__materia__creditos'),
+        )
+        if _row['creditos']:
+            ppa_calculado = round(float(_row['puntos']) / float(_row['creditos']), 2)
+        else:
+            ppa_calculado = float(e.promedio) if e.promedio is not None else None
+
         return JsonResponse({
             'codigo':              e.codigo,
             'nombre':              e.nombre,
@@ -326,7 +397,7 @@ def obtener_detalle_estudiante(request, codigo):
             'semestre':            e.semestre,
             'pensum':              e.pensum,
             'ingreso':             e.ingreso.isoformat() if e.ingreso else None,
-            'promedio':            float(e.promedio) if e.promedio is not None else None,
+            'promedio':            ppa_calculado,
             'estado_matricula':    e.estado_matricula,
             'celular':             e.celular,
             'email_personal':      e.email_personal,
