@@ -152,26 +152,53 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
         return data
 
     elif tipo == 'rendimiento-academico':
+        from django.db.models import Sum, Case, When, IntegerField
         qs = Estudiante.objects.all()
         if estudiantes_ids is not None:
             qs = qs.filter(codigo__in=estudiantes_ids)
-        data = []
-        for e in qs:
-            notas = Nota.objects.filter(estudiante=e)
-            if cursos_ids is not None:
-                notas = notas.filter(curso__in=cursos_ids)
-            passed = notas.filter(definitiva__gte=3.0).count()
-            failed = notas.filter(definitiva__lt=3.0).count()
-            credits = sum(
-                n.curso.materia.creditos
-                for n in notas.select_related('curso__materia')
-                if n.definitiva and n.definitiva >= 3.0 and n.curso.materia.creditos
+
+        # Una sola query agregada: contar aprobadas, reprobadas y créditos aprobados
+        notas_filter = Q(nota__isnull=False)
+        if cursos_ids is not None:
+            notas_filter &= Q(nota__curso__in=cursos_ids)
+
+        est_agg = (
+            qs.annotate(
+                passed=Count(
+                    'nota',
+                    filter=Q(nota__definitiva__gte=3.0) & (
+                        Q(nota__curso__in=cursos_ids) if cursos_ids is not None else Q()
+                    ),
+                ),
+                failed=Count(
+                    'nota',
+                    filter=Q(nota__definitiva__lt=3.0) & (
+                        Q(nota__curso__in=cursos_ids) if cursos_ids is not None else Q()
+                    ),
+                ),
+                credits=Sum(
+                    'nota__curso__materia__creditos',
+                    filter=Q(nota__definitiva__gte=3.0) & (
+                        Q(nota__curso__in=cursos_ids) if cursos_ids is not None else Q()
+                    ),
+                ),
             )
+            .values('codigo', 'nombre', 'semestre', 'promedio', 'passed', 'failed', 'credits')
+        )
+
+        data = []
+        today = datetime.date.today().isoformat()
+        for e in est_agg:
             data.append({
-                'code': e.codigo, 'name': e.nombre, 'semester': e.semestre,
-                'gpa': float(e.promedio) if e.promedio else 0.0,
-                'passed': passed, 'failed': failed,
-                'credits': credits or 16, 'program': 'systems',
+                'code':     e['codigo'],
+                'name':     e['nombre'],
+                'semester': e['semestre'],
+                'gpa':      float(e['promedio']) if e['promedio'] else 0.0,
+                'passed':   e['passed'] or 0,
+                'failed':   e['failed'] or 0,
+                'credits':  e['credits'] or 0,
+                'program':  'systems',
+                'date':     today,  # fecha de generación para que el filtro de fechas no descarte filas
             })
         return data
 
@@ -179,18 +206,38 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
         qs = Curso.objects.all().select_related('materia', 'docente')
         if cursos_ids is not None:
             qs = qs.filter(id__in=cursos_ids)
+
+        # Una sola query agregada para evitar N+1
+        curso_ids_list = list(qs.values_list('id', flat=True))
+        stats = (
+            Nota.objects
+            .filter(curso_id__in=curso_ids_list)
+            .values('curso_id')
+            .annotate(
+                total=Count('id'),
+                failed_count=Count('id', filter=Q(definitiva__lt=3.0, definitiva__isnull=False)),
+            )
+        )
+        stats_map = {row['curso_id']: row for row in stats}
+
+        today = datetime.date.today().isoformat()
         data = []
         for c in qs:
-            notas = Nota.objects.filter(curso=c)
-            enrolled = notas.count() or 40
-            failedCount = notas.filter(definitiva__lt=3.0).count()
+            s = stats_map.get(c.id)
+            enrolled = s['total'] if s else 0
+            failedCount = s['failed_count'] if s else 0
             rate = int(failedCount / enrolled * 100) if enrolled > 0 else 0
             data.append({
-                'courseCode': c.materia.codigo, 'subject': c.materia.nombre,
-                'group': c.grupo, 'teacher': c.docente.nombre,
-                'enrolled': enrolled, 'failedCount': failedCount, 'rate': rate,
-                'program': 'systems',
-                'risk': 'ALTO' if rate > 30 else 'MEDIO' if rate > 15 else 'BAJO',
+                'courseCode':  c.materia.codigo,
+                'subject':     c.materia.nombre,
+                'group':       c.grupo,
+                'teacher':     c.docente.nombre if c.docente else 'Sin asignar',
+                'enrolled':    enrolled,
+                'failedCount': failedCount,
+                'rate':        rate,
+                'program':     'systems',
+                'risk':        'ALTO' if rate > 30 else 'MEDIO' if rate > 15 else 'BAJO',
+                'date':        today,  # requerido para que el filtro de fechas no descarte la fila
             })
         return data
 
@@ -220,49 +267,95 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
         return data
 
     elif tipo == 'analisis-cohortes':
-        estudiantes = Estudiante.objects.all()
-        if estudiantes_ids is not None:
-            estudiantes = estudiantes.filter(codigo__in=estudiantes_ids)
-        total_est = estudiantes.count() or 200
-        con_promedio = estudiantes.filter(promedio__isnull=False)
-        promedio_global = (
-            sum(float(e.promedio) for e in con_promedio) / con_promedio.count()
-            if con_promedio.count() > 0 else 3.0
-        )
-        alertas_qs = Alerta.objects.all()
-        if estudiantes_ids is not None:
-            alertas_qs = alertas_qs.filter(estudiante_id__in=estudiantes_ids)
-        total_alertas = alertas_qs.count()
-        riesgo_qs_periodo = RiesgoEstudiantePeriodo.objects
-        if estudiantes_ids is not None:
-            riesgo_qs_periodo = riesgo_qs_periodo.filter(estudiante_id__in=estudiantes_ids)
-        # Nivel del periodo más reciente por estudiante
+        # Calcula los datos reales agrupados por periodo usando solo los
+        # estudiantes del docente (si aplica el filtro).
         from django.db.models import Subquery as _SQ2, OuterRef as _OR2
+
+        # IDs de estudiantes a considerar
+        est_qs = Estudiante.objects.all()
+        if estudiantes_ids is not None:
+            est_qs = est_qs.filter(codigo__in=estudiantes_ids)
+        est_ids_set = list(est_qs.values_list('codigo', flat=True))
+
+        # Agrupar notas por periodo para obtener: estudiantes distintos y promedio
+        notas_base = Nota.objects.filter(estudiante_id__in=est_ids_set)
+        if cursos_ids is not None:
+            notas_base = notas_base.filter(curso_id__in=cursos_ids)
+
+        periodos_stats = (
+            notas_base
+            .values('periodo__anio', 'periodo__semestre')
+            .annotate(
+                total_estudiantes=Count('estudiante_id', distinct=True),
+                promedio_cohorte=Avg('definitiva'),
+            )
+            .order_by('periodo__anio', 'periodo__semestre')
+        )
+
+        # Alertas por periodo: usamos fecha_generacion como proxy del periodo
+        alertas_base = Alerta.objects.filter(estudiante_id__in=est_ids_set)
+
+        # Nivel de riesgo del periodo más reciente de cada estudiante
         ult_id_sq2 = (
             RiesgoEstudiantePeriodo.objects
             .filter(estudiante_id=_OR2('estudiante_id'))
             .order_by('-periodo__anio', '-periodo__semestre')
             .values('id')[:1]
         )
-        riesgo_qs_actual = RiesgoEstudiantePeriodo.objects.filter(id=_SQ2(ult_id_sq2))
-        if estudiantes_ids is not None:
-            riesgo_qs_actual = riesgo_qs_actual.filter(estudiante_id__in=estudiantes_ids)
-        return [
-            {'cohort': 'Periodo 2025-1', 'totalStudents': total_est - 15,
-             'averageGpa': round(promedio_global + 0.1, 2), 'highRisk': 15, 'mediumRisk': 30,
-             'lowRisk': total_est - 45, 'totalAlerts': max(0, total_alertas - 10),
-             'program': 'systems', 'risk': 'MEDIO', 'date': '2025-06-30'},
-            {'cohort': 'Periodo 2025-2', 'totalStudents': total_est - 5,
-             'averageGpa': round(promedio_global + 0.05, 2), 'highRisk': 20, 'mediumRisk': 45,
-             'lowRisk': total_est - 70, 'totalAlerts': max(0, total_alertas - 5),
-             'program': 'systems', 'risk': 'ALTO', 'date': '2025-12-15'},
-            {'cohort': 'Periodo 2026-1', 'totalStudents': total_est,
-             'averageGpa': round(promedio_global, 2),
-             'highRisk':   riesgo_qs_actual.filter(nivel_riesgo='high').count() or 8,
-             'mediumRisk': riesgo_qs_actual.filter(nivel_riesgo='medium').count() or 12,
-             'lowRisk':    riesgo_qs_actual.filter(nivel_riesgo='low').count() or 80,
-             'totalAlerts': total_alertas, 'program': 'systems', 'risk': 'ALTO', 'date': '2026-05-20'},
-        ]
+
+        data = []
+        for row in periodos_stats:
+            anio     = row['periodo__anio']
+            semestre = row['periodo__semestre']
+            cohort   = f'Periodo {anio}-{semestre}'
+            total    = row['total_estudiantes'] or 0
+            avg_gpa  = round(float(row['promedio_cohorte']), 2) if row['promedio_cohorte'] else 0.0
+
+            # Estudiantes con nota en este periodo
+            est_en_periodo = list(
+                notas_base
+                .filter(periodo__anio=anio, periodo__semestre=semestre)
+                .values_list('estudiante_id', flat=True)
+                .distinct()
+            )
+
+            # Conteo de niveles de riesgo para estos estudiantes en ese periodo
+            riesgo_periodo_qs = RiesgoEstudiantePeriodo.objects.filter(
+                estudiante_id__in=est_en_periodo,
+                periodo__anio=anio,
+                periodo__semestre=semestre,
+            )
+            high   = riesgo_periodo_qs.filter(nivel_riesgo='high').count()
+            medium = riesgo_periodo_qs.filter(nivel_riesgo='medium').count()
+            low    = riesgo_periodo_qs.filter(nivel_riesgo='low').count()
+
+            # Alertas generadas en este periodo (aproximado por año)
+            total_alertas = alertas_base.filter(
+                fecha_generacion__year=anio,
+            ).count()
+
+            # Nivel de riesgo dominante del cohorte
+            if high >= medium and high >= low:
+                riesgo_dom = 'ALTO'
+            elif medium >= low:
+                riesgo_dom = 'MEDIO'
+            else:
+                riesgo_dom = 'BAJO'
+
+            data.append({
+                'cohort':         cohort,
+                'totalStudents':  total,
+                'averageGpa':     avg_gpa,
+                'highRisk':       high,
+                'mediumRisk':     medium,
+                'lowRisk':        low,
+                'totalAlerts':    total_alertas,
+                'program':        'systems',
+                'risk':           riesgo_dom,
+                'date':           f'{anio}-{"06" if semestre == 1 else "12"}-30',
+            })
+
+        return data
 
     raise ValueError(f'Tipo de reporte inválido: {tipo}')
 
@@ -349,7 +442,65 @@ def exportar_reporte(request):
     }
     titulo = titulos.get(tipo, tipo)
 
-    headers = [h for h in (data_list[0].keys() if data_list else []) if h != 'program']
+    # ── Columnas legibles (mismos labels que la previsualización) ─────────────
+    # Cada entrada: (clave_en_dict, label_visible)
+    COLUMNAS = {
+        'riesgo-estudiantil': [
+            ('code',     'Código'),
+            ('name',     'Estudiante'),
+            ('semester', 'Semestre'),
+            ('gpa',      'Promedio'),
+            ('alerts',   'Alertas Activas'),
+            ('risk',     'Nivel de Riesgo'),
+        ],
+        'resumen-alertas': [
+            ('studentCode', 'Código Est.'),
+            ('studentName', 'Estudiante'),
+            ('alertType',   'Tipo de Alerta'),
+            ('rule',        'Regla Aplicada'),
+            ('date',        'Fecha Generación'),
+            ('status',      'Estado'),
+        ],
+        'rendimiento-academico': [
+            ('code',     'Código'),
+            ('name',     'Estudiante'),
+            ('semester', 'Semestre'),
+            ('gpa',      'Promedio PPA'),
+            ('passed',   'Aprobadas'),
+            ('failed',   'Reprobadas'),
+            ('credits',  'Créditos Aprobados'),
+        ],
+        'reprobacion-cursos': [
+            ('subject',     'Materia'),
+            ('courseCode',  'Código Curso'),
+            ('group',       'Grupo'),
+            ('teacher',     'Docente'),
+            ('enrolled',    'Matriculados'),
+            ('failedCount', 'Reprobados'),
+            ('rate',        'Tasa de Reprobación (%)'),
+        ],
+        'seguimiento-intervenciones': [
+            ('date',          'Fecha'),
+            ('student',       'Estudiante'),
+            ('type',          'Tipo'),
+            ('counselor',     'Responsable'),
+            ('result',        'Resultado'),
+            ('evidenceCount', 'Evidencias'),
+            ('notes',         'Observaciones'),
+        ],
+        'analisis-cohortes': [
+            ('cohort',        'Cohorte / Semestre'),
+            ('totalStudents', 'Total Estudiantes'),
+            ('averageGpa',    'Promedio Cohorte'),
+            ('highRisk',      'Riesgo Alto'),
+            ('mediumRisk',    'Riesgo Medio'),
+            ('lowRisk',       'Riesgo Bajo'),
+            ('totalAlerts',   'Total Alertas'),
+        ],
+    }
+    col_defs = COLUMNAS.get(tipo, [(k, k) for k in (data_list[0].keys() if data_list else [])])
+    keys    = [c[0] for c in col_defs]
+    headers = [c[1] for c in col_defs]
     filtros_txt = f'Período: {fecha_desde or "—"} al {fecha_hasta or "—"}'
     if riesgo:    filtros_txt += f' | Riesgo: {riesgo}'
     if programa:  filtros_txt += f' | Programa: {programa}'
@@ -395,16 +546,17 @@ def exportar_reporte(request):
             table_data = [[Paragraph(str(h), hdr_style) for h in headers]]
             for row in data_list:
                 table_data.append([
-                    Paragraph(str(row.get(h, '') or ''), cell_style)
-                    for h in headers
+                    Paragraph(str(row.get(k, '') or ''), cell_style)
+                    for k in keys
                 ])
 
             # Anchos proporcionales al contenido máximo de cada columna
             col_max_lens = []
-            for h in headers:
+            for i, h in enumerate(headers):
+                k = keys[i]
                 max_len = max(
                     len(str(h)),
-                    max((len(str(row.get(h, '') or '')) for row in data_list), default=0)
+                    max((len(str(row.get(k, '') or '')) for row in data_list), default=0)
                 )
                 col_max_lens.append(max(max_len, 6))
             total_len = sum(col_max_lens)
@@ -457,7 +609,7 @@ def exportar_reporte(request):
 
     alt_fill = PatternFill(start_color='F5F5F5', end_color='F5F5F5', fill_type='solid')
     for i, row in enumerate(data_list):
-        ws.append([row.get(h, '') for h in headers])
+        ws.append([row.get(k, '') for k in keys])
         if i % 2 == 1:
             for cell in ws[ws.max_row]:
                 cell.fill = alt_fill
