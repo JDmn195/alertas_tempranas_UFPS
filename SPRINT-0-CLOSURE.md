@@ -1,4 +1,4 @@
-# Cierre de Sprint 0 — Sistema de Alertas Tempranas Académicas (UFPS)
+# Sprint 0 — Sistema de Alertas Tempranas Académicas (UFPS)
 
 **Proyecto:** Sistema de Alertas Tempranas Académicas  
 **Institución:** Universidad Francisco de Paula Santander (UFPS)  
