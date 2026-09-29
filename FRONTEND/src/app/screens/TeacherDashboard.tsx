@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router';
 import {
   AlertTriangle, BookOpen, Users, ChevronLeft, ChevronRight,
   RefreshCw, X, TrendingUp, CheckCircle2, BarChart2,
-  Activity, BookX, ExternalLink,
+  Activity, BookX, ExternalLink, CheckSquare,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -12,6 +12,8 @@ import {
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { apiFetch } from '../../services/apiFetch';
+import AttendanceModal from '../components/AttendanceModal';
+
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -90,6 +92,10 @@ export default function TeacherDashboard() {
 
   // Modal: detalle de curso
   const [selectedCurso, setSelectedCurso]   = useState<CursoDoc | null>(null);
+  
+  // Modal: toma de asistencia
+  const [attendanceCurso, setAttendanceCurso] = useState<CursoDoc | null>(null);
+
   const [modalStudents, setModalStudents]   = useState<EstudianteRiesgo[]>([]);
   const [modalPage, setModalPage]           = useState(1);
   const [modalPages, setModalPages]         = useState(1);
@@ -413,9 +419,24 @@ export default function TeacherDashboard() {
                     </div>
                   )}
                 </div>
+                
+                <div className="pt-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full justify-center text-[#C8102E] border-[#C8102E]/30 hover:bg-red-50 hover:text-red-700 hover:border-red-300"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAttendanceCurso(curso);
+                    }}
+                  >
+                    <CheckSquare className="w-4 h-4 mr-2" /> Tomar asistencia
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
+
         )}
       </div>
 
@@ -504,6 +525,14 @@ export default function TeacherDashboard() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ── Modal: Toma de Asistencia ────────────── */}
+      {attendanceCurso && (
+        <AttendanceModal 
+          curso={attendanceCurso} 
+          onClose={() => setAttendanceCurso(null)} 
+        />
       )}
     </div>
   );
