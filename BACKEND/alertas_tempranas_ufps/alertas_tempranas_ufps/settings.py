@@ -133,6 +133,9 @@ if 'test' in sys.argv:
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 
+# En los tests las tareas en segundo plano corren síncronas (ver alertas/tareas.py)
+TAREAS_EN_SEGUNDO_PLANO = 'test' not in sys.argv
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators

@@ -376,15 +376,12 @@ def importar_estudiantes_dirplan(request):
             # Fix 1.2: se ejecuta en background para no demorar la respuesta HTTP
             try:
                 from alertas.views.alert_generation_views import reprocesar_alertas_completas
-                import threading
+                from alertas.tareas import ejecutar_en_segundo_plano
                 codigos_importados = [est.codigo for est in estudiantes_objs]
                 def _generar_alertas_bg():
-                    try:
-                        qs = Estudiante.objects.filter(codigo__in=codigos_importados)
-                        reprocesar_alertas_completas(qs, usuario=None)
-                    except Exception as bg_err:
-                        print(f"[BG] Error en generación automática de alertas: {bg_err}")
-                threading.Thread(target=_generar_alertas_bg, daemon=True).start()
+                    qs = Estudiante.objects.filter(codigo__in=codigos_importados)
+                    reprocesar_alertas_completas(qs, usuario=None)
+                ejecutar_en_segundo_plano(_generar_alertas_bg)
             except Exception as ae:
                 logger.warning("Error en generación automática de alertas tras importar estudiantes: %s", ae, exc_info=True)
 
@@ -657,18 +654,15 @@ def importar_historial_academico(request):
         # Fix 1.2: se ejecuta en background para no demorar la respuesta HTTP
         try:
             from alertas.views.alert_generation_views import calcular_y_guardar_riesgo_por_periodos, reprocesar_alertas_completas
-            import threading
+            from alertas.tareas import ejecutar_en_segundo_plano
             _codigo = codigo_estudiante
             _est = estudiante
             def _recalcular_bg():
-                try:
-                    calcular_y_guardar_riesgo_por_periodos(_est)
-                    reprocesar_alertas_completas(
-                        Estudiante.objects.filter(codigo=_codigo), usuario=None
-                    )
-                except Exception as bg_err:
-                    print(f"[BG] Error en recálculo automático de riesgo/alertas: {bg_err}")
-            threading.Thread(target=_recalcular_bg, daemon=True).start()
+                calcular_y_guardar_riesgo_por_periodos(_est)
+                reprocesar_alertas_completas(
+                    Estudiante.objects.filter(codigo=_codigo), usuario=None
+                )
+            ejecutar_en_segundo_plano(_recalcular_bg)
         except Exception as ae:
             logger.warning("Error en generación automática de alertas tras importar historial de '%s': %s",
                            codigo_estudiante, ae, exc_info=True)
