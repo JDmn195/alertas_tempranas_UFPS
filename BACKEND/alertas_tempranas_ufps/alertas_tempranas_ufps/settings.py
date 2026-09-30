@@ -243,3 +243,16 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
 
 # Tamaño máximo de archivos de importación en MB (por defecto 10 MB)
 MAX_IMPORT_FILE_SIZE_MB = int(os.environ.get('MAX_IMPORT_FILE_SIZE_MB', 10))
+
+# ==============================================================================
+# HU-29: RE-EVALUACIÓN PERIÓDICA DEL RIESGO
+# ==============================================================================
+# Token que debe enviar el programador externo (GitHub Actions / cron) en el
+# header X-Cron-Token. Si no se define, el endpoint programado queda deshabilitado.
+REEVALUACION_CRON_TOKEN = os.environ.get('REEVALUACION_CRON_TOKEN', '')
+# Número máximo de intentos por ejecución (1 = sin reintentos)
+REEVALUACION_MAX_INTENTOS = int(os.environ.get('REEVALUACION_MAX_INTENTOS', 3))
+# Espera base entre reintentos, en segundos (se duplica en cada intento)
+REEVALUACION_ESPERA_SEGUNDOS = int(os.environ.get('REEVALUACION_ESPERA_SEGUNDOS', 60))
+# Una ejecución EN_CURSO más antigua que esto se considera abandonada y no bloquea
+REEVALUACION_BLOQUEO_HORAS = int(os.environ.get('REEVALUACION_BLOQUEO_HORAS', 2))

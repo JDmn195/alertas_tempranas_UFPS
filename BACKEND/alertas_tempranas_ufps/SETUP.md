@@ -135,6 +135,27 @@ Si ves la página de bienvenida de Django, ¡el backend está funcionando! 🎉
 
 ---
 
+## Re-evaluación periódica del riesgo (HU-29)
+
+El sistema re-evalúa el riesgo de todos los estudiantes (excepto retirados, graduados y cancelados) con las reglas activas, **sin necesidad de una nueva importación**: recalcula promedio y riesgo por periodo, crea alertas nuevas, actualiza las abiertas y cierra las que ya no aplican. Cada ejecución (y cada reintento) queda registrada en la tabla `ejecucion_reevaluacion`.
+
+**Ejecutarla a mano (local):**
+```bash
+python manage.py reevaluar_riesgo
+python manage.py reevaluar_riesgo --max-intentos 1 --codigos 1151234
+```
+
+**Programación en producción:** el workflow `.github/workflows/reevaluacion-riesgo.yml` la dispara todos los días a las 2:00 a. m. (hora Colombia) llamando a `POST /api/alertas/reevaluacion/programada/`. Para activarla:
+
+1. En Render, define la variable `REEVALUACION_CRON_TOKEN` con un valor secreto largo.
+2. En GitHub → *Settings → Secrets and variables → Actions*, crea `BACKEND_URL` (URL del backend en Render) y `REEVALUACION_CRON_TOKEN` (el mismo valor).
+
+**Reintentos:** si un intento falla por completo, se repite con espera exponencial (60 s, 120 s…) hasta `REEVALUACION_MAX_INTENTOS`. Si solo fallan algunos estudiantes, el reintento procesa únicamente esos. Si faltan reglas activas, no se reintenta.
+
+**Consultar la bitácora:** `GET /api/alertas/reevaluacion/ejecuciones/` y `GET /api/alertas/reevaluacion/ejecuciones/<id>/` (ADMINISTRADOR o DIRECTOR). Un administrador también puede lanzarla con `POST /api/alertas/reevaluacion/ejecutar/`.
+
+---
+
 ## ❗ Errores comunes
 
 | Error | Causa probable | Solución |
