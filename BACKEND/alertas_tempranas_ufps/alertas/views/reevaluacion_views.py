@@ -10,11 +10,8 @@ La re-evaluación corre en un hilo para no exceder el timeout de gunicorn;
 la respuesta es 202 y el resultado queda en la bitácora.
 """
 import hmac
-import logging
-import threading
 
 from django.conf import settings
-from django.db import connection
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
@@ -22,24 +19,19 @@ from django.views.decorators.http import require_http_methods
 
 from alertas.models import EjecucionReevaluacion
 from alertas.reevaluacion import ReevaluacionEnCurso, ejecutar_reevaluacion, hay_ejecucion_en_curso
+from alertas.tareas import ejecutar_en_segundo_plano
 from usuarios.decorators import requiere_rol
 
-logger = logging.getLogger(__name__)
 
-
-def _ejecutar_en_hilo(origen, usuario):
+def _reevaluar(origen, usuario):
     try:
         ejecutar_reevaluacion(origen=origen, usuario=usuario)
     except ReevaluacionEnCurso:
         pass
-    except Exception as e:
-        logger.error("Re-evaluación en segundo plano falló: %s", e, exc_info=True)
-    finally:
-        connection.close()
 
 
 def lanzar_en_segundo_plano(origen, usuario=None):
-    threading.Thread(target=_ejecutar_en_hilo, args=(origen, usuario), daemon=True).start()
+    ejecutar_en_segundo_plano(_reevaluar, origen, usuario)
 
 
 def _iniciar(origen, usuario=None):

@@ -1,10 +1,10 @@
 import json
-import threading
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
 from ..models import Regla
+from ..tareas import ejecutar_en_segundo_plano
 from django.db.models import ProtectedError
 from usuarios.models import Usuario
 from usuarios.decorators import requiere_rol
@@ -13,21 +13,18 @@ from usuarios.utils import registrar_auditoria
 
 def _recalcular_en_background(usuario, regla_id=None):
     """
-    Lanza reprocesar_alertas_completas en un hilo separado para no bloquear la respuesta.
+    Recalcula el riesgo tras crear/modificar una regla (se lanza en segundo plano).
     Fix 3.3: si se pasa regla_id, solo reprocesa alertas de esa regla.
     """
     from alertas.views.alert_generation_views import reprocesar_alertas_completas
     from alertas.models import Regla as _Regla
-    try:
-        regla_obj = None
-        if regla_id:
-            try:
-                regla_obj = _Regla.objects.get(pk=regla_id)
-            except _Regla.DoesNotExist:
-                pass
-        reprocesar_alertas_completas(usuario=usuario, regla_especifica=regla_obj)
-    except Exception:
-        pass  # Errores en background no deben afectar la respuesta al usuario
+    regla_obj = None
+    if regla_id:
+        try:
+            regla_obj = _Regla.objects.get(pk=regla_id)
+        except _Regla.DoesNotExist:
+            pass
+    reprocesar_alertas_completas(usuario=usuario, regla_especifica=regla_obj)
 
 
 @csrf_exempt
@@ -68,11 +65,7 @@ def listar_crear_reglas(request):
             registrar_auditoria(request.usuario, 'CREAR_REGLA', f"Regla '{regla.nombre}' creada.")
 
             # Recalcular riesgo en background — Fix 3.3: solo para esta regla
-            threading.Thread(
-                target=_recalcular_en_background,
-                args=(request.usuario, regla.id),
-                daemon=True
-            ).start()
+            ejecutar_en_segundo_plano(_recalcular_en_background, request.usuario, regla.id)
 
             return JsonResponse({
                 'id': regla.id,
@@ -135,11 +128,7 @@ def detalle_regla(request, pk):
             registrar_auditoria(request.usuario, accion, msg_audit)
 
             # Recalcular riesgo en background — Fix 3.3: solo para esta regla
-            threading.Thread(
-                target=_recalcular_en_background,
-                args=(request.usuario, regla.id),
-                daemon=True
-            ).start()
+            ejecutar_en_segundo_plano(_recalcular_en_background, request.usuario, regla.id)
 
             return JsonResponse({'mensaje': msg_resp})
         except Exception as e:
