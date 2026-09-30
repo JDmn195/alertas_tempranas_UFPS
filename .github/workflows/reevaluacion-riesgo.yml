@@ -1,0 +1,35 @@
+# HU-29: Programación de la re-evaluación periódica del riesgo académico.
+#
+# Todos los días a las 2:00 a. m. (hora Colombia, UTC-5) llama al endpoint
+# programado del backend, que re-evalúa el riesgo y registra la ejecución.
+#
+# Secretos requeridos en GitHub (Settings → Secrets and variables → Actions):
+#   BACKEND_URL              URL base del backend, p. ej. https://mi-backend.onrender.com
+#   REEVALUACION_CRON_TOKEN  Mismo valor que la variable de entorno del backend
+name: Re-evaluación periódica del riesgo
+
+on:
+  schedule:
+    - cron: '0 7 * * *'   # 07:00 UTC = 02:00 America/Bogota
+  workflow_dispatch:       # Permite lanzarla a mano desde la pestaña Actions
+
+jobs:
+  reevaluar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar re-evaluación
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          CRON_TOKEN: ${{ secrets.REEVALUACION_CRON_TOKEN }}
+        run: |
+          # Reintentos para tolerar el arranque en frío de Render y fallos de red.
+          # 202 = iniciada, 409 = ya había una en curso (no es un error).
+          status=$(curl --silent --output response.json --write-out '%{http_code}' \
+            --retry 5 --retry-delay 30 --retry-all-errors --max-time 120 \
+            -X POST "$BACKEND_URL/api/alertas/reevaluacion/programada/" \
+            -H "X-Cron-Token: $CRON_TOKEN")
+          cat response.json; echo
+          echo "HTTP $status"
+          if [ "$status" != "202" ] && [ "$status" != "409" ]; then
+            exit 1
+          fi
