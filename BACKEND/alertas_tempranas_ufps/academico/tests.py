@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from academico.models import Curso, Docente, Materia, Estudiante, Periodo, Nota
-from alertas.models import RiesgoEstudiante, Alerta, Regla
+from alertas.models import RiesgoEstudiante, Alerta, Regla, RiesgoEstudiantePeriodo
 from usuarios.models import Usuario
 
 class ImportViewsTestCase(TestCase):
@@ -149,6 +149,8 @@ class ImportViewsTestCase(TestCase):
 
         RiesgoEstudiante.objects.create(estudiante=est1, nivel_riesgo="high")
         RiesgoEstudiante.objects.create(estudiante=est2, nivel_riesgo="low")
+        RiesgoEstudiantePeriodo.objects.create(estudiante=est1, periodo=periodo, nivel_riesgo='high')
+        RiesgoEstudiantePeriodo.objects.create(estudiante=est2, periodo=periodo, nivel_riesgo='low')
 
         regla = Regla.objects.create(nombre="Prueba", tipo="PROMEDIO", valor_umbral=3.0, operador="<", nivel="high")
         Alerta.objects.create(estudiante=est1, regla=regla, estado="activa")
