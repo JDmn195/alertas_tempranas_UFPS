@@ -65,7 +65,7 @@ def _calcular_nivel_para_periodo(estudiante, periodo, reglas, semestre_en_period
     # Atraso: materias obligatorias de semestres anteriores al semestre_ref sin aprobar
     atraso = _Materia.objects.filter(
         semestre__lt=semestre_ref
-    ).exclude(codigo__in=aprobadas_ids).exclude(tipo__icontains='electiva').count()
+    ).exclude(codigo__in=aprobadas_ids).filter(tipo='linea').count()
 
     orden_niveles = {'high': 3, 'medium': 2, 'low': 1}
     nivel_actual = 'low'
@@ -215,7 +215,7 @@ def _evaluar_regla_para_estudiante(est, r):
 
             atrasadas_qs = Materia.objects.filter(
                 semestre__lt=est.semestre
-            ).exclude(codigo__in=aprobadas_ids).exclude(tipo__icontains='electiva')
+            ).exclude(codigo__in=aprobadas_ids).filter(tipo='linea')
             val = atrasadas_qs.count()
             metadata_regla = {
                 'semestre_actual': est.semestre,
