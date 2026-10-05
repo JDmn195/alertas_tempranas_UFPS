@@ -8,7 +8,7 @@ import { apiFetch } from '../../services/apiFetch';
 
 export default function AdminDashboard() {
   const [dragActive, setDragActive] = useState(false);
-  const [importType, setImportType] = useState('general');
+  const [importType, setImportType] = useState('pensum');
   const [validationStatus, setValidationStatus] = useState<'idle' | 'validating' | 'success' | 'error'>('idle');
   const [responseMessage, setResponseMessage] = useState<string>('');
   const [responseErrors, setResponseErrors] = useState<any[]>([]);
@@ -67,6 +67,7 @@ export default function AdminDashboard() {
     }
 
     const endpointMap: Record<string, string> = {
+      pensum: "import/pensum/",
       general: "import/students/",
       individual: "import/history/",
       courses: "import/offering/",
@@ -193,12 +194,14 @@ export default function AdminDashboard() {
             onChange={(e) => setImportType(e.target.value)}
             className="w-full border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-[#C8102E] focus:border-[#C8102E] outline-none transition-colors"
           >
+            <option value="pensum">Pensum</option>
             <option value="general">Reporte General de Estudiantes (DIRPLAN)</option>
             <option value="individual">Reportes Individuales de Estudiantes</option>
             <option value="courses">Listado de Cursos</option>
             <option value="teachers">Listado de Docentes</option>
           </select>
           <p className="text-sm text-gray-500 mt-2">
+            {importType === 'pensum' && 'Importa la definición del pensum (Código, Nombre, Créditos, Semestre, Tipo y Equivalencias).'}
             {importType === 'general' && 'Permite consolidar la información académica básica de los estudiantes desde la fuente DIRPLAN.'}
             {importType === 'individual' && 'Construye de manera detallada el historial académico completo de cada estudiante.'}
             {importType === 'courses' && 'Suministra la información requerida (cursos, asignaturas y docentes) para el análisis académico.'}
