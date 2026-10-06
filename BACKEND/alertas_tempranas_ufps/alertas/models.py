@@ -106,7 +106,13 @@ class RiesgoEstudiantePeriodo(models.Model):
 
     class Meta:
         db_table = 'riesgo_estudiante_periodo'
-        unique_together = ('estudiante', 'periodo')
+        # Debe coincidir con la restricción creada en la migración 0012
+        constraints = [
+            models.UniqueConstraint(
+                fields=['estudiante', 'periodo'],
+                name='unique_riesgo_estudiante_periodo',
+            ),
+        ]
         verbose_name = 'Riesgo Estudiante por Periodo'
         verbose_name_plural = 'Riesgos Estudiantes por Periodo'
         ordering = ['periodo__anio', 'periodo__semestre']

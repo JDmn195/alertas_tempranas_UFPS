@@ -28,8 +28,8 @@ export default function Login() {
 
       if (response.ok) {
         if (data.cambio_obligatorio) {
-          // Guardar temporalmente para la pantalla de cambio
-          localStorage.setItem('temp_forced_change', JSON.stringify({ id: data.id }));
+          // Guardar temporalmente el token de cambio para la pantalla de cambio
+          localStorage.setItem('temp_forced_change', JSON.stringify({ token: data.token_cambio }));
           navigate('/reset-password');
           return;
         }

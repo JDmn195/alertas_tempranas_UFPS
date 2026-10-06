@@ -7,6 +7,23 @@ from django.views.decorators.csrf import csrf_exempt
 from academico.models import Estudiante, Nota, Materia
 from alertas.models import Alerta, Regla
 from usuarios.decorators import requiere_rol
+from usuarios.utils import registrar_auditoria
+
+
+def _acceso_denegado_docente(request, estudiante):
+    """
+    RBAC (HU-27): un docente solo ve estudiantes de sus cursos.
+    Devuelve la respuesta 403 si no tiene acceso, o None si puede continuar.
+    """
+    if request.usuario.rol != 'DOCENTE':
+        return None
+    if Nota.objects.filter(estudiante=estudiante, curso__docente__usuario=request.usuario).exists():
+        return None
+    registrar_auditoria(
+        request.usuario, 'ACCESO_DENEGADO',
+        f"Docente intentó acceder a datos del estudiante {estudiante.codigo} sin tenerlo en sus cursos"
+    )
+    return JsonResponse({'error': 'Prohibido. No tiene acceso a los datos de este estudiante.'}, status=403)
 
 
 
@@ -347,13 +364,9 @@ def obtener_detalle_estudiante(request, codigo):
         e = Estudiante.objects.get(codigo=codigo)
         
         # Filtro RBAC según rol del usuario (HU-27)
-        if request.usuario.rol == 'DOCENTE':
-            # Verificar si el docente tiene acceso a este estudiante
-            tiene_acceso = Nota.objects.filter(estudiante=e, curso__docente__usuario=request.usuario).exists()
-            if not tiene_acceso:
-                from usuarios.utils import registrar_auditoria
-                registrar_auditoria(request.usuario, 'ACCESO_DENEGADO', f"Docente intentó acceder al detalle del estudiante {codigo} sin tenerlo en sus cursos")
-                return JsonResponse({'error': 'Prohibido. No tiene acceso a los datos de este estudiante.'}, status=403)
+        denegado = _acceso_denegado_docente(request, e)
+        if denegado:
+            return denegado
 
         # Anotar conteo de alertas activas
         total_alertas = Alerta.objects.filter(
@@ -414,6 +427,7 @@ def obtener_detalle_estudiante(request, codigo):
 
 
 @require_GET
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def obtener_indicadores_estudiante(request, codigo):
     """
     Calcula los indicadores académicos para un estudiante específico:
@@ -423,6 +437,9 @@ def obtener_indicadores_estudiante(request, codigo):
     - Porcentaje de progreso basado en el total de créditos del sistema
     """
     estudiante = get_object_or_404(Estudiante, codigo=codigo)
+    denegado = _acceso_denegado_docente(request, estudiante)
+    if denegado:
+        return denegado
     
     # 1. Total de créditos del programa (Valor fijo: 165)
     TOTAL_CREDITOS_SISTEMA = 165
@@ -505,12 +522,16 @@ def obtener_indicadores_estudiante(request, codigo):
 
 
 @require_GET
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def obtener_historial_academico(request, codigo):
     """
     GET /api/academico/students/<codigo>/history/
     Devuelve el historial académico agrupado por periodos.
     """
     estudiante = get_object_or_404(Estudiante, codigo=codigo)
+    denegado = _acceso_denegado_docente(request, estudiante)
+    if denegado:
+        return denegado
     notas = Nota.objects.filter(estudiante=estudiante).select_related(
         'periodo', 'curso__materia', 'curso__docente'
     ).order_by('periodo__anio', 'periodo__semestre')
@@ -574,6 +595,7 @@ def obtener_historial_academico(request, codigo):
 
 
 @require_GET
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def obtener_intervenciones_estudiante(request, codigo):
     """
     GET /api/academico/students/<codigo>/intervenciones/
@@ -581,6 +603,9 @@ def obtener_intervenciones_estudiante(request, codigo):
     ordenadas de forma descendente por fecha.
     """
     estudiante = get_object_or_404(Estudiante, codigo=codigo)
+    denegado = _acceso_denegado_docente(request, estudiante)
+    if denegado:
+        return denegado
     
     from alertas.models import Intervencion
     intervenciones = Intervencion.objects.filter(alerta__estudiante=estudiante).select_related(

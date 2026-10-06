@@ -13,7 +13,11 @@ from django.urls import reverse
 
 from academico.models import Curso, Docente, Estudiante, Materia, Nota, Periodo
 from alertas import reevaluacion
-from alertas.models import Alerta, EjecucionReevaluacion, Regla, RiesgoEstudiante
+from alertas.models import (
+    Alerta, AnotacionIntervencion, EjecucionReevaluacion, Intervencion, NotificacionInterna, Regla,
+    RiesgoEstudiante,
+)
+from alertas.views.alert_generation_views import reprocesar_alertas_completas
 from usuarios.models import Usuario
 
 
@@ -386,3 +390,126 @@ class ReevaluacionEndpointsTests(ReevaluacionBaseTestCase):
         detalle = self.client.get(reverse('reevaluacion-ejecucion-detalle', args=[ej.id]), **headers).json()
         self.assertEqual(detalle['alcance']['tipo'], 'COMPLETO')
         self.assertEqual(len(detalle['detalle_cambios']), 2)
+
+
+class ReprocesarAlertasTests(ReevaluacionBaseTestCase):
+    """Reprocesar tras una importación no debe recrear ni renotificar alertas vigentes."""
+
+    def setUp(self):
+        super().setUp()
+        Estudiante.objects.filter(pk=self.est_bueno.pk).update(promedio=Decimal('4.0'))
+        Estudiante.objects.filter(pk=self.est_malo.pk).update(promedio=Decimal('2.2'))
+
+    def test_no_recrea_ni_renotifica_alertas_que_siguen_aplicando(self):
+        reprocesar_alertas_completas()
+        alerta = Alerta.objects.get(estudiante=self.est_malo)
+        self.assertEqual(self.notif.call_count, 1)
+
+        Estudiante.objects.filter(pk=self.est_malo.pk).update(promedio=Decimal('2.0'))
+        reprocesar_alertas_completas()
+
+        self.assertEqual(self.notif.call_count, 1)
+        actual = Alerta.objects.get(estudiante=self.est_malo)
+        self.assertEqual(actual.id, alerta.id)
+        self.assertEqual(actual.fecha_generacion, alerta.fecha_generacion)
+        self.assertEqual(float(actual.valor_causa), 2.0)
+
+    def test_borra_alerta_activa_sin_intervenciones_si_la_regla_ya_no_aplica(self):
+        reprocesar_alertas_completas()
+        Estudiante.objects.filter(pk=self.est_malo.pk).update(promedio=Decimal('4.5'))
+        reprocesar_alertas_completas()
+        self.assertFalse(Alerta.objects.filter(estudiante=self.est_malo).exists())
+
+
+class ProteccionEndpointsTests(ReevaluacionBaseTestCase):
+    """Endpoints que antes no exigían token o confiaban en un usuario_id del cliente."""
+
+    def setUp(self):
+        super().setUp()
+        self.admin = Usuario.objects.create(nombre='Admin', correo='admin@ufps.edu.co', rol='ADMINISTRADOR', contrasena='x')
+        self.director = Usuario.objects.create(nombre='Dir', correo='dir@ufps.edu.co', rol='DIRECTOR', contrasena='x')
+        self.bienestar = Usuario.objects.create(nombre='Bien', correo='bien@ufps.edu.co', rol='BIENESTAR', contrasena='x')
+        self.docente_ajeno = Usuario.objects.create(nombre='Otro', correo='otro@ufps.edu.co', rol='DOCENTE', contrasena='x')
+        Docente.objects.create(codigo='D2', nombre='Otro', tipo_vinculacion='Planta', usuario=self.docente_ajeno)
+
+        self.alerta = Alerta.objects.create(estudiante=self.est_malo, regla=self.regla_bajo, estado='activa')
+        self.intervencion = Intervencion.objects.create(
+            alerta=self.alerta, usuario=self.bienestar, tipo='TUTORIA', observaciones='x'
+        )
+
+    def _auth(self, usuario):
+        return {'HTTP_AUTHORIZATION': f'Bearer {_make_token(usuario)}'}
+
+    def test_endpoints_sin_token_responden_401(self):
+        e = self.est_malo.codigo
+        endpoints = [
+            ('get', reverse('list-bitacoras')),
+            ('get', reverse('detail-bitacora', args=[1])),
+            ('post', reverse('subir-evidencia', args=[self.intervencion.id])),
+            ('get', reverse('listar-evidencias', args=[self.intervencion.id])),
+            ('delete', reverse('eliminar-evidencia', args=[1])),
+            ('get', reverse('listar-intervenciones', args=[self.alerta.id])),
+            ('get', reverse('gestionar-anotaciones', args=[self.intervencion.id])),
+            ('post', reverse('gestionar-anotaciones', args=[self.intervencion.id])),
+            ('delete', reverse('eliminar-anotacion', args=[1])),
+            ('get', reverse('historial-notificaciones')),
+            ('get', reverse('notificaciones-internas')),
+            ('post', reverse('marcar-leida', args=[1])),
+            ('get', reverse('student-indicators', args=[e])),
+            ('get', reverse('student-history', args=[e])),
+            ('get', reverse('student-interventions', args=[e])),
+            ('get', reverse('course-indicators')),
+            ('get', reverse('director-indicadores')),
+        ]
+        for metodo, url in endpoints:
+            with self.subTest(url=url, metodo=metodo):
+                self.assertEqual(getattr(self.client, metodo)(url).status_code, 401)
+
+    def test_roles_sin_permiso_reciben_403(self):
+        self.assertEqual(self.client.get(reverse('list-bitacoras'), **self._auth(self.bienestar)).status_code, 403)
+        self.assertEqual(self.client.get(reverse('historial-notificaciones'), **self._auth(self.director)).status_code, 403)
+        self.assertEqual(self.client.get(reverse('director-indicadores'), **self._auth(self.bienestar)).status_code, 403)
+
+    def test_notificaciones_internas_solo_del_usuario_autenticado(self):
+        propia = NotificacionInterna.objects.create(usuario=self.director, alerta=self.alerta, mensaje='mia')
+        ajena = NotificacionInterna.objects.create(usuario=self.admin, alerta=self.alerta, mensaje='ajena')
+
+        url = reverse('notificaciones-internas') + f'?usuario_id={self.admin.id}'
+        data = self.client.get(url, **self._auth(self.director)).json()
+        self.assertEqual([n['id'] for n in data['notificaciones']], [propia.id])
+
+        resp = self.client.post(reverse('marcar-leida', args=[ajena.id]), **self._auth(self.director))
+        self.assertEqual(resp.status_code, 404)
+        ajena.refresh_from_db()
+        self.assertFalse(ajena.leida)
+
+    def test_anotacion_se_firma_con_el_usuario_autenticado(self):
+        resp = self.client.post(
+            reverse('gestionar-anotaciones', args=[self.intervencion.id]),
+            data={'usuario_id': self.admin.id, 'texto': 'hola'},
+            content_type='application/json',
+            **self._auth(self.bienestar),
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(AnotacionIntervencion.objects.get().usuario, self.bienestar)
+
+    def test_solo_el_autor_o_un_admin_eliminan_anotaciones(self):
+        anotacion = AnotacionIntervencion.objects.create(intervencion=self.intervencion, usuario=self.bienestar, texto='x')
+        url = reverse('eliminar-anotacion', args=[anotacion.id])
+        self.assertEqual(self.client.delete(url, **self._auth(self.director)).status_code, 403)
+        self.assertEqual(self.client.delete(url, **self._auth(self.admin)).status_code, 200)
+
+    def test_docente_no_ve_cursos_ajenos_aunque_envie_usuario_id_de_director(self):
+        url = reverse('course-indicators') + f'?usuario_id={self.director.id}&periodo_anio=todos'
+        data = self.client.get(url, **self._auth(self.docente_ajeno)).json()
+        self.assertEqual(data['total'], 0)
+
+        data = self.client.get(url, **self._auth(self.director)).json()
+        self.assertEqual(data['total'], len(self.cursos))
+
+    def test_docente_no_ve_datos_de_estudiantes_ajenos(self):
+        for nombre in ('student-indicators', 'student-history', 'student-interventions'):
+            with self.subTest(endpoint=nombre):
+                url = reverse(nombre, args=[self.est_malo.codigo])
+                self.assertEqual(self.client.get(url, **self._auth(self.docente_ajeno)).status_code, 403)
+                self.assertEqual(self.client.get(url, **self._auth(self.bienestar)).status_code, 200)

@@ -1,4 +1,5 @@
 from django.http import JsonResponse
+from django.contrib.auth.hashers import make_password
 from django.core.files.storage import FileSystemStorage
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction, reset_queries
@@ -540,7 +541,7 @@ def importar_historial_academico(request):
                     defaults={
                         'nombre': 'Docente por Asignar',
                         'rol': 'DOCENTE',
-                        'contrasena': '00000',
+                        'contrasena': make_password(None),  # cuenta de relleno, sin acceso
                         'activo': True
                     }
                 )
@@ -916,7 +917,8 @@ def importar_docentes(request):
                 correo_usuario = correo_institucional or correo_personal or f"{codigo}@ufps.edu.co"
                 usuario_obj, usuario_creado = Usuario.objects.get_or_create(
                     correo=correo_usuario,
-                    defaults={"nombre": nombre, "rol": "DOCENTE", "contrasena": codigo, "activo": True},
+                    # Sin contraseña utilizable: el docente define la suya con el enlace de recuperación
+                    defaults={"nombre": nombre, "rol": "DOCENTE", "contrasena": make_password(None), "activo": True},
                 )
                 if usuario_creado:
                     usuarios_creados += 1

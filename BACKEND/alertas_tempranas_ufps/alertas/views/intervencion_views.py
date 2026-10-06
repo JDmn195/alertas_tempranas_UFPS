@@ -4,7 +4,6 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from alertas.models import Alerta, Intervencion
-from usuarios.models import Usuario
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
 
@@ -45,8 +44,7 @@ def registrar_intervencion(request, alerta_id):
     """
     POST /api/alertas/<alerta_id>/intervenciones/
 
-    Body JSON:
-        usuario_id  – id del usuario que registra (obligatorio)
+    Body JSON (el autor es el usuario autenticado):
         tipo        – TUTORIA | CITACION | REMISION (obligatorio)
         observaciones – texto libre (obligatorio)
         evidencia   – texto opcional
@@ -73,15 +71,13 @@ def registrar_intervencion(request, alerta_id):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Body JSON inválido'}, status=400)
 
-    usuario_id    = body.get('usuario_id')
+    usuario       = request.usuario
     tipo          = body.get('tipo', '').strip().upper()
     observaciones = body.get('observaciones', '').strip()
     evidencia     = body.get('evidencia', '').strip() or None
     resultado     = body.get('resultado', '').strip() or None
 
     # Validar campos obligatorios
-    if not usuario_id:
-        return JsonResponse({'error': 'usuario_id es obligatorio'}, status=400)
     if not tipo:
         return JsonResponse({'error': 'tipo es obligatorio'}, status=400)
     if not observaciones:
@@ -94,12 +90,6 @@ def registrar_intervencion(request, alerta_id):
             {'error': f'tipo inválido. Opciones: {", ".join(tipos_validos)}'},
             status=400
         )
-
-    # Validar usuario
-    try:
-        usuario = Usuario.objects.get(id=int(usuario_id))
-    except (Usuario.DoesNotExist, ValueError):
-        return JsonResponse({'error': 'usuario_id inválido o no encontrado'}, status=400)
 
     # Crear intervención
     intervencion = Intervencion.objects.create(
@@ -139,6 +129,7 @@ def registrar_intervencion(request, alerta_id):
 
 @csrf_exempt
 @require_http_methods(["GET"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def listar_intervenciones(request, alerta_id):
     """
     GET /api/alertas/<alerta_id>/intervenciones/
@@ -178,10 +169,11 @@ from alertas.models import AnotacionIntervencion
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def gestionar_anotaciones(request, intervencion_id):
     """
     GET: Lista las anotaciones de una intervención.
-    POST: Crea una nueva anotación (requiere usuario_id y texto).
+    POST: Crea una nueva anotación (requiere texto; el autor es el usuario autenticado).
     """
     try:
         intervencion = Intervencion.objects.get(id=intervencion_id)
@@ -207,16 +199,11 @@ def gestionar_anotaciones(request, intervencion_id):
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Body JSON inválido'}, status=400)
 
-        usuario_id = body.get('usuario_id')
+        usuario = request.usuario
         texto = body.get('texto', '').strip()
 
-        if not usuario_id or not texto:
-            return JsonResponse({'error': 'usuario_id y texto son obligatorios'}, status=400)
-
-        try:
-            usuario = Usuario.objects.get(id=int(usuario_id))
-        except (Usuario.DoesNotExist, ValueError):
-            return JsonResponse({'error': 'usuario_id inválido o no encontrado'}, status=400)
+        if not texto:
+            return JsonResponse({'error': 'texto es obligatorio'}, status=400)
 
         anotacion = AnotacionIntervencion.objects.create(
             intervencion=intervencion,
@@ -237,13 +224,16 @@ def gestionar_anotaciones(request, intervencion_id):
 
 @csrf_exempt
 @require_http_methods(["DELETE"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def eliminar_anotacion(request, anotacion_id):
     """
     DELETE /api/alertas/anotaciones/<id>/
-    Elimina una anotación específica.
+    Elimina una anotación específica. Solo su autor o un administrador.
     """
     try:
         anotacion = AnotacionIntervencion.objects.get(id=anotacion_id)
+        if anotacion.usuario_id != request.usuario.id and request.usuario.rol != 'ADMINISTRADOR':
+            return JsonResponse({'error': 'Solo el autor puede eliminar esta anotación.'}, status=403)
         anotacion.delete()
         return JsonResponse({'mensaje': 'Anotación eliminada correctamente'})
     except AnotacionIntervencion.DoesNotExist:

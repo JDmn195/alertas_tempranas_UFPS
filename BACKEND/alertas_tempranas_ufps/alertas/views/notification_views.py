@@ -3,8 +3,10 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from ..models import NotificacionHistorial, NotificacionInterna
+from usuarios.decorators import requiere_rol
 
 @require_http_methods(["GET"])
+@requiere_rol(['ADMINISTRADOR'])
 def listar_historial_notificaciones(request):
     """
     GET /api/alertas/notificaciones/historial/
@@ -44,15 +46,13 @@ def listar_historial_notificaciones(request):
     return JsonResponse({'historial': data})
 
 @require_http_methods(["GET"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def listar_notificaciones_internas(request):
     """
-    GET /api/alertas/notificaciones/internas/?usuario_id=123
+    GET /api/alertas/notificaciones/internas/
+    Notificaciones del usuario autenticado.
     """
-    usuario_id = request.GET.get('usuario_id')
-    if not usuario_id:
-        return JsonResponse({'error': 'Falta usuario_id'}, status=400)
-        
-    qs = NotificacionInterna.objects.filter(usuario_id=usuario_id).select_related('alerta__regla')
+    qs = NotificacionInterna.objects.filter(usuario=request.usuario).select_related('alerta__regla')
     
     data = []
     for n in qs:
@@ -72,11 +72,13 @@ def listar_notificaciones_internas(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def marcar_notificacion_leida(request, notificacion_id):
     """
     POST /api/alertas/notificaciones/internas/<id>/leer/
+    Solo sobre notificaciones propias.
     """
-    notificacion = get_object_or_404(NotificacionInterna, id=notificacion_id)
+    notificacion = get_object_or_404(NotificacionInterna, id=notificacion_id, usuario=request.usuario)
     notificacion.leida = True
     notificacion.save()
     return JsonResponse({'mensaje': 'Notificación marcada como leída'})

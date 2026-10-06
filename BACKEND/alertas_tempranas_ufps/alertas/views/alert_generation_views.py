@@ -263,13 +263,6 @@ def reprocesar_alertas_completas(estudiantes_qs=None, usuario=None, regla_especi
 
     with transaction.atomic():
         for est in estudiantes_qs:
-            # 0. Limpieza solo aplica en modo completo (no por regla específica)
-            if not regla_especifica:
-                Alerta.objects.filter(
-                    estudiante=est,
-                    estado__in=['activa', 'active']
-                ).annotate(n_int=Count('intervencion')).filter(n_int=0).delete()
-
             # 1. Calcular y persistir riesgo por periodo + snapshot actual
             nivel = calcular_y_guardar_riesgo_por_periodos(est, reglas)
             por_nivel[nivel] = por_nivel.get(nivel, 0) + 1
@@ -285,14 +278,32 @@ def reprocesar_alertas_completas(estudiantes_qs=None, usuario=None, regla_especi
                         'valor': val, 'metadata': metadata_regla
                     }
 
-            # 3. Generar alertas — Fix 3.4: omitir si ya existe alerta de esa regla
+            # 3. Limpieza (solo en modo completo): borrar las alertas activas sin
+            # intervenciones cuya regla ya no aplica. Las que siguen aplicando se
+            # conservan para no recrearlas ni volver a notificar en cada importación.
+            if not regla_especifica:
+                ids_aplicables = [r_app['id'] for r_app in reglas_por_tipo.values()]
+                Alerta.objects.filter(
+                    estudiante=est,
+                    estado__in=['activa', 'active']
+                ).exclude(
+                    regla_id__in=ids_aplicables
+                ).annotate(n_int=Count('intervencion')).filter(n_int=0).delete()
+
+            # 4. Generar alertas — Fix 3.4: omitir si ya existe alerta de esa regla
             for r_app in list(reglas_por_tipo.values()):
-                ya_existe = Alerta.objects.filter(
+                existente = Alerta.objects.filter(
                     estudiante=est,
                     regla_id=r_app['id']
-                ).exists()
-                if ya_existe:
-                    continue  # No duplicar sin importar el estado
+                ).first()
+                if existente:
+                    # No duplicar sin importar el estado; si sigue activa,
+                    # solo refrescar el valor que la disparó (sin notificar)
+                    if existente.estado in ('activa', 'active'):
+                        existente.valor_causa = r_app['valor']
+                        existente.metadata = r_app['metadata']
+                        existente.save(update_fields=['valor_causa', 'metadata'])
+                    continue
 
                 nueva_alerta = Alerta.objects.create(
                     estudiante=est,

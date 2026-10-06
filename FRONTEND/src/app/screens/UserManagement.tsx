@@ -27,6 +27,8 @@ export default function UserManagement() {
   });
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Contraseña temporal del usuario recién creado: el backend solo la devuelve una vez
+  const [credencialesNuevas, setCredencialesNuevas] = useState<{ correo: string; contrasena: string } | null>(null);
 
   const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -95,10 +97,11 @@ export default function UserManagement() {
           method: 'POST',
           body: JSON.stringify(formData),
         });
+        const data = await res.json();
         if (!res.ok) {
-          const data = await res.json();
           throw new Error(data.error || 'Error al crear usuario');
         }
+        setCredencialesNuevas({ correo: formData.correo, contrasena: data.contrasena_temporal });
       }
       setShowDrawer(false);
       fetchUsers();
@@ -149,6 +152,20 @@ export default function UserManagement() {
           </Button>
         </div>
       </div>
+
+      {credencialesNuevas && (
+        <div className="p-4 bg-green-50 text-green-800 rounded-lg border border-green-200 flex items-start justify-between gap-4">
+          <div className="text-sm">
+            <p className="font-semibold">Usuario creado. Entrégale estas credenciales; la contraseña no se volverá a mostrar.</p>
+            <p className="mt-1">Correo: <span className="font-mono">{credencialesNuevas.correo}</span></p>
+            <p>Contraseña temporal: <span className="font-mono select-all">{credencialesNuevas.contrasena}</span></p>
+            <p className="mt-1 text-green-700">Deberá cambiarla en su primer inicio de sesión.</p>
+          </div>
+          <button onClick={() => setCredencialesNuevas(null)} className="text-green-700 hover:text-green-900" aria-label="Cerrar">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 flex items-center gap-2">

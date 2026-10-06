@@ -2,8 +2,10 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.timezone import localtime
 from academico.models import BitacoraImportacion
+from usuarios.decorators import requiere_rol
 
 @csrf_exempt
+@requiere_rol(['ADMINISTRADOR'])
 def listar_bitacoras(request):
     """
     Retorna la lista de todas las importaciones ordenadas de la más reciente a la más antigua.
@@ -28,6 +30,7 @@ def listar_bitacoras(request):
 
 
 @csrf_exempt
+@requiere_rol(['ADMINISTRADOR'])
 def detalle_bitacora(request, id):
     """
     Retorna el detalle completo de una importación específica por ID,
