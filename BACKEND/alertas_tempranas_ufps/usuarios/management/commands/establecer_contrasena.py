@@ -30,7 +30,5 @@ class Command(BaseCommand):
         except ValidationError as e:
             raise CommandError(' '.join(e.messages))
 
-        usuario.set_password(contrasena)
-        usuario.debe_cambiar_contrasena = False
-        usuario.save(update_fields=['contrasena', 'debe_cambiar_contrasena'])
+        usuario.cambiar_contrasena(contrasena)
         self.stdout.write(self.style.SUCCESS(f'Contraseña actualizada para {usuario.correo}.'))

@@ -4,6 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from alertas.models import Alerta, Intervencion
+from alertas.permisos import denegar_acceso_alerta, puede_acceder_alerta
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
 
@@ -58,6 +59,8 @@ def registrar_intervencion(request, alerta_id):
         alerta = Alerta.objects.get(id=alerta_id)
     except Alerta.DoesNotExist:
         return JsonResponse({'error': 'Alerta no encontrada'}, status=404)
+    if not puede_acceder_alerta(request.usuario, alerta):
+        return denegar_acceso_alerta()
 
     # Validar estado de la alerta — solo las cerradas bloquean nuevas intervenciones
     if alerta.estado.lower() in ESTADOS_NO_PERMITIDOS:
@@ -140,6 +143,8 @@ def listar_intervenciones(request, alerta_id):
         alerta = Alerta.objects.get(id=alerta_id)
     except Alerta.DoesNotExist:
         return JsonResponse({'error': 'Alerta no encontrada'}, status=404)
+    if not puede_acceder_alerta(request.usuario, alerta):
+        return denegar_acceso_alerta()
 
     intervenciones = Intervencion.objects.filter(alerta=alerta).order_by('-fecha')
 
@@ -176,9 +181,11 @@ def gestionar_anotaciones(request, intervencion_id):
     POST: Crea una nueva anotación (requiere texto; el autor es el usuario autenticado).
     """
     try:
-        intervencion = Intervencion.objects.get(id=intervencion_id)
+        intervencion = Intervencion.objects.select_related('alerta').get(id=intervencion_id)
     except Intervencion.DoesNotExist:
         return JsonResponse({'error': 'Intervención no encontrada'}, status=404)
+    if not puede_acceder_alerta(request.usuario, intervencion.alerta):
+        return denegar_acceso_alerta()
 
     if request.method == "GET":
         anotaciones = AnotacionIntervencion.objects.filter(intervencion=intervencion).order_by('-fecha')
@@ -250,9 +257,11 @@ def concluir_intervencion(request, intervencion_id):
     - Si todas están concluidas             → 'atendida'
     """
     try:
-        intervencion = Intervencion.objects.get(id=intervencion_id)
+        intervencion = Intervencion.objects.select_related('alerta').get(id=intervencion_id)
     except Intervencion.DoesNotExist:
         return JsonResponse({'error': 'Intervención no encontrada'}, status=404)
+    if not puede_acceder_alerta(request.usuario, intervencion.alerta):
+        return denegar_acceso_alerta()
 
     if intervencion.concluida:
         return JsonResponse({'error': 'Esta intervención ya fue concluida'}, status=400)

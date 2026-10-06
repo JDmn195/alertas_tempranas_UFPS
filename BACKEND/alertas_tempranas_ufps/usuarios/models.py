@@ -1,5 +1,6 @@
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import models
+from django.utils import timezone
 
 class Usuario(models.Model):
     ROL_CHOICES = [
@@ -17,6 +18,8 @@ class Usuario(models.Model):
     activo = models.BooleanField(default=True)
     # True cuando la contraseña es temporal (asignada por un admin) y debe cambiarse al entrar
     debe_cambiar_contrasena = models.BooleanField(default=False)
+    # Momento del último cambio de contraseña: los JWT emitidos antes dejan de valer
+    contrasena_cambiada_en = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'usuario'
@@ -28,6 +31,13 @@ class Usuario(models.Model):
 
     def set_password(self, raw_password):
         self.contrasena = make_password(raw_password)
+
+    def cambiar_contrasena(self, raw_password):
+        """Cambio definitivo hecho por el usuario: cierra las sesiones abiertas con la anterior."""
+        self.set_password(raw_password)
+        self.debe_cambiar_contrasena = False
+        self.contrasena_cambiada_en = timezone.now()
+        self.save(update_fields=['contrasena', 'debe_cambiar_contrasena', 'contrasena_cambiada_en'])
 
     def set_unusable_password(self):
         """El usuario solo podrá entrar tras definir su contraseña con el enlace de recuperación."""

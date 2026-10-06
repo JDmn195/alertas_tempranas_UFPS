@@ -601,3 +601,87 @@ class ImportViewsTestCase(TestCase):
 
 
 
+
+
+class ImportarEstudiantesValidacionTests(ImportViewsTestCase):
+    """INC-01 (umbral de registros inválidos) e INC-02 (duplicados en la auditoría)."""
+
+    def _importar(self, data):
+        archivo = SimpleUploadedFile(
+            "estudiantes.xlsx", self.generate_excel_file(data),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        return self.client.post(reverse('import-students-dirplan'), {'file': archivo},
+                                HTTP_AUTHORIZATION=self.admin_token)
+
+    def _datos(self, n):
+        return {
+            "Codigo": [str(1150100 + i) for i in range(n)],
+            "Nombre": [f"Estudiante {i}" for i in range(n)],
+            "Documento": [str(100500 + i) for i in range(n)],
+            "Promedio": [4.0] * n,
+            "Semestre": [3] * n,
+        }
+
+    def test_cancela_si_supera_10_por_ciento_de_invalidos(self):
+        from academico.models import BitacoraImportacion
+        datos = self._datos(10)
+        datos["Nombre"][0] = ""           # campo en blanco
+        datos["Promedio"][1] = "abc"      # error de formato
+        response = self._importar(datos)
+
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
+        self.assertIn("más del 10 % de registros inválidos, importación cancelada", body["mensaje"])
+        self.assertEqual(body["total_errores"], 2)
+        self.assertEqual(Estudiante.objects.count(), 0)  # no queda nada parcial
+        bitacora = BitacoraImportacion.objects.get()
+        self.assertFalse(bitacora.exitoso)
+        self.assertEqual(bitacora.total_errores, 2)
+
+    def test_importa_si_no_supera_el_umbral_y_reporta_rechazados(self):
+        datos = self._datos(10)
+        datos["Semestre"][4] = 40         # 1 de 10 = 10 %: no supera el umbral
+        response = self._importar(datos)
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["detalles"]["total_procesados"], 9)
+        self.assertEqual(len(body["advertencias"]), 1)
+        self.assertEqual(body["advertencias"][0]["campo"], "Semestre")
+        self.assertFalse(Estudiante.objects.filter(codigo="1150104").exists())
+
+    def test_duplicados_se_rechazan_y_quedan_en_la_auditoria(self):
+        from usuarios.models import Auditoria
+        datos = self._datos(10)
+        datos["Codigo"][9] = datos["Codigo"][0]
+        response = self._importar(datos)
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["detalles"]["duplicados"], 1)
+        self.assertEqual(Estudiante.objects.count(), 9)
+        # Se conserva la primera fila del código repetido
+        self.assertEqual(Estudiante.objects.get(codigo="1150100").nombre, "Estudiante 0")
+        detalle = Auditoria.objects.get(tipo_accion='IMPORTACION').detalle
+        self.assertIn("1 registros rechazados por código duplicado", detalle)
+        self.assertIn("1150100", detalle)
+
+    def test_documento_de_otro_estudiante_se_rechaza(self):
+        Estudiante.objects.create(codigo="999", nombre="Existente", tipo_documento="CC",
+                                  numero_documento="100500", semestre=1, estado_matricula="Activo")
+        response = self._importar(self._datos(10))
+        self.assertEqual(response.status_code, 200)
+        advertencias = response.json()["advertencias"]
+        self.assertEqual(len(advertencias), 1)
+        self.assertIn("999", advertencias[0]["mensaje"])
+        self.assertFalse(Estudiante.objects.filter(codigo="1150100").exists())
+
+    def test_filas_vacias_no_cuentan_como_registros(self):
+        datos = self._datos(3)
+        for col in datos:
+            datos[col].insert(1, None)  # fila vacía en medio del archivo
+        response = self._importar(datos)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["detalles"]["omitidos"], 1)
+        self.assertEqual(Estudiante.objects.count(), 3)

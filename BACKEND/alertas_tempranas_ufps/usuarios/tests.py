@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.conf import settings
+from django.core.cache import cache
 from usuarios.models import Usuario
 
 
@@ -128,6 +129,7 @@ class AutenticacionTestCase(TestCase):
     CONTRASENA = 'Clave-segura-2026'
 
     def setUp(self):
+        cache.clear()  # contador de intentos fallidos de login
         self.admin = Usuario(nombre='Admin', correo='admin@ufps.edu.co', rol='ADMINISTRADOR')
         self.admin.set_password(self.CONTRASENA)
         self.admin.save()
@@ -221,3 +223,78 @@ class SesionActualTestCase(TestCase):
 
     def test_sin_token_responde_401(self):
         self.assertEqual(self.client.get(reverse('sesion_actual')).status_code, 401)
+
+
+class ValidacionRolTestCase(TestCase):
+    def setUp(self):
+        self.admin = Usuario.objects.create(nombre='Admin', correo='admin@ufps.edu.co', rol='ADMINISTRADOR')
+        self.otro = Usuario.objects.create(nombre='Otro', correo='otro@ufps.edu.co', rol='DOCENTE')
+        self.headers = {'HTTP_AUTHORIZATION': f'Bearer {_make_token(self.admin)}'}
+
+    def test_crear_con_rol_inexistente_falla(self):
+        resp = self.client.post(reverse('crear_usuario'), data=json.dumps(
+            {'nombre': 'X', 'correo': 'x@ufps.edu.co', 'rol': 'ADMINISTRADORR'}),
+            content_type='application/json', **self.headers)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('Rol inválido', resp.json()['error'])
+        self.assertFalse(Usuario.objects.filter(correo='x@ufps.edu.co').exists())
+
+    def test_actualizar_con_rol_inexistente_falla(self):
+        url = reverse('actualizar_usuario', kwargs={'usuario_id': self.otro.id})
+        resp = self.client.put(url, data=json.dumps({'rol': 'SUPERUSUARIO'}),
+                               content_type='application/json', **self.headers)
+        self.assertEqual(resp.status_code, 400)
+        self.otro.refresh_from_db()
+        self.assertEqual(self.otro.rol, 'DOCENTE')
+
+    def test_admin_no_puede_quitarse_su_propio_rol(self):
+        url = reverse('actualizar_usuario', kwargs={'usuario_id': self.admin.id})
+        resp = self.client.put(url, data=json.dumps({'rol': 'DOCENTE'}),
+                               content_type='application/json', **self.headers)
+        self.assertEqual(resp.status_code, 400)
+
+
+class SeguridadSesionTestCase(TestCase):
+    CONTRASENA = 'Clave-segura-2026'
+
+    def setUp(self):
+        cache.clear()
+        self.usuario = Usuario(nombre='Ana', correo='ana@ufps.edu.co', rol='DIRECTOR')
+        self.usuario.set_password(self.CONTRASENA)
+        self.usuario.save()
+
+    def _login(self, contrasena):
+        return self.client.post(reverse('login'), data=json.dumps(
+            {'email': 'ana@ufps.edu.co', 'password': contrasena}), content_type='application/json')
+
+    def test_bloquea_tras_varios_intentos_fallidos(self):
+        for _ in range(5):
+            self.assertEqual(self._login('incorrecta').status_code, 401)
+        # Bloqueado aunque ahora la contraseña sea la correcta
+        self.assertEqual(self._login(self.CONTRASENA).status_code, 429)
+        cache.clear()  # pasa la ventana de bloqueo
+        self.assertEqual(self._login(self.CONTRASENA).status_code, 200)
+
+    def test_login_exitoso_reinicia_el_contador(self):
+        for _ in range(4):
+            self._login('incorrecta')
+        self.assertEqual(self._login(self.CONTRASENA).status_code, 200)
+        for _ in range(4):
+            self._login('incorrecta')
+        self.assertEqual(self._login(self.CONTRASENA).status_code, 200)
+
+    def test_cambiar_contrasena_invalida_tokens_anteriores(self):
+        payload = {
+            'user_id': self.usuario.id,
+            'exp': datetime.now(timezone.utc) + timedelta(days=1),
+            'iat': datetime.now(timezone.utc) - timedelta(minutes=5),
+        }
+        token_viejo = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+        me = lambda t: self.client.get(reverse('sesion_actual'), HTTP_AUTHORIZATION=f'Bearer {t}')
+        self.assertEqual(me(token_viejo).status_code, 200)
+
+        self.usuario.cambiar_contrasena('Otra-clave-segura-2026')
+
+        self.assertEqual(me(token_viejo).status_code, 401)
+        token_nuevo = self._login('Otra-clave-segura-2026').json()['token']
+        self.assertEqual(me(token_nuevo).status_code, 200)
