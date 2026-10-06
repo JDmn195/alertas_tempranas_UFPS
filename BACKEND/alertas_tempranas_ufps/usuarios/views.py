@@ -214,8 +214,9 @@ def crear_usuario(request):
             'contrasena_temporal': contrasena_temporal,
         }, status=201)
         
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        logger.exception("Error al crear usuario")
+        return JsonResponse({'error': 'Error al crear el usuario.'}, status=500)
 
 @csrf_exempt
 @require_http_methods(["PUT", "PATCH"])
@@ -237,8 +238,9 @@ def actualizar_usuario(request, usuario_id):
         return JsonResponse({'mensaje': 'Usuario actualizado correctamente'})
     except Usuario.DoesNotExist:
         return JsonResponse({'error': 'Usuario no encontrado'}, status=404)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        logger.exception("Error al actualizar el usuario %s", usuario_id)
+        return JsonResponse({'error': 'Error al actualizar el usuario.'}, status=500)
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -260,8 +262,9 @@ def desactivar_usuario(request, usuario_id):
         return JsonResponse({'mensaje': f'Usuario {accion} correctamente', 'activo': usuario_target.activo})
     except Usuario.DoesNotExist:
         return JsonResponse({'error': 'Usuario no encontrado'}, status=404)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        logger.exception("Error al activar/desactivar el usuario %s", usuario_id)
+        return JsonResponse({'error': 'Error al cambiar el estado del usuario.'}, status=500)
 
 
 # --- Auditoría (HU-28) ---

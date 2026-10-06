@@ -102,7 +102,7 @@ def _leer_dataframe(archivo, dtype=None):
         return df, None
     except Exception as e:
         logger.warning("Error leyendo archivo '%s': %s", archivo.name, e, exc_info=True)
-        return None, JsonResponse({"error": f"Error leyendo archivo: {str(e)}"}, status=400)
+        return None, JsonResponse({"error": "Error leyendo archivo: verifica que sea un Excel o CSV válido y no esté dañado."}, status=400)
 
 
 def _validar_columnas(df, columnas_requeridas, nombre_archivo, tipo_bitacora, request, nombre_formato):
@@ -416,7 +416,7 @@ def importar_estudiantes_dirplan(request):
                          e, exc_info=True)
             if 'file' in locals() and hasattr(file, 'name'):
                 _registrar_bitacora(request, file.name, 'ESTUDIANTES', 0, [{"mensaje": str(e)}], False)
-            return JsonResponse({"status": "error", "message": str(e)}, status=500)
+            return JsonResponse({"status": "error", "mensaje": "Error inesperado al procesar la importación. Revisa la bitácora o contacta al administrador."}, status=500)
 
     return JsonResponse({"status": "error", "message": "Método no permitido o archivo faltante"}, status=400)
 
@@ -709,7 +709,7 @@ def importar_historial_academico(request):
                      e, exc_info=True)
         if 'nombre_archivo' in locals():
             _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', 0, [{"mensaje": str(e)}], False)
-        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+        return JsonResponse({"status": "error", "mensaje": "Error inesperado al procesar la importación. Revisa la bitácora o contacta al administrador."}, status=500)
 
 
 @csrf_exempt
@@ -826,7 +826,7 @@ def importar_oferta_academica(request):
     except Exception as e:
         logger.error("Error inesperado al importar oferta académica desde '%s': %s", nombre_archivo, e, exc_info=True)
         _registrar_bitacora(request, nombre_archivo, 'OFERTA', 0, [{"mensaje": str(e)}], False)
-        return JsonResponse({"status": "error", "mensaje": str(e)}, status=500)
+        return JsonResponse({"status": "error", "mensaje": "Error inesperado al procesar la importación. Revisa la bitácora o contacta al administrador."}, status=500)
 
 
 @csrf_exempt
@@ -1098,7 +1098,7 @@ def importar_asistencia(request):
     except Exception as e:
         logger.error("Error inesperado al guardar asistencia desde '%s': %s", nombre_archivo, e, exc_info=True)
         _registrar_bitacora(request, nombre_archivo, 'ASISTENCIA', 0, [{"mensaje": str(e)}], False)
-        return JsonResponse({"status": "error", "mensaje": str(e)}, status=500)
+        return JsonResponse({"status": "error", "mensaje": "Error inesperado al procesar la importación. Revisa la bitácora o contacta al administrador."}, status=500)
 
 
 @csrf_exempt
@@ -1263,4 +1263,4 @@ def importar_pensum(request):
     except Exception as e:
         logger.error("Error inesperado al importar pensum desde '%s': %s", nombre_archivo, e, exc_info=True)
         _registrar_bitacora(request, nombre_archivo, 'PENSUM', 0, [{"mensaje": str(e)}], False)
-        return JsonResponse({"status": "error", "mensaje": str(e)}, status=500)
+        return JsonResponse({"status": "error", "mensaje": "Error inesperado al procesar la importación. Revisa la bitácora o contacta al administrador."}, status=500)

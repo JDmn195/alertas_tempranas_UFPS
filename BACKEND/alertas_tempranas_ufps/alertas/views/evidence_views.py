@@ -106,7 +106,7 @@ def upload_evidence(request, intervencion_id):
     except Exception as e:
         logger.error("Error inesperado al subir evidencia para intervención %s: %s",
                      intervencion_id, e, exc_info=True)
-        return JsonResponse({'error': f'Error en el proceso de subida: {str(e)}'}, status=500)
+        return JsonResponse({'error': 'Error en el proceso de subida del archivo.'}, status=500)
 
 
 @require_http_methods(["GET"])

@@ -3,6 +3,7 @@ import json
 import os
 from django.conf import settings
 from django.template.loader import render_to_string
+from django.utils.html import escape
 from .models import Alerta, NotificacionHistorial, NotificacionInterna
 from academico.models import Estudiante, Docente, Nota, Periodo
 from usuarios.models import Usuario
@@ -85,9 +86,10 @@ class NotificationService:
 
     @staticmethod
     def generar_html_basico(alerta, destinatario_nombre):
-        """Genera un HTML estético para el correo"""
+        """Genera un HTML estético para el correo. Los datos importados se escapan."""
         estudiante = alerta.estudiante
         regla = alerta.regla
+        destinatario_nombre = escape(destinatario_nombre)
         
         # Estilos embebidos para compatibilidad con clientes de correo
         html = f"""
@@ -102,10 +104,10 @@ class NotificationService:
                     <p>Se ha detectado una nueva alerta en el sistema para el estudiante:</p>
                     
                     <div style="background-color: #fff8f8; padding: 15px; border-left: 4px solid #aa1916; margin: 20px 0;">
-                        <p style="margin: 5px 0;"><strong>Estudiante:</strong> {estudiante.nombre} ({estudiante.codigo})</p>
-                        <p style="margin: 5px 0;"><strong>Tipo de Alerta:</strong> {regla.nombre}</p>
-                        <p style="margin: 5px 0;"><strong>Severidad:</strong> {regla.get_nivel_display()}</p>
-                        <p style="margin: 5px 0;"><strong>Causa:</strong> {alerta.valor_causa}</p>
+                        <p style="margin: 5px 0;"><strong>Estudiante:</strong> {escape(estudiante.nombre)} ({escape(estudiante.codigo)})</p>
+                        <p style="margin: 5px 0;"><strong>Tipo de Alerta:</strong> {escape(regla.nombre)}</p>
+                        <p style="margin: 5px 0;"><strong>Severidad:</strong> {escape(regla.get_nivel_display())}</p>
+                        <p style="margin: 5px 0;"><strong>Causa:</strong> {escape(alerta.valor_causa)}</p>
                     </div>
 
                     <p>Por favor, revisa el sistema para realizar el seguimiento correspondiente.</p>

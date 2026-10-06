@@ -1,3 +1,4 @@
+import logging
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import csrf_exempt
@@ -6,6 +7,8 @@ from django.db.models import Q, Count, Avg, Subquery, OuterRef
 from academico.models import Curso, Nota, Periodo, Estudiante
 from alertas.models import RiesgoEstudiante, RiesgoEstudiantePeriodo, Alerta, Regla
 from usuarios.decorators import requiere_rol
+
+logger = logging.getLogger(__name__)
 
 # Umbral para marcar un curso como crítico (configurable aquí)
 UMBRAL_CRITICO = 30.0       # tasa de reprobación >= 30% → CRÍTICO
@@ -532,5 +535,6 @@ def director_indicadores(request):
             'cursos_criticos': cursos_criticos_list,
         })
 
-    except Exception as e:
-        return JsonResponse({'error': f'Error al calcular indicadores: {str(e)}'}, status=500)
+    except Exception:
+        logger.exception("Error al calcular los indicadores del director")
+        return JsonResponse({'error': 'Error al calcular indicadores.'}, status=500)

@@ -237,10 +237,9 @@ def recalcular_riesgo_estudiante(request, codigo):
             'nivel_riesgo': nivel,
             'promedio': float(estudiante.promedio) if estudiante.promedio is not None else None,
         })
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        logger.exception("Error al recalcular el riesgo del estudiante %s", codigo)
+        return JsonResponse({'error': 'Error al recalcular el riesgo.'}, status=500)
 
 
 @csrf_exempt
@@ -259,7 +258,7 @@ def generar_alertas(request):
         })
     except Exception as e:
         logger.error("Error inesperado en generar_alertas: %s", e, exc_info=True)
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({'error': 'Error al generar las alertas.'}, status=500)
 
 
 @csrf_exempt
@@ -278,10 +277,9 @@ def reevaluar_alertas(request):
                        f"{resultado['cerradas_automaticamente']} cerradas automáticamente.",
             **resultado
         })
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        logger.exception("Error al reevaluar las alertas activas")
+        return JsonResponse({'error': 'Error al reevaluar las alertas.'}, status=500)
 
 
 @csrf_exempt
@@ -365,10 +363,9 @@ def migrar_riesgo_periodos(request):
             'periodos_creados': periodos_creados,
             'errores': errores_lista[:20],  # máximo 20 errores en la respuesta
         })
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        logger.exception("Error al migrar el riesgo por periodos")
+        return JsonResponse({'error': 'Error al migrar el riesgo por periodos.'}, status=500)
 
 @csrf_exempt
 @require_http_methods(["GET"])

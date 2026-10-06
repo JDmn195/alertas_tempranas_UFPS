@@ -1,3 +1,4 @@
+import logging
 from django.http import JsonResponse
 from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404
@@ -9,6 +10,8 @@ from alertas.evaluacion import calcular_indicadores, calcular_ppa, nivel_de_ries
 from alertas.models import Alerta, Regla
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
+
+logger = logging.getLogger(__name__)
 
 
 def _acceso_denegado_docente(request, estudiante):
@@ -352,8 +355,9 @@ def obtener_detalle_estudiante(request, codigo):
         })
     except Estudiante.DoesNotExist:
         return JsonResponse({'error': f'Estudiante con código {codigo} no encontrado'}, status=404)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        logger.exception("Error al obtener el detalle del estudiante %s", codigo)
+        return JsonResponse({'error': 'Error al obtener los datos del estudiante.'}, status=500)
 
 
 @require_GET

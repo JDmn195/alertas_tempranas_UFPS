@@ -15,5 +15,6 @@ gunicorn
 whitenoise
 dj-database-url
 supabase==2.30.0
+PyJWT==2.13.0
 requests
 reportlab==4.2.5
