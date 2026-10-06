@@ -72,6 +72,7 @@ export default function AdminDashboard() {
       individual: "import/history/",
       courses: "import/offering/",
       teachers: "import/teachers/",
+      attendance: "import/asistencia/",
     };
 
     const endpoint = endpointMap[importType];
@@ -199,15 +200,39 @@ export default function AdminDashboard() {
             <option value="individual">Reportes Individuales de Estudiantes</option>
             <option value="courses">Listado de Cursos</option>
             <option value="teachers">Listado de Docentes</option>
+            <option value="attendance">Asistencia de Estudiantes</option>
           </select>
-          <p className="text-sm text-gray-500 mt-2">
+          <div className="text-sm text-gray-500 mt-2">
             {importType === 'pensum' && 'Importa la definición del pensum (Código, Nombre, Créditos, Semestre, Tipo y Equivalencias).'}
             {importType === 'general' && 'Permite consolidar la información académica básica de los estudiantes desde la fuente DIRPLAN.'}
             {importType === 'individual' && 'Construye de manera detallada el historial académico completo de cada estudiante.'}
             {importType === 'courses' && 'Suministra la información requerida (cursos, asignaturas y docentes) para el análisis académico.'}
             {importType === 'teachers' && 'Profesores.'}
-          </p>
+            {importType === 'attendance' && (
+              <div className="mt-1">
+                Columnas requeridas: codigo, materia, grupo, fecha, estado<br/>
+                Formato fecha: DD/MM/YYYY o YYYY-MM-DD<br/>
+                Estados: ASISTIO (A), FALTA (F), FALTA_JUSTIFICADA (FJ)<br/>
+                <button 
+                  onClick={() => {
+                    const csvContent = "data:text/csv;charset=utf-8,codigo,materia,grupo,fecha,estado\n1151234,1150301,A,15/09/2026,A";
+                    const encodedUri = encodeURI(csvContent);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", encodedUri);
+                    link.setAttribute("download", "plantilla_asistencia.csv");
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                  }}
+                  className="mt-2 px-3 py-1 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors text-xs font-medium"
+                >
+                  Descargar plantilla CSV
+                </button>
+              </div>
+            )}
+          </div>
         </div>
+
 
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">

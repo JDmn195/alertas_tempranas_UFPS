@@ -4,7 +4,6 @@ import logging
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from supabase import create_client, Client
 from alertas.models import Intervencion, Evidencia
 
 logger = logging.getLogger(__name__)
@@ -12,13 +11,15 @@ logger = logging.getLogger(__name__)
 BUCKET = os.environ.get("SUPABASE_BUCKET_NAME", "evidencias")
 
 # Cliente lazy: se inicializa la primera vez que se necesita
-_supabase_client: Client = None
+_supabase_client = None
 _supabase_failed: bool = False  # True solo si ya intentó y falló
 
-def get_supabase() -> Client:
+def get_supabase():
     """Devuelve el cliente Supabase, inicializándolo si es necesario.
     Reintenta siempre que no haya un cliente válido."""
     global _supabase_client, _supabase_failed
+
+    from supabase import create_client
 
     if _supabase_client is not None:
         return _supabase_client

@@ -4,6 +4,7 @@ from .views.intervencion_views import registrar_intervencion, listar_intervencio
 from .views.evidence_views import upload_evidence, list_evidence, delete_evidence
 from .views.alert_generation_views import generar_alertas, listar_alertas, cerrar_alerta, reevaluar_alertas, migrar_riesgo_periodos, recalcular_riesgo_estudiante
 from .views import notification_views
+from .views import reevaluacion_views
 from .views.report_views import export_report_data, exportar_reporte
 
 urlpatterns = [
@@ -13,6 +14,11 @@ urlpatterns = [
     path('generar/', generar_alertas, name='generar-alertas'),
     path('reevaluar/', reevaluar_alertas, name='reevaluar-alertas'),
     path('migrar-riesgo-periodos/', migrar_riesgo_periodos, name='migrar-riesgo-periodos'),
+    # HU-29: Re-evaluación periódica del riesgo
+    path('reevaluacion/programada/', reevaluacion_views.reevaluacion_programada, name='reevaluacion-programada'),
+    path('reevaluacion/ejecutar/', reevaluacion_views.reevaluacion_manual, name='reevaluacion-manual'),
+    path('reevaluacion/ejecuciones/', reevaluacion_views.listar_ejecuciones, name='reevaluacion-ejecuciones'),
+    path('reevaluacion/ejecuciones/<int:ejecucion_id>/', reevaluacion_views.detalle_ejecucion, name='reevaluacion-ejecucion-detalle'),
     path('estudiantes/<str:codigo>/recalcular/', recalcular_riesgo_estudiante, name='recalcular-riesgo-estudiante'),
     path('<int:alerta_id>/cerrar/', cerrar_alerta, name='cerrar-alerta'),
     path('<int:alerta_id>/intervenciones/', listar_intervenciones,  name='listar-intervenciones'),

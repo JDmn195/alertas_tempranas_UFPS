@@ -10,10 +10,11 @@ import traceback
 import logging
 from datetime import date
 from django.conf import settings
-from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia, BitacoraImportacion, EquivalenciaMateria
+from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia, BitacoraImportacion, EquivalenciaMateria, Asistencia
 from usuarios.models import Usuario
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
+from academico.services.asistencia import periodo_desde_fecha, normalizar_estado, estudiantes_del_curso
 
 logger = logging.getLogger(__name__)
 
@@ -375,15 +376,12 @@ def importar_estudiantes_dirplan(request):
             # Fix 1.2: se ejecuta en background para no demorar la respuesta HTTP
             try:
                 from alertas.views.alert_generation_views import reprocesar_alertas_completas
-                import threading
+                from alertas.tareas import ejecutar_en_segundo_plano
                 codigos_importados = [est.codigo for est in estudiantes_objs]
                 def _generar_alertas_bg():
-                    try:
-                        qs = Estudiante.objects.filter(codigo__in=codigos_importados)
-                        reprocesar_alertas_completas(qs, usuario=None)
-                    except Exception as bg_err:
-                        print(f"[BG] Error en generación automática de alertas: {bg_err}")
-                threading.Thread(target=_generar_alertas_bg, daemon=True).start()
+                    qs = Estudiante.objects.filter(codigo__in=codigos_importados)
+                    reprocesar_alertas_completas(qs, usuario=None)
+                ejecutar_en_segundo_plano(_generar_alertas_bg)
             except Exception as ae:
                 logger.warning("Error en generación automática de alertas tras importar estudiantes: %s", ae, exc_info=True)
 
@@ -656,18 +654,15 @@ def importar_historial_academico(request):
         # Fix 1.2: se ejecuta en background para no demorar la respuesta HTTP
         try:
             from alertas.views.alert_generation_views import calcular_y_guardar_riesgo_por_periodos, reprocesar_alertas_completas
-            import threading
+            from alertas.tareas import ejecutar_en_segundo_plano
             _codigo = codigo_estudiante
             _est = estudiante
             def _recalcular_bg():
-                try:
-                    calcular_y_guardar_riesgo_por_periodos(_est)
-                    reprocesar_alertas_completas(
-                        Estudiante.objects.filter(codigo=_codigo), usuario=None
-                    )
-                except Exception as bg_err:
-                    print(f"[BG] Error en recálculo automático de riesgo/alertas: {bg_err}")
-            threading.Thread(target=_recalcular_bg, daemon=True).start()
+                calcular_y_guardar_riesgo_por_periodos(_est)
+                reprocesar_alertas_completas(
+                    Estudiante.objects.filter(codigo=_codigo), usuario=None
+                )
+            ejecutar_en_segundo_plano(_recalcular_bg)
         except Exception as ae:
             logger.warning("Error en generación automática de alertas tras importar historial de '%s': %s",
                            codigo_estudiante, ae, exc_info=True)
@@ -911,6 +906,163 @@ def importar_docentes(request):
         "docentes_actualizados": actualizados,
         "errores":               errores,
     })
+
+
+@csrf_exempt
+@requiere_rol(['ADMINISTRADOR'])
+def importar_asistencia(request):
+    """
+    HU-33: IMPORTAR ASISTENCIA DESDE ARCHIVO
+    """
+    archivo, error = _validar_request_archivo(request, extensiones_permitidas=['.csv', '.xlsx', '.xls'])
+    if error:
+        return error
+
+    nombre_archivo = archivo.name
+
+    df, error = _leer_dataframe(archivo, dtype={'codigo': str, 'materia': str, 'grupo': str})
+    if error:
+        return error
+
+    columnas_requeridas = ['codigo', 'materia', 'grupo', 'fecha', 'estado']
+    error = _validar_columnas(df, columnas_requeridas, nombre_archivo, 'ASISTENCIA', request, 'Asistencia')
+    if error:
+        return error
+
+    # Limpiar columnas obligatorias tipo string
+    for col in ['codigo', 'materia', 'grupo']:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+            # Limpiar el .0 al final en caso de que excel lo haya convertido
+            df[col] = df[col].apply(lambda x: str(int(float(x))) if x.endswith('.0') else x)
+
+    errores = []
+    registros_validos = []
+    seen_keys = {}
+    
+    # Precargar datos para no consultar en el ciclo
+    codigos = df['codigo'].dropna().unique()
+    estudiantes_dict = {est.codigo: est for est in Estudiante.objects.filter(codigo__in=codigos)}
+    
+    materias = df['materia'].dropna().unique()
+    grupos = df['grupo'].dropna().unique()
+    cursos_qs = Curso.objects.filter(materia__codigo__in=materias, grupo__in=grupos)
+    cursos_dict = {(c.materia.codigo, c.grupo): c for c in cursos_qs}
+    
+    # Pre-calcular periodos y pertenencia a curso
+    # para evitar N consultas
+    cache_periodos = {}
+    cache_pertenencia = {}
+
+    for index, row in df.iterrows():
+        fila_num = index + 2
+        codigo = row.get('codigo')
+        materia_cod = row.get('materia')
+        grupo = row.get('grupo')
+        fecha_raw = row.get('fecha')
+        estado_raw = row.get('estado')
+
+        if not codigo or codigo == 'nan':
+            errores.append({"fila": fila_num, "campo": "codigo", "mensaje": "Código vacío"})
+            continue
+
+        estudiante = estudiantes_dict.get(codigo)
+        if not estudiante:
+            errores.append({"fila": fila_num, "campo": "codigo", "valor": codigo, "mensaje": "El estudiante no existe"})
+            continue
+
+        if not materia_cod or not grupo or materia_cod == 'nan' or grupo == 'nan':
+            errores.append({"fila": fila_num, "campo": "curso", "mensaje": "Materia o grupo vacío"})
+            continue
+            
+        curso = cursos_dict.get((materia_cod, grupo))
+        if not curso:
+            errores.append({"fila": fila_num, "campo": "curso", "valor": f"{materia_cod}-{grupo}", "mensaje": "El curso no existe"})
+            continue
+
+        try:
+            fecha_clase = pd.to_datetime(fecha_raw, dayfirst=True).date()
+        except (ValueError, TypeError):
+            errores.append({"fila": fila_num, "campo": "fecha", "valor": fecha_raw, "mensaje": "Formato de fecha inválido"})
+            continue
+            
+        if fecha_clase > date.today():
+            errores.append({"fila": fila_num, "campo": "fecha", "valor": str(fecha_clase), "mensaje": "No se pueden registrar asistencias futuras"})
+            continue
+
+        if fecha_clase not in cache_periodos:
+            cache_periodos[fecha_clase] = periodo_desde_fecha(fecha_clase)
+            
+        periodo = cache_periodos[fecha_clase]
+        if not periodo:
+            errores.append({"fila": fila_num, "campo": "fecha", "valor": str(fecha_clase), "mensaje": "No existe un periodo académico configurado para esta fecha"})
+            continue
+
+        # Verificar si el estudiante pertenece al curso
+        clave_curso_periodo = (curso.id, periodo.id)
+        if clave_curso_periodo not in cache_pertenencia:
+            cache_pertenencia[clave_curso_periodo] = estudiantes_del_curso(curso, periodo)
+            
+        if codigo not in cache_pertenencia[clave_curso_periodo]:
+            errores.append({"fila": fila_num, "campo": "estudiante", "valor": codigo, "mensaje": "El estudiante no pertenece al curso en este periodo"})
+            continue
+
+        estado_norm = normalizar_estado(estado_raw)
+        if not estado_norm:
+            errores.append({"fila": fila_num, "campo": "estado", "valor": estado_raw, "mensaje": "Estado inválido. Use ASISTIO, FALTA o FALTA_JUSTIFICADA (o A, F, FJ)"})
+            continue
+
+        clave_unica = (codigo, curso.id, fecha_clase)
+        if clave_unica in seen_keys:
+            # Buscar en qué fila se vio primero
+            errores.append({"fila": fila_num, "campo": "fila", "mensaje": f"Duplicado en el archivo: la fila {fila_num} repite la fila {seen_keys[clave_unica]}"})
+            continue
+            
+        seen_keys[clave_unica] = fila_num
+
+        registros_validos.append(
+            Asistencia(
+                estudiante=estudiante,
+                curso=curso,
+                periodo=periodo,
+                fecha_clase=fecha_clase,
+                estado=estado_norm,
+                registrado_por=request.usuario
+            )
+        )
+
+    if errores:
+        _registrar_bitacora(request, nombre_archivo, 'ASISTENCIA', 0, errores, False)
+        return JsonResponse({
+            "status": "error",
+            "mensaje": "Errores encontrados en el archivo.",
+            "errores": errores
+        }, status=400)
+
+    try:
+        with transaction.atomic():
+            Asistencia.objects.bulk_create(
+                registros_validos,
+                batch_size=500,
+                update_conflicts=True,
+                unique_fields=['estudiante_id', 'curso_id', 'fecha_clase'],
+                update_fields=['estado', 'periodo', 'registrado_por']
+            )
+
+        _registrar_bitacora(request, nombre_archivo, 'ASISTENCIA', len(registros_validos), [], True)
+        registrar_auditoria(
+            request.usuario, 'IMPORTACION',
+            f"Importación de ASISTENCIA exitosa: {len(registros_validos)} registros desde '{nombre_archivo}'."
+        )
+        return JsonResponse({
+            "status": "success",
+            "mensaje": "Asistencia importada correctamente.",
+            "creados": len(registros_validos)
+        })
+    except Exception as e:
+        logger.error("Error inesperado al guardar asistencia desde '%s': %s", nombre_archivo, e, exc_info=True)
+        _registrar_bitacora(request, nombre_archivo, 'ASISTENCIA', 0, [{"mensaje": str(e)}], False)
+        return JsonResponse({"status": "error", "mensaje": str(e)}, status=500)
 
 
 @csrf_exempt

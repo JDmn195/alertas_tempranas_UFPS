@@ -38,6 +38,7 @@ class Auditoria(models.Model):
         ('GENERAR_ALERTAS', 'Generar Alertas'),
         ('LOGIN', 'Inicio de Sesión'),
         ('ACCESO_DENEGADO', 'Acceso Denegado (403)'),
+        ('REGISTRO_ASISTENCIA', 'Registro de Asistencia'),  # HU-33
     ]
 
     usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True)
