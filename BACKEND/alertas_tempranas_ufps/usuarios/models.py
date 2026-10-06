@@ -59,6 +59,10 @@ class Auditoria(models.Model):
         ('REGISTRO_ASISTENCIA', 'Registro de Asistencia'),  # HU-33
         ('ENVIO_RECORDATORIOS', 'Envío de Recordatorios'),  # HU-30
         ('CONFIGURAR_RECORDATORIOS', 'Configurar Recordatorios'),  # HU-30
+        ('REEVALUAR_ALERTAS', 'Reevaluar Alertas'),
+        ('RECALCULAR_RIESGO', 'Recalcular Riesgo de Estudiante'),
+        ('REEVALUACION_RIESGO', 'Re-evaluación Periódica del Riesgo'),  # HU-29
+        ('MIGRAR_RIESGO_PERIODOS', 'Migrar Riesgo por Periodos'),
     ]
 
     usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True)

@@ -97,7 +97,10 @@ DB_PASSWORD=la_password_que_te_dieron
 DB_HOST=ep-xxxx.neon.tech
 DB_PORT=5432
 
-SECRET_KEY=django-insecure-om79t4&_8=o0^c--314xy+nbzy%8=wz^qi5m^6lubf-o22qes&
+# Genera una clave propia con:
+# python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+SECRET_KEY=tu_clave_generada
+# Solo en desarrollo; sin esta línea el proyecto arranca en modo producción
 DEBUG=True
 ```
 

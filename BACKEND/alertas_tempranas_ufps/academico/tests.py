@@ -575,7 +575,7 @@ class ImportViewsTestCase(TestCase):
 
     def test_atraso_electiva_con_semestre_no_cuenta_como_atrasada(self):
         """ATRASO: una electiva con semestre asignado no cuenta como materia atrasada."""
-        from alertas.views.alert_generation_views import _evaluar_regla_para_estudiante
+        from alertas.views.alert_generation_views import evaluar_reglas_estudiante
         est = Estudiante.objects.create(codigo="1152008", nombre="Alumno Atraso", semestre=3, numero_documento="DOC_T8")
         periodo = Periodo.objects.create(anio=2024, semestre=1)
         
@@ -595,7 +595,7 @@ class ImportViewsTestCase(TestCase):
         # Regla de atraso
         regla_atraso = Regla.objects.create(nombre="Atraso > 0", tipo="ATRASO", valor_umbral=0, operador=">", nivel="high")
         
-        aplica, val, meta = _evaluar_regla_para_estudiante(est, regla_atraso)
+        aplica, val, meta = evaluar_reglas_estudiante(est, [regla_atraso])[regla_atraso.id]
         self.assertEqual(val, 0)
         self.assertFalse(aplica)
 

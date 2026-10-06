@@ -176,10 +176,8 @@ def _registrar_bitacora(request, archivo_nombre, tipo, total_procesados, errores
             except Usuario.DoesNotExist:
                 pass
 
+    # total_procesados = registros realmente guardados: 0 si la importación se canceló
     num_errores = len(errores) if isinstance(errores, list) else 0
-    # Fix 1.1: total_procesados debe ser 0 cuando la importación falla completamente
-    # (evita que "exitosos = total_procesados - errores" dé negativo en el frontend)
-    procesados_real = total_procesados if exitoso else max(0, total_procesados)
 
     detalles = errores if isinstance(errores, list) else []
     if advertencias and isinstance(advertencias, list):
@@ -189,7 +187,7 @@ def _registrar_bitacora(request, archivo_nombre, tipo, total_procesados, errores
         usuario=usuario,
         archivo_nombre=archivo_nombre,
         tipo=tipo,
-        total_procesados=procesados_real,
+        total_procesados=total_procesados,
         total_errores=num_errores,
         detalles_errores=detalles,
         exitoso=exitoso
@@ -369,23 +367,19 @@ def importar_estudiantes_dirplan(request):
                     processed_count = len(estudiantes_objs)
 
                     # Fix 1.4: Para los estudiantes que tienen notas registradas,
-                    # recalcular el promedio a partir de sus notas reales.
-                    # Los que no tienen notas conservan el promedio del archivo.
-                    from django.db.models import Avg as _Avg
-                    from django.db.models import OuterRef, Subquery
+                    # recalcular el promedio (PPA ponderado por créditos) a partir
+                    # de sus notas reales. Los que no tienen notas conservan el
+                    # promedio del archivo.
+                    from alertas.evaluacion import actualizar_promedio
                     codigos_importados = [est.codigo for est in estudiantes_objs]
-                    # Obtener promedios calculados desde notas para los estudiantes importados
-                    notas_con_prom = (
+                    codigos_con_notas = (
                         Nota.objects
-                        .filter(estudiante_id__in=codigos_importados)
-                        .exclude(definitiva__isnull=True)
-                        .values('estudiante_id')
-                        .annotate(ppa=_Avg('definitiva'))
+                        .filter(estudiante_id__in=codigos_importados, definitiva__isnull=False)
+                        .values_list('estudiante_id', flat=True)
+                        .distinct()
                     )
-                    for row in notas_con_prom:
-                        Estudiante.objects.filter(codigo=row['estudiante_id']).update(
-                            promedio=round(row['ppa'], 2)
-                        )
+                    for est in Estudiante.objects.filter(codigo__in=codigos_con_notas):
+                        actualizar_promedio(est)
 
             # AUTOMATIZACIÓN: Generar alertas para los estudiantes procesados
             # Fix 1.2: se ejecuta en background para no demorar la respuesta HTTP
@@ -678,16 +672,9 @@ def importar_historial_academico(request):
             )
             creados = len(nota_objs)
 
-            # Actualizar promedio del estudiante (solo notas con definitiva)
-            from django.db.models import Avg as _Avg
-            ppa_result = Nota.objects.filter(
-                estudiante=estudiante
-            ).exclude(definitiva__isnull=True).aggregate(ppa=_Avg('definitiva'))
-            if ppa_result['ppa'] is not None:
-                Estudiante.objects.filter(codigo=estudiante.codigo).update(
-                    promedio=round(ppa_result['ppa'], 2)
-                )
-                estudiante.refresh_from_db()
+            # Actualizar promedio del estudiante (PPA ponderado, solo notas con definitiva)
+            from alertas.evaluacion import actualizar_promedio
+            actualizar_promedio(estudiante)
 
         _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', creados, [], True, advertencias=advertencias)
         registrar_auditoria(
@@ -793,9 +780,9 @@ def importar_oferta_academica(request):
             "docente": docente_obj, "horario": horario, "matriculados": matriculados,
         })
 
-    # CANCELAR SI HAY ERRORES
+    # CANCELAR SI HAY ERRORES (no se guarda nada)
     if errores:
-        _registrar_bitacora(request, nombre_archivo, 'OFERTA', len(registros_validos), errores, False)
+        _registrar_bitacora(request, nombre_archivo, 'OFERTA', 0, errores, False)
         return JsonResponse({"status": "error", "mensaje": "Se encontraron errores.", "total_errores": len(errores), "errores": errores}, status=400)
 
     # 5. GUARDAR

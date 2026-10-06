@@ -1,16 +1,13 @@
-import json
 import logging
 from django.http import JsonResponse
 from django.db import transaction
-from django.db.models import Q, Count, Avg
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.shortcuts import get_object_or_404
 
 from academico.models import Estudiante, Nota, Curso, Periodo
+from alertas.evaluacion import actualizar_promedio, calcular_indicadores, evaluar_regla, nivel_de_riesgo
 from alertas.models import Regla, Alerta, RiesgoEstudiante, RiesgoEstudiantePeriodo
-from academico.views.student_views import calcular_nivel_riesgo
-from alertas.services import NotificationService
 
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
@@ -20,79 +17,15 @@ logger = logging.getLogger(__name__)
 
 def _calcular_nivel_para_periodo(estudiante, periodo, reglas, semestre_en_periodo=None):
     """
-    Calcula el nivel de riesgo de un estudiante usando solo las notas
-    del periodo indicado como referencia para REPROBACION y ATRASO.
-    Para PROMEDIO usa el PPA acumulado hasta ese periodo.
+    Nivel de riesgo del estudiante con sus notas hasta el periodo indicado.
 
     semestre_en_periodo: semestre que cursaba el estudiante en ese periodo
     (posición ordinal desde su primer periodo con notas). Si no se pasa,
     se usa estudiante.semestre (snapshot actual).
     """
-    from django.db.models import Avg as _Avg
-    from academico.models import Materia as _Materia
-    from academico.models import EquivalenciaMateria as _Equiv
-
-    # Semestre de referencia para el cálculo de atraso
-    semestre_ref = semestre_en_periodo if semestre_en_periodo is not None else estudiante.semestre
-
-    # PPA acumulado hasta este periodo (inclusive)
-    notas_hasta = Nota.objects.filter(
-        estudiante=estudiante,
-        periodo__anio__lte=periodo.anio
-    ).exclude(
-        periodo__anio=periodo.anio,
-        periodo__semestre__gt=periodo.semestre
-    ).exclude(definitiva__isnull=True)
-
-    ppa_row = notas_hasta.aggregate(ppa=_Avg('definitiva'))
-    ppa = float(ppa_row['ppa']) if ppa_row['ppa'] else None
-
-    # Reprobadas acumuladas hasta este periodo
-    reprobadas = notas_hasta.filter(definitiva__lt=3.0).count()
-
-    # Materias aprobadas directamente
-    aprobadas_materia_ids = set(
-        notas_hasta.filter(definitiva__gte=3.0)
-        .values_list('curso__materia_id', flat=True)
-    )
-    # Materias del pensum satisfechas por equivalencia:
-    # si el estudiante aprobó una materia_equivalente, la materia_pensum se cuenta como aprobada
-    equiv_satisfechas = _Equiv.objects.filter(
-        materia_equivalente_id__in=aprobadas_materia_ids
-    ).values_list('materia_pensum_id', flat=True)
-    aprobadas_ids = aprobadas_materia_ids | set(equiv_satisfechas)
-
-    # Atraso: materias obligatorias de semestres anteriores al semestre_ref sin aprobar
-    atraso = _Materia.objects.filter(
-        semestre__lt=semestre_ref
-    ).exclude(codigo__in=aprobadas_ids).filter(tipo='linea').count()
-
-    orden_niveles = {'high': 3, 'medium': 2, 'low': 1}
-    nivel_actual = 'low'
-    valor_max_nivel = 0
-    reglas_aplicadas = []
-
-    for regla in reglas:
-        if ppa is None and regla.tipo == 'PROMEDIO':
-            continue
-        val = ppa if regla.tipo == 'PROMEDIO' else (reprobadas if regla.tipo == 'REPROBACION' else atraso)
-        try:
-            aplica = (
-                (regla.operador == '<'  and val < float(regla.valor_umbral)) or
-                (regla.operador == '>'  and val > float(regla.valor_umbral)) or
-                (regla.operador == '<=' and val <= float(regla.valor_umbral)) or
-                (regla.operador == '>=' and val >= float(regla.valor_umbral)) or
-                (regla.operador == '==' and val == float(regla.valor_umbral))
-            )
-        except Exception:
-            continue
-        if aplica:
-            if orden_niveles.get(regla.nivel, 0) > valor_max_nivel:
-                nivel_actual = regla.nivel
-                valor_max_nivel = orden_niveles[regla.nivel]
-            reglas_aplicadas.append({'id': regla.id, 'nombre': regla.nombre, 'nivel': regla.nivel, 'valor': val})
-
-    return nivel_actual, reglas_aplicadas, ppa
+    indicadores = calcular_indicadores(estudiante, periodo=periodo, semestre_ref=semestre_en_periodo)
+    nivel, reglas_aplicadas = nivel_de_riesgo(reglas, indicadores)
+    return nivel, reglas_aplicadas, indicadores['ppa']
 
 
 def calcular_y_guardar_riesgo_por_periodos(estudiante, reglas=None):
@@ -101,9 +34,8 @@ def calcular_y_guardar_riesgo_por_periodos(estudiante, reglas=None):
     para cada periodo en el que tiene notas registradas.
     También actualiza RiesgoEstudiante (snapshot actual = último periodo).
 
-    Si el estudiante no tiene notas pero sí tiene promedio registrado,
-    se evalúa el riesgo directamente con las reglas de PROMEDIO para
-    evitar que quede en 'unknown' al ser importado sin historial.
+    Si el estudiante no tiene notas se evalúa con su promedio importado
+    (solo aplican las reglas de PROMEDIO; sin promedio queda en 'unknown').
 
     Retorna el nivel del periodo más reciente (o calculado desde promedio).
     """
@@ -118,15 +50,14 @@ def calcular_y_guardar_riesgo_por_periodos(estudiante, reglas=None):
         .order_by('anio', 'semestre')
     )
 
-    nivel_actual = 'unknown'
+    nivel_actual = None
     reglas_actuales = []
 
     for idx, periodo in enumerate(periodos):
         # Semestre que cursaba el estudiante en este periodo:
         # el primer periodo con notas = semestre 1, el siguiente = 2, etc.
-        semestre_en_periodo = idx + 1
         nivel, reglas_ap, _ = _calcular_nivel_para_periodo(
-            estudiante, periodo, reglas, semestre_en_periodo=semestre_en_periodo
+            estudiante, periodo, reglas, semestre_en_periodo=idx + 1
         )
         RiesgoEstudiantePeriodo.objects.update_or_create(
             estudiante=estudiante,
@@ -136,41 +67,8 @@ def calcular_y_guardar_riesgo_por_periodos(estudiante, reglas=None):
         nivel_actual = nivel
         reglas_actuales = reglas_ap
 
-    # Si no hay notas pero el estudiante tiene promedio, evaluar solo reglas de PROMEDIO.
-    # No evaluar REPROBACION ni ATRASO: sin notas registradas esos valores serían
-    # espurios (0 reprobadas, pero N materias "no aprobadas" inflarían el atraso).
-    if nivel_actual == 'unknown' and estudiante.promedio is not None:
-        orden_niveles = {'high': 3, 'medium': 2, 'low': 1}
-        nivel_prom = 'low'
-        valor_max_prom = 0
-        reglas_prom_aplicadas = []
-        for regla in reglas:
-            if regla.tipo != 'PROMEDIO':
-                continue
-            try:
-                val = float(estudiante.promedio)
-                umbral = float(regla.valor_umbral)
-                aplica = (
-                    (regla.operador == '<'  and val < umbral) or
-                    (regla.operador == '>'  and val > umbral) or
-                    (regla.operador == '<=' and val <= umbral) or
-                    (regla.operador == '>=' and val >= umbral) or
-                    (regla.operador == '==' and val == umbral)
-                )
-            except Exception:
-                continue
-            if aplica and orden_niveles.get(regla.nivel, 0) > valor_max_prom:
-                nivel_prom = regla.nivel
-                valor_max_prom = orden_niveles[regla.nivel]
-                reglas_prom_aplicadas.append({
-                    'id': regla.id, 'nombre': regla.nombre,
-                    'nivel': regla.nivel, 'valor': float(estudiante.promedio)
-                })
-        # Solo asignar nivel distinto de 'unknown' si alguna regla aplicó;
-        # si el promedio es bueno y no dispara ninguna regla, queda en 'low'
-        # (hay suficientes datos para decir que no está en riesgo).
-        nivel_actual = nivel_prom
-        reglas_actuales = reglas_prom_aplicadas
+    if nivel_actual is None:
+        nivel_actual, reglas_actuales = nivel_de_riesgo(reglas, calcular_indicadores(estudiante))
 
     # Snapshot actual
     RiesgoEstudiante.objects.update_or_create(
@@ -180,145 +78,59 @@ def calcular_y_guardar_riesgo_por_periodos(estudiante, reglas=None):
     return nivel_actual
 
 
-def _evaluar_regla_para_estudiante(est, r):
+def evaluar_reglas_estudiante(est, reglas):
     """
-    Evalúa si una regla aplica al estudiante dado su estado académico actual.
-    Retorna (aplica: bool, val: float, metadata: dict).
-    Respeta equivalencias de materias para el cálculo de ATRASO.
+    Evalúa las reglas con el estado académico actual del estudiante.
+    Retorna {regla.id: (aplica, valor, metadata)}.
     """
-    from academico.models import Materia, EquivalenciaMateria
-    aplica = False
-    val = 0
-    metadata_regla = {}
-
-    if r.tipo == 'PROMEDIO':
-        val = float(est.promedio) if est.promedio else 0
-        metadata_regla = {'promedio': val}
-    elif r.tipo == 'REPROBACION':
-        reprobadas_qs = Nota.objects.filter(
-            estudiante=est, definitiva__lt=3.0
-        ).select_related('curso__materia')
-        val = reprobadas_qs.count()
-        metadata_regla = {'materias': [n.curso.materia.nombre for n in reprobadas_qs]}
-    elif r.tipo == 'ATRASO':
-        if Nota.objects.filter(estudiante=est).exists():
-            # Materias aprobadas directamente
-            aprobadas_materia_ids = set(
-                Nota.objects.filter(estudiante=est, definitiva__gte=3.0)
-                .values_list('curso__materia_id', flat=True)
-            )
-            # Materias del pensum satisfechas por equivalencia
-            equiv_satisfechas = EquivalenciaMateria.objects.filter(
-                materia_equivalente_id__in=aprobadas_materia_ids
-            ).values_list('materia_pensum_id', flat=True)
-            aprobadas_ids = aprobadas_materia_ids | set(equiv_satisfechas)
-
-            atrasadas_qs = Materia.objects.filter(
-                semestre__lt=est.semestre
-            ).exclude(codigo__in=aprobadas_ids).filter(tipo='linea')
-            val = atrasadas_qs.count()
-            metadata_regla = {
-                'semestre_actual': est.semestre,
-                'materias_atrasadas': [m.nombre for m in atrasadas_qs],
-                'total_atrasadas': val
-            }
-
-    try:
-        if r.operador == '<':  aplica = val < float(r.valor_umbral)
-        elif r.operador == '>':  aplica = val > float(r.valor_umbral)
-        elif r.operador == '<=': aplica = val <= float(r.valor_umbral)
-        elif r.operador == '>=': aplica = val >= float(r.valor_umbral)
-        elif r.operador == '==': aplica = val == float(r.valor_umbral)
-    except Exception:
-        pass
-
-    return aplica, val, metadata_regla
+    indicadores = calcular_indicadores(est)
+    return {r.id: evaluar_regla(r, indicadores) for r in reglas}
 
 
 def reprocesar_alertas_completas(estudiantes_qs=None, usuario=None, regla_especifica=None):
     """
-    (Re)genera alertas y riesgos para los estudiantes indicados.
+    (Re)genera riesgo y alertas de los estudiantes indicados (por defecto, todos
+    los evaluables) con la misma lógica de la re-evaluación periódica (HU-29):
 
-    Fix 3.3: si se pasa regla_especifica (Regla), solo genera/reevalúa alertas
-    de esa regla, sin tocar las demás.
+    - Las alertas abiertas que siguen aplicando se conservan (solo se actualiza
+      su valor): no se recrean ni se vuelven a notificar.
+    - Las abiertas cuya regla ya no aplica se cierran.
+    - Si no hay una alerta abierta de la regla, se crea una nueva, aunque haya
+      una cerrada de antes (el estudiante recayó).
+    - Cada estudiante va en su propia transacción y los correos salen después
+      de confirmarla.
 
-    Fix 3.4: no crea una alerta si ya existe una de la misma regla para el
-    estudiante en cualquier estado (activa, en_seguimiento, atendida, cerrada).
-    Así se evitan duplicados en generación manual.
+    Fix 3.3: si se pasa regla_especifica (Regla), solo crea/actualiza/cierra
+    alertas de esa regla, sin tocar las demás.
     """
+    from alertas.reevaluacion import estudiantes_evaluables, reevaluar_estudiante
+
     reglas = list(Regla.objects.filter(activo=True).order_by('-prioridad'))
     if estudiantes_qs is None:
-        estudiantes_qs = Estudiante.objects.exclude(
-            Q(estado_matricula__icontains='retirado') |
-            Q(estado_matricula__icontains='graduado') |
-            Q(estado_matricula__icontains='cancelado')
-        )
+        estudiantes_qs = estudiantes_evaluables()
 
-    # Si solo aplica a una regla específica, restringir la lista
-    reglas_a_evaluar = [regla_especifica] if regla_especifica else reglas
-
+    evaluados = 0
     nuevas_alertas = 0
-    actualizados = 0
+    errores = 0
     por_nivel = {'high': 0, 'medium': 0, 'low': 0, 'unknown': 0}
 
-    with transaction.atomic():
-        for est in estudiantes_qs:
-            # 1. Calcular y persistir riesgo por periodo + snapshot actual
-            nivel = calcular_y_guardar_riesgo_por_periodos(est, reglas)
-            por_nivel[nivel] = por_nivel.get(nivel, 0) + 1
-            actualizados += 1
-
-            # 2. Evaluar reglas para generar alertas
-            reglas_por_tipo = {}
-            for r in reglas_a_evaluar:
-                aplica, val, metadata_regla = _evaluar_regla_para_estudiante(est, r)
-                if aplica and r.tipo not in reglas_por_tipo:
-                    reglas_por_tipo[r.tipo] = {
-                        'id': r.id, 'nombre': r.nombre, 'nivel': r.nivel,
-                        'valor': val, 'metadata': metadata_regla
-                    }
-
-            # 3. Limpieza (solo en modo completo): borrar las alertas activas sin
-            # intervenciones cuya regla ya no aplica. Las que siguen aplicando se
-            # conservan para no recrearlas ni volver a notificar en cada importación.
-            if not regla_especifica:
-                ids_aplicables = [r_app['id'] for r_app in reglas_por_tipo.values()]
-                Alerta.objects.filter(
-                    estudiante=est,
-                    estado__in=['activa', 'active']
-                ).exclude(
-                    regla_id__in=ids_aplicables
-                ).annotate(n_int=Count('intervencion')).filter(n_int=0).delete()
-
-            # 4. Generar alertas — Fix 3.4: omitir si ya existe alerta de esa regla
-            for r_app in list(reglas_por_tipo.values()):
-                existente = Alerta.objects.filter(
-                    estudiante=est,
-                    regla_id=r_app['id']
-                ).first()
-                if existente:
-                    # No duplicar sin importar el estado; si sigue activa,
-                    # solo refrescar el valor que la disparó (sin notificar)
-                    if existente.estado in ('activa', 'active'):
-                        existente.valor_causa = r_app['valor']
-                        existente.metadata = r_app['metadata']
-                        existente.save(update_fields=['valor_causa', 'metadata'])
-                    continue
-
-                nueva_alerta = Alerta.objects.create(
-                    estudiante=est,
-                    regla_id=r_app['id'],
-                    estado='activa',
-                    valor_causa=r_app['valor'],
-                    metadata=r_app['metadata']
-                )
-                NotificationService.notificar_alerta(nueva_alerta)
-                nuevas_alertas += 1
+    for est in estudiantes_qs:
+        evaluados += 1
+        try:
+            res = reevaluar_estudiante(est, reglas, solo_regla=regla_especifica)
+        except Exception as e:
+            # Un estudiante con datos problemáticos no detiene a los demás
+            logger.error("Error al generar alertas del estudiante %s: %s", est.codigo, e, exc_info=True)
+            errores += 1
+            continue
+        por_nivel[res['nivel_nuevo']] = por_nivel.get(res['nivel_nuevo'], 0) + 1
+        nuevas_alertas += res['alertas_generadas']
 
     resultado = {
-        'total_evaluados': estudiantes_qs.count(),
-        'actualizados': actualizados,
+        'total_evaluados': evaluados,
+        'actualizados': evaluados - errores,
         'nuevas_alertas': nuevas_alertas,
+        'errores': errores,
         'estudiantes_por_nivel': por_nivel
     }
 
@@ -332,7 +144,7 @@ def reprocesar_alertas_completas(estudiantes_qs=None, usuario=None, regla_especi
         'GENERAR_ALERTAS',
         f"Generación de alertas ejecutada por {origen}. "
         f"Evaluados: {resultado['total_evaluados']}, "
-        f"nuevas alertas: {resultado['nuevas_alertas']}."
+        f"nuevas alertas: {resultado['nuevas_alertas']}, errores: {errores}."
     )
 
     return resultado
@@ -354,6 +166,7 @@ def reevaluar_alertas_activas(usuario=None):
 
     cerradas = 0
     evaluadas = 0
+    indicadores_por_estudiante = {}
 
     with transaction.atomic():
         for alerta in alertas:
@@ -367,7 +180,9 @@ def reevaluar_alertas_activas(usuario=None):
                 evaluadas += 1
                 continue
 
-            aplica, val, metadata_regla = _evaluar_regla_para_estudiante(est, r)
+            if est.pk not in indicadores_por_estudiante:
+                indicadores_por_estudiante[est.pk] = calcular_indicadores(est)
+            aplica, val, metadata_regla = evaluar_regla(r, indicadores_por_estudiante[est.pk])
             evaluadas += 1
 
             if not aplica:
@@ -404,15 +219,8 @@ def recalcular_riesgo_estudiante(request, codigo):
         return JsonResponse({'error': f'Estudiante {codigo} no encontrado'}, status=404)
 
     try:
-        from django.db.models import Avg as _Avg
-
-        # 1. Recalcular promedio desde notas reales si tiene notas
-        notas_qs = Nota.objects.filter(estudiante=estudiante).exclude(definitiva__isnull=True)
-        if notas_qs.exists():
-            ppa = notas_qs.aggregate(ppa=_Avg('definitiva'))['ppa']
-            if ppa is not None:
-                Estudiante.objects.filter(codigo=codigo).update(promedio=round(ppa, 2))
-                estudiante.refresh_from_db()
+        # 1. Recalcular promedio (PPA) desde notas reales si tiene notas
+        actualizar_promedio(estudiante)
 
         # 2. Recalcular riesgo por periodo + snapshot
         nivel = calcular_y_guardar_riesgo_por_periodos(estudiante)

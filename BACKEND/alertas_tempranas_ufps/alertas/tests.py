@@ -219,7 +219,7 @@ class RegistroEjecucionTests(ReevaluacionBaseTestCase):
         self.assertEqual(RiesgoEstudiante.objects.get(estudiante=self.est_malo).nivel_riesgo, 'high')
 
     def test_error_de_un_estudiante_revierte_sus_cambios_parciales(self):
-        with patch('alertas.views.alert_generation_views._evaluar_regla_para_estudiante',
+        with patch('alertas.views.alert_generation_views.evaluar_reglas_estudiante',
                    side_effect=RuntimeError('boom')):
             ej = self._ejecutar()[-1]
 
@@ -395,17 +395,17 @@ class ReevaluacionEndpointsTests(ReevaluacionBaseTestCase):
 class ReprocesarAlertasTests(ReevaluacionBaseTestCase):
     """Reprocesar tras una importación no debe recrear ni renotificar alertas vigentes."""
 
-    def setUp(self):
-        super().setUp()
-        Estudiante.objects.filter(pk=self.est_bueno.pk).update(promedio=Decimal('4.0'))
-        Estudiante.objects.filter(pk=self.est_malo.pk).update(promedio=Decimal('2.2'))
+    def _notas_malo(self, *definitivas):
+        for nota, definitiva in zip(Nota.objects.filter(estudiante=self.est_malo).order_by('curso_id'), definitivas):
+            nota.definitiva = Decimal(str(definitiva))
+            nota.save()
 
     def test_no_recrea_ni_renotifica_alertas_que_siguen_aplicando(self):
         reprocesar_alertas_completas()
         alerta = Alerta.objects.get(estudiante=self.est_malo)
         self.assertEqual(self.notif.call_count, 1)
 
-        Estudiante.objects.filter(pk=self.est_malo.pk).update(promedio=Decimal('2.0'))
+        self._notas_malo(1.4, 2.2, 2.4)  # PPA 2.2 → 2.0, sigue aplicando
         reprocesar_alertas_completas()
 
         self.assertEqual(self.notif.call_count, 1)
@@ -414,11 +414,31 @@ class ReprocesarAlertasTests(ReevaluacionBaseTestCase):
         self.assertEqual(actual.fecha_generacion, alerta.fecha_generacion)
         self.assertEqual(float(actual.valor_causa), 2.0)
 
-    def test_borra_alerta_activa_sin_intervenciones_si_la_regla_ya_no_aplica(self):
+    def test_cierra_la_alerta_si_la_regla_ya_no_aplica(self):
         reprocesar_alertas_completas()
-        Estudiante.objects.filter(pk=self.est_malo.pk).update(promedio=Decimal('4.5'))
+        self._notas_malo(4.5, 4.5, 4.5)
         reprocesar_alertas_completas()
-        self.assertFalse(Alerta.objects.filter(estudiante=self.est_malo).exists())
+        self.assertEqual(Alerta.objects.get(estudiante=self.est_malo).estado, 'cerrada')
+
+    def test_genera_alerta_nueva_si_recae_tras_el_cierre(self):
+        reprocesar_alertas_completas()
+        self._notas_malo(4.5, 4.5, 4.5)
+        reprocesar_alertas_completas()
+        self._notas_malo(1.0, 1.5, 2.0)
+        reprocesar_alertas_completas()
+
+        estados = list(Alerta.objects.filter(estudiante=self.est_malo).order_by('id').values_list('estado', flat=True))
+        self.assertEqual(estados, ['cerrada', 'activa'])
+        self.assertEqual(self.notif.call_count, 2)
+
+    def test_regla_especifica_solo_toca_sus_alertas(self):
+        regla_reprobacion = Regla.objects.create(
+            nombre='Reprobación', tipo='REPROBACION', operador='>=', valor_umbral=Decimal('1'),
+            nivel='medium', prioridad=10,
+        )
+        reprocesar_alertas_completas(regla_especifica=regla_reprobacion)
+        reglas = set(Alerta.objects.filter(estudiante=self.est_malo).values_list('regla_id', flat=True))
+        self.assertEqual(reglas, {regla_reprobacion.id})
 
 
 class ProteccionEndpointsTests(ReevaluacionBaseTestCase):

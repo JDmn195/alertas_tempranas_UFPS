@@ -1,5 +1,6 @@
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
+from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from ..models import NotificacionHistorial, NotificacionInterna
@@ -27,7 +28,20 @@ def listar_historial_notificaciones(request):
         qs = qs.filter(canal=canal)
     if tipo:
         qs = qs.filter(tipo=tipo.upper())
-        
+
+    # Rango de fechas (YYYY-MM-DD), ambos extremos inclusive
+    for param, lookup in (('fecha_inicio', 'fecha_envio__date__gte'), ('fecha_fin', 'fecha_envio__date__lte')):
+        valor = request.GET.get(param)
+        if not valor:
+            continue
+        try:
+            fecha = parse_date(valor)
+        except ValueError:
+            fecha = None
+        if fecha is None:
+            return JsonResponse({'error': f'{param} inválida; usa el formato YYYY-MM-DD.'}, status=400)
+        qs = qs.filter(**{lookup: fecha})
+
     data = []
     for n in qs:
         data.append({
