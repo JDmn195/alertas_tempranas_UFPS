@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404
 
 from academico.models import Estudiante, Nota, Curso, Periodo
 from alertas.evaluacion import actualizar_promedio, calcular_indicadores, evaluar_regla, nivel_de_riesgo
+from alertas.permisos import denegar_acceso_alerta, puede_acceder_alerta
 from alertas.models import Regla, Alerta, RiesgoEstudiante, RiesgoEstudiantePeriodo
 
 from usuarios.decorators import requiere_rol
@@ -469,6 +470,8 @@ def cerrar_alerta(request, alerta_id):
     Cierra una alerta directamente.
     """
     alerta = get_object_or_404(Alerta, id=alerta_id)
+    if not puede_acceder_alerta(request.usuario, alerta):
+        return denegar_acceso_alerta()
     alerta.estado = 'cerrada'
     alerta.save()
     

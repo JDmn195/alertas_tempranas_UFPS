@@ -256,6 +256,15 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
 # Tamaño máximo de archivos de importación en MB (por defecto 10 MB)
 MAX_IMPORT_FILE_SIZE_MB = int(os.environ.get('MAX_IMPORT_FILE_SIZE_MB', 10))
 
+# Si más de este porcentaje de registros de un archivo de estudiantes es inválido,
+# la importación se cancela completa (INC-01)
+IMPORT_MAX_PORCENTAJE_INVALIDOS = float(os.environ.get('IMPORT_MAX_PORCENTAJE_INVALIDOS', 10))
+
+# Intentos fallidos de inicio de sesión por correo antes de bloquear temporalmente.
+# El contador vive en la caché de Django (por defecto en memoria de cada proceso).
+LOGIN_MAX_INTENTOS = int(os.environ.get('LOGIN_MAX_INTENTOS', 5))
+LOGIN_BLOQUEO_MINUTOS = int(os.environ.get('LOGIN_BLOQUEO_MINUTOS', 15))
+
 # ==============================================================================
 # HU-29: RE-EVALUACIÓN PERIÓDICA DEL RIESGO
 # ==============================================================================
