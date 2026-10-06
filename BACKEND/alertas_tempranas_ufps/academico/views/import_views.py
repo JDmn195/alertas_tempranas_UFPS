@@ -9,6 +9,7 @@ import unicodedata
 import traceback
 import logging
 from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
 from django.conf import settings
 from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia, BitacoraImportacion, EquivalenciaMateria, Asistencia
 from usuarios.models import Usuario
@@ -17,6 +18,15 @@ from usuarios.utils import registrar_auditoria
 from academico.services.asistencia import periodo_desde_fecha, normalizar_estado, estudiantes_del_curso
 
 logger = logging.getLogger(__name__)
+
+PESO_CORTES = Decimal('0.7')
+PESO_EXAMEN = Decimal('0.3')
+DECIMALES_REDONDEO = Decimal('0.1')
+
+def calcular_definitiva(c1, c2, c3, examen):
+    cortes = (Decimal(str(c1)) + Decimal(str(c2)) + Decimal(str(c3))) / Decimal('3')
+    nota = (cortes * PESO_CORTES) + (Decimal(str(examen)) * PESO_EXAMEN)
+    return float(nota.quantize(DECIMALES_REDONDEO, rounding=ROUND_HALF_UP))
 
 # Tamaño máximo permitido para archivos de importación (configurable en settings).
 # Por defecto: 10 MB. Ajustar en settings.py con MAX_IMPORT_FILE_SIZE_MB.
@@ -154,7 +164,7 @@ def _normalizar_codigo_docente(codigo_raw):
 # que valida y decodifica el JWT en cada petición.
 # ==============================================================================
 
-def _registrar_bitacora(request, archivo_nombre, tipo, total_procesados, errores, exitoso):
+def _registrar_bitacora(request, archivo_nombre, tipo, total_procesados, errores, exitoso, advertencias=None):
     # Leer usuario del JWT (inyectado por el decorador) o del POST body como fallback
     usuario = getattr(request, 'usuario', None)
     if not usuario:
@@ -170,13 +180,17 @@ def _registrar_bitacora(request, archivo_nombre, tipo, total_procesados, errores
     # (evita que "exitosos = total_procesados - errores" dé negativo en el frontend)
     procesados_real = total_procesados if exitoso else max(0, total_procesados)
 
+    detalles = errores if isinstance(errores, list) else []
+    if advertencias and isinstance(advertencias, list):
+        detalles = detalles + advertencias
+
     BitacoraImportacion.objects.create(
         usuario=usuario,
         archivo_nombre=archivo_nombre,
         tipo=tipo,
         total_procesados=procesados_real,
         total_errores=num_errores,
-        detalles_errores=errores if isinstance(errores, list) else [],
+        detalles_errores=detalles,
         exitoso=exitoso
     )
 
@@ -445,21 +459,24 @@ def importar_historial_academico(request):
         df = pd.read_excel(archivo) if extension != '.csv' else pd.read_csv(archivo)
         df.columns = df.columns.str.strip()
 
-        # Validar que el archivo tenga las columnas esperadas
+        # Validar que el archivo tenga las columnas esperadas.
+        # Tipo Nota y Creditos se ignoran si vienen; no son requeridas.
         columnas_requeridas = [
             'Periodo', 'Materia Base', 'Codigo Materia',
-            'Nombre Materia', 'Tipo Nota', 'Definitiva', 'Creditos'
+            'Nombre Materia', 'Corte 1', 'Corte 2', 'Corte 3',
+            'Examen Final', 'Definitiva'
         ]
         error = _validar_columnas(df, columnas_requeridas, nombre_archivo, 'HISTORIAL', request, 'Historial Académico')
         if error:
             return error
 
         errores = []
+        advertencias = []
         filas_validas = []
 
         for index, row in df.iterrows():
             fila_num = index + 2
-            
+
             if index % 50 == 0:
                 reset_queries()
 
@@ -475,94 +492,49 @@ def importar_historial_academico(request):
                 continue
 
             anio = int(periodo_match.group(1))
-            semestre = int(periodo_match.group(2))
+            semestre_num = int(periodo_match.group(2))
+            periodo_obj, _ = Periodo.objects.get_or_create(anio=anio, semestre=semestre_num)
 
-            # Si el periodo no existe, se crea automáticamente
-            periodo_obj, _ = Periodo.objects.get_or_create(anio=anio, semestre=semestre)
-
-            # --- Validar Curso ---
+            # --- Materia Base y grupo ---
             codigo_materia = str(row.get('Codigo Materia', '')).strip()
             if pd.isna(row.get('Codigo Materia')) or codigo_materia == '':
                 errores.append({"fila": fila_num, "campo": "Codigo Materia", "mensaje": "Código vacío."})
                 continue
 
-            # Materia Base es el código limpio sin grupo (puede venir como número en Excel)
             materia_base_raw = row.get('Materia Base', '')
             if not pd.isna(materia_base_raw) and str(materia_base_raw).strip():
-                # Limpiar: quitar decimales si pandas lo leyó como float (ej: 1155101.0 → "1155101")
                 try:
                     base_materia = str(int(float(str(materia_base_raw).strip())))
                 except (ValueError, TypeError):
                     base_materia = str(materia_base_raw).strip()
             else:
-                # Fallback: extraer parte numérica de Codigo Materia
                 match_codigo = re.match(r'^(\d+)(.*)$', codigo_materia)
                 base_materia = match_codigo.group(1) if match_codigo else codigo_materia
 
-            # Extraer grupo desde Codigo Materia eliminando el prefijo numérico base
-            # Ej: "1155101A" con base "1155101" → grupo "A"
             grupo_str = ''
             if codigo_materia.startswith(base_materia):
                 grupo_str = codigo_materia[len(base_materia):].strip('- ').upper()
             else:
-                # Fallback regex si el codigo no empieza exactamente con base
                 match_codigo = re.match(r'^(\d+)(.*)$', codigo_materia)
                 if match_codigo:
                     grupo_str = match_codigo.group(2).strip('- ').upper()
 
+            # --- Materia debe existir en el pensum ---
+            try:
+                materia_obj = Materia.objects.get(codigo=base_materia)
+            except Materia.DoesNotExist:
+                errores.append({
+                    "fila": fila_num, "campo": "Codigo Materia", "valor": base_materia,
+                    "mensaje": f"Materia {base_materia} no registrada en el pensum."
+                })
+                continue
+
+            # --- Curso: buscar por materia y grupo; crear si no existe ---
             curso_obj = None
             if grupo_str:
-                curso_obj = Curso.objects.filter(materia__codigo=base_materia, grupo=grupo_str).first()
+                curso_obj = Curso.objects.filter(materia=materia_obj, grupo=grupo_str).first()
             if not curso_obj:
-                curso_obj = Curso.objects.filter(materia__codigo=base_materia).first()
-            
-            if not curso_obj:
-                # Si el curso no existe, se crea automáticamente a partir de la materia.
-                # Antes de crear una materia nueva, verificar si existe una del pensum
-                # con el mismo nombre normalizado → registrar equivalencia automática.
-                nombre_materia = str(row.get('Nombre Materia', '')).strip()
-                creditos_raw = row.get('Creditos')
-                try:
-                    creditos_val = int(float(creditos_raw)) if not pd.isna(creditos_raw) else None
-                except (ValueError, TypeError):
-                    creditos_val = None
-
-                def _normalizar(s):
-                    """Normaliza un nombre: minúsculas, sin tildes, sin espacios extra."""
-                    s = s.strip().lower()
-                    s = ''.join(
-                        c for c in unicodedata.normalize('NFD', s)
-                        if unicodedata.category(c) != 'Mn'
-                    )
-                    return ' '.join(s.split())
-
-                nombre_norm = _normalizar(nombre_materia)
-
-                # Buscar materia del pensum (con semestre asignado) con mismo nombre normalizado
-                materia_pensum_equiv = None
-                for m in Materia.objects.filter(semestre__isnull=False):
-                    if _normalizar(m.nombre) == nombre_norm and m.codigo != base_materia:
-                        materia_pensum_equiv = m
-                        break
-
-                # Obtener o crear la materia con el código del historial
-                materia_obj, creada = Materia.objects.get_or_create(
-                    codigo=base_materia,
-                    defaults={
-                        "nombre": nombre_materia,
-                        "creditos": creditos_val,
-                        "tipo": "linea"
-                    }
-                )
-
-                # Si encontramos una materia del pensum equivalente, registrar la relación
-                if materia_pensum_equiv:
-                    EquivalenciaMateria.objects.get_or_create(
-                        materia_pensum=materia_pensum_equiv,
-                        materia_equivalente=materia_obj
-                    )
-
-                # Obtener o crear docente por defecto para satisfacer el FK obligatorio
+                # Crear docente por defecto
                 default_user, _ = Usuario.objects.get_or_create(
                     correo='docente.defecto@ufps.edu.co',
                     defaults={
@@ -580,8 +552,6 @@ def importar_historial_academico(request):
                         'usuario': default_user
                     }
                 )
-
-                # Crear el curso con grupo por defecto 'A' si no viene especificado
                 grupo_para_crear = grupo_str if grupo_str else 'A'
                 curso_obj = Curso.objects.create(
                     materia=materia_obj,
@@ -591,17 +561,89 @@ def importar_historial_academico(request):
                     cantidad_matriculados=0
                 )
 
-            # --- Validar Nota ---
-            nota_raw = row.get('Definitiva')
-            try:
-                nota = float(nota_raw)
-                if not (0.0 <= nota <= 5.0): raise ValueError(f"Nota fuera de rango: {nota_raw}")
-            except (ValueError, TypeError):
-                errores.append({"fila": fila_num, "campo": "Definitiva", "mensaje": f"Nota '{nota_raw}' inválida."})
+            # --- Validar notas por corte y examen ---
+            def _leer_nota_columna(col_name):
+                """Retorna (valor_float_o_None, error_str_o_None)."""
+                raw = row.get(col_name)
+                if raw is None or (isinstance(raw, float) and pd.isna(raw)) or str(raw).strip() == '':
+                    return None, None
+                try:
+                    val = float(raw)
+                    if not (0.0 <= val <= 5.0):
+                        return None, f"Nota '{raw}' fuera de rango (0.0 – 5.0)."
+                    return val, None
+                except (ValueError, TypeError):
+                    return None, f"Nota '{raw}' no es un número válido."
+
+            fila_con_error = False
+            corte1, err = _leer_nota_columna('Corte 1')
+            if err:
+                errores.append({"fila": fila_num, "campo": "Corte 1", "valor": row.get('Corte 1'), "mensaje": err})
+                fila_con_error = True
+            corte2, err = _leer_nota_columna('Corte 2')
+            if err:
+                errores.append({"fila": fila_num, "campo": "Corte 2", "valor": row.get('Corte 2'), "mensaje": err})
+                fila_con_error = True
+            corte3, err = _leer_nota_columna('Corte 3')
+            if err:
+                errores.append({"fila": fila_num, "campo": "Corte 3", "valor": row.get('Corte 3'), "mensaje": err})
+                fila_con_error = True
+            examen, err = _leer_nota_columna('Examen Final')
+            if err:
+                errores.append({"fila": fila_num, "campo": "Examen Final", "valor": row.get('Examen Final'), "mensaje": err})
+                fila_con_error = True
+            definitiva_archivo, err = _leer_nota_columna('Definitiva')
+            if err:
+                errores.append({"fila": fila_num, "campo": "Definitiva", "valor": row.get('Definitiva'), "mensaje": err})
+                fila_con_error = True
+
+            if fila_con_error:
                 continue
 
+            tiene_cortes = corte1 is not None and corte2 is not None and corte3 is not None
+            tiene_examen = examen is not None
+            todas_notas = tiene_cortes and tiene_examen
+            ninguna_nota = (corte1 is None and corte2 is None and corte3 is None and examen is None)
+
+            # --- Calcular definitiva según reglas ---
+            definitiva_final = None
+
+            if todas_notas:
+                definitiva_calc = calcular_definitiva(corte1, corte2, corte3, examen)
+                if definitiva_archivo is not None and abs(definitiva_archivo - definitiva_calc) > 0.05:
+                    advertencias.append({
+                        "fila": fila_num, "campo": "Definitiva", "nivel": "advertencia",
+                        "mensaje": f"Definitiva del archivo ({definitiva_archivo}) difiere de la calculada ({definitiva_calc}). Se guardó la calculada."
+                    })
+                definitiva_final = definitiva_calc
+
+            elif ninguna_nota and definitiva_archivo is not None:
+                # Periodo antiguo: solo viene definitiva
+                definitiva_final = definitiva_archivo
+
+            elif ninguna_nota and definitiva_archivo is None:
+                # Fila completamente vacía
+                errores.append({
+                    "fila": fila_num, "campo": "Notas", "mensaje": "Fila sin notas."
+                })
+                continue
+
+            elif not todas_notas and definitiva_archivo is None:
+                # Semestre en curso: cortes parciales, definitiva vacía → aceptar con null
+                definitiva_final = None
+
+            else:
+                # Cortes parciales pero sí hay definitiva en el archivo
+                definitiva_final = definitiva_archivo
+                advertencias.append({
+                    "fila": fila_num, "campo": "Definitiva", "nivel": "advertencia",
+                    "mensaje": "Notas parciales con definitiva en el archivo; se usó la del archivo."
+                })
+
             filas_validas.append({
-                "estudiante": estudiante, "curso": curso_obj, "periodo": periodo_obj, "definitiva": nota,
+                "estudiante": estudiante, "curso": curso_obj, "periodo": periodo_obj,
+                "definitiva": definitiva_final,
+                "corte1": corte1, "corte2": corte2, "corte3": corte3, "examen_final": examen,
             })
 
         if errores:
@@ -613,13 +655,16 @@ def importar_historial_academico(request):
 
         creados = 0
         with transaction.atomic():
-            # Bulk upsert de notas — una sola query en lugar de N update_or_create
             nota_objs = [
                 Nota(
                     estudiante=fila["estudiante"],
                     curso=fila["curso"],
                     periodo=fila["periodo"],
                     definitiva=fila["definitiva"],
+                    corte1=fila["corte1"],
+                    corte2=fila["corte2"],
+                    corte3=fila["corte3"],
+                    examen_final=fila["examen_final"],
                 )
                 for fila in filas_validas
             ]
@@ -628,11 +673,11 @@ def importar_historial_academico(request):
                 batch_size=500,
                 update_conflicts=True,
                 unique_fields=['estudiante_id', 'curso_id', 'periodo_id'],
-                update_fields=['definitiva'],
+                update_fields=['definitiva', 'corte1', 'corte2', 'corte3', 'examen_final'],
             )
             creados = len(nota_objs)
 
-            # Fix 1.4: actualizar promedio del estudiante desde sus notas reales
+            # Actualizar promedio del estudiante (solo notas con definitiva)
             from django.db.models import Avg as _Avg
             ppa_result = Nota.objects.filter(
                 estudiante=estudiante
@@ -643,15 +688,14 @@ def importar_historial_academico(request):
                 )
                 estudiante.refresh_from_db()
 
-        _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', creados, [], True)
+        _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', creados, [], True, advertencias=advertencias)
         registrar_auditoria(
             request.usuario,
             'IMPORTACION',
             f"Importación de HISTORIAL exitosa: {creados} notas registradas desde '{nombre_archivo}'."
         )
 
-        # Recalcular riesgo por periodo tras importar historial
-        # Fix 1.2: se ejecuta en background para no demorar la respuesta HTTP
+        # Recalcular riesgo en segundo plano
         try:
             from alertas.views.alert_generation_views import calcular_y_guardar_riesgo_por_periodos, reprocesar_alertas_completas
             from alertas.tareas import ejecutar_en_segundo_plano
@@ -667,7 +711,10 @@ def importar_historial_academico(request):
             logger.warning("Error en generación automática de alertas tras importar historial de '%s': %s",
                            codigo_estudiante, ae, exc_info=True)
 
-        return JsonResponse({"status": "success", "creados": creados})
+        resp = {"status": "success", "creados": creados}
+        if advertencias:
+            resp["advertencias"] = advertencias
+        return JsonResponse(resp)
     except Exception as e:
         logger.error("Error inesperado al importar historial académico desde '%s': %s",
                      nombre_archivo if 'nombre_archivo' in locals() else 'archivo desconocido',

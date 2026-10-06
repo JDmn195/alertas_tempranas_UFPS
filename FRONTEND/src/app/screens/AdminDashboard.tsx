@@ -12,6 +12,7 @@ export default function AdminDashboard() {
   const [validationStatus, setValidationStatus] = useState<'idle' | 'validating' | 'success' | 'error'>('idle');
   const [responseMessage, setResponseMessage] = useState<string>('');
   const [responseErrors, setResponseErrors] = useState<any[]>([]);
+  const [responseAdvertencias, setResponseAdvertencias] = useState<any[]>([]);
   const [importHistory, setImportHistory] = useState<any[]>([]);
 
   // ── Migración de RiesgoEstudiantePeriodo ──────────────────────────────────
@@ -87,6 +88,7 @@ export default function AdminDashboard() {
       setValidationStatus("validating");
       setResponseMessage('');
       setResponseErrors([]);
+      setResponseAdvertencias([]);
 
       console.log("Endpoint usado:", endpoint);
 
@@ -106,6 +108,7 @@ export default function AdminDashboard() {
         setValidationStatus("success");
         setResponseMessage(data.mensaje || "Importación exitosa.");
         setResponseErrors([]);
+        setResponseAdvertencias(data.advertencias || []);
         fetchHistory(); // Recargar el historial tras éxito
       } else {
         setValidationStatus("error");
@@ -203,9 +206,15 @@ export default function AdminDashboard() {
             <option value="attendance">Asistencia de Estudiantes</option>
           </select>
           <div className="text-sm text-gray-500 mt-2">
-            {importType === 'pensum' && 'Importa la definición del pensum (Código, Nombre, Créditos, Semestre, Tipo y Equivalencias).'}
+            {importType === 'pensum' && 'Importa la definición del pensum (Código, Nombre, Créditos, Semestre, Tipo y Equivalencias). Carga el pensum antes de importar historiales.'}
             {importType === 'general' && 'Permite consolidar la información académica básica de los estudiantes desde la fuente DIRPLAN.'}
-            {importType === 'individual' && 'Construye de manera detallada el historial académico completo de cada estudiante.'}
+            {importType === 'individual' && (
+              <>
+                Historial académico individual de un estudiante. El nombre del archivo debe incluir el código del estudiante.
+                {' '}Columnas requeridas: <strong>Periodo | Materia Base | Codigo Materia | Nombre Materia | Corte 1 | Corte 2 | Corte 3 | Examen Final | Definitiva</strong>.
+                {' '}Cortes y Examen Final son opcionales (vacío = aún no registrado). El pensum debe cargarse antes.
+              </>
+            )}
             {importType === 'courses' && 'Suministra la información requerida (cursos, asignaturas y docentes) para el análisis académico.'}
             {importType === 'teachers' && 'Profesores.'}
             {importType === 'attendance' && (
@@ -249,8 +258,18 @@ export default function AdminDashboard() {
               <CheckCircle className="w-14 h-14 text-green-600 mb-4" />
               <h3 className="text-xl font-medium text-green-900">¡Importación Exitosa!</h3>
               <p className="text-sm text-green-700 mt-1">{responseMessage}</p>
+              {responseAdvertencias.length > 0 && (
+                <div className="mt-4 w-full max-h-48 overflow-y-auto border border-yellow-300 rounded-lg bg-yellow-50 text-left">
+                  <p className="px-3 py-2 text-xs font-semibold text-yellow-800 bg-yellow-100">Advertencias ({responseAdvertencias.length})</p>
+                  {responseAdvertencias.map((adv: any, i: number) => (
+                    <div key={i} className="px-3 py-1 text-xs text-yellow-800 border-t border-yellow-200">
+                      <span className="font-medium">Fila {adv.fila} – {adv.campo}:</span> {adv.mensaje}
+                    </div>
+                  ))}
+                </div>
+              )}
               <button
-                onClick={() => { setValidationStatus('idle'); setResponseMessage(''); setResponseErrors([]); }}
+                onClick={() => { setValidationStatus('idle'); setResponseMessage(''); setResponseErrors([]); setResponseAdvertencias([]); }}
                 className="mt-4 px-4 py-2 text-sm font-medium text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition-colors"
               >
                 Importar otro archivo

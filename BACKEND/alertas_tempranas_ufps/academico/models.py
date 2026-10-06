@@ -103,6 +103,10 @@ class Nota(models.Model):
     periodo = models.ForeignKey(Periodo, on_delete=models.PROTECT)
     estudiante = models.ForeignKey(Estudiante, on_delete=models.CASCADE, db_column='codigo_estudiante')
     curso = models.ForeignKey(Curso, on_delete=models.CASCADE)
+    corte1 = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    corte2 = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    corte3 = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    examen_final = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
     definitiva = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
 
     class Meta:

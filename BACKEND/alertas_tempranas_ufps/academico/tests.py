@@ -382,3 +382,222 @@ class ImportViewsTestCase(TestCase):
         response = self.client.post(url, {'file': excel_file}, HTTP_AUTHORIZATION=self.docente_token)
         self.assertEqual(response.status_code, 403)
 
+    def test_importar_historial_cuatro_notas_definitiva_calculada(self):
+        """Fila con las cuatro notas: definitiva calculada (3.5, 4.0, 3.2 y 3.6 deben dar 3.6)."""
+        est = Estudiante.objects.create(codigo="1152001", nombre="Alumno Test", semestre=2, numero_documento="DOC_T1")
+        Materia.objects.create(codigo="1155101", nombre="Calculo I", creditos=4, tipo="linea", semestre=1)
+        url = reverse('import-history-individual')
+        data = {
+            "Periodo": ["2025-1"],
+            "Materia Base": ["1155101"],
+            "Codigo Materia": ["1155101A"],
+            "Nombre Materia": ["Calculo I"],
+            "Corte 1": [3.5],
+            "Corte 2": [4.0],
+            "Corte 3": [3.2],
+            "Examen Final": [3.6],
+            "Definitiva": [""]
+        }
+        excel_content = self.generate_excel_file(data)
+        excel_file = SimpleUploadedFile("historial_1152001.xlsx", excel_content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response = self.client.post(url, {'file': excel_file}, HTTP_AUTHORIZATION=self.admin_token)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Nota.objects.filter(estudiante=est).count(), 1)
+        nota = Nota.objects.get(estudiante=est)
+        self.assertEqual(float(nota.corte1), 3.5)
+        self.assertEqual(float(nota.corte2), 4.0)
+        self.assertEqual(float(nota.corte3), 3.2)
+        self.assertEqual(float(nota.examen_final), 3.6)
+        self.assertEqual(float(nota.definitiva), 3.6)
+
+    def test_importar_historial_periodo_antiguo_solo_definitiva(self):
+        """Fila de periodo antiguo solo con definitiva: se guarda la del archivo."""
+        est = Estudiante.objects.create(codigo="1152002", nombre="Alumno Antiguo", semestre=5, numero_documento="DOC_T2")
+        Materia.objects.create(codigo="1155102", nombre="Algebra Lineal", creditos=3, tipo="linea", semestre=1)
+        url = reverse('import-history-individual')
+        data = {
+            "Periodo": ["2022-1"],
+            "Materia Base": ["1155102"],
+            "Codigo Materia": ["1155102"],
+            "Nombre Materia": ["Algebra Lineal"],
+            "Corte 1": [""],
+            "Corte 2": [""],
+            "Corte 3": [""],
+            "Examen Final": [""],
+            "Definitiva": [4.2]
+        }
+        excel_content = self.generate_excel_file(data)
+        excel_file = SimpleUploadedFile("historial_1152002.xlsx", excel_content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response = self.client.post(url, {'file': excel_file}, HTTP_AUTHORIZATION=self.admin_token)
+        self.assertEqual(response.status_code, 200)
+        nota = Nota.objects.get(estudiante=est)
+        self.assertIsNone(nota.corte1)
+        self.assertIsNone(nota.corte2)
+        self.assertIsNone(nota.corte3)
+        self.assertIsNone(nota.examen_final)
+        self.assertEqual(float(nota.definitiva), 4.2)
+
+    def test_importar_historial_cortes_parciales_definitiva_vacia(self):
+        """Fila con cortes parciales y definitiva vacía: se importa con definitiva null."""
+        est = Estudiante.objects.create(codigo="1152003", nombre="Alumno Curso", semestre=1, numero_documento="DOC_T3")
+        Materia.objects.create(codigo="1155103", nombre="Quimica", creditos=3, tipo="linea", semestre=1)
+        url = reverse('import-history-individual')
+        data = {
+            "Periodo": ["2025-1"],
+            "Materia Base": ["1155103"],
+            "Codigo Materia": ["1155103A"],
+            "Nombre Materia": ["Quimica"],
+            "Corte 1": [4.0],
+            "Corte 2": [3.5],
+            "Corte 3": [""],
+            "Examen Final": [""],
+            "Definitiva": [""]
+        }
+        excel_content = self.generate_excel_file(data)
+        excel_file = SimpleUploadedFile("historial_1152003.xlsx", excel_content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response = self.client.post(url, {'file': excel_file}, HTTP_AUTHORIZATION=self.admin_token)
+        self.assertEqual(response.status_code, 200)
+        nota = Nota.objects.get(estudiante=est)
+        self.assertEqual(float(nota.corte1), 4.0)
+        self.assertEqual(float(nota.corte2), 3.5)
+        self.assertIsNone(nota.corte3)
+        self.assertIsNone(nota.examen_final)
+        self.assertIsNone(nota.definitiva)
+
+    def test_importar_historial_definitiva_distinta_calculada_genera_advertencia(self):
+        """Definitiva del archivo distinta a la calculada: se guarda la calculada y se reporta una advertencia."""
+        est = Estudiante.objects.create(codigo="1152004", nombre="Alumno Dif", semestre=2, numero_documento="DOC_T4")
+        Materia.objects.create(codigo="1155104", nombre="Fisica I", creditos=4, tipo="linea", semestre=1)
+        url = reverse('import-history-individual')
+        data = {
+            "Periodo": ["2025-1"],
+            "Materia Base": ["1155104"],
+            "Codigo Materia": ["1155104B"],
+            "Nombre Materia": ["Fisica I"],
+            "Corte 1": [3.5],
+            "Corte 2": [4.0],
+            "Corte 3": [3.2],
+            "Examen Final": [3.6],
+            "Definitiva": [4.5]
+        }
+        excel_content = self.generate_excel_file(data)
+        excel_file = SimpleUploadedFile("historial_1152004.xlsx", excel_content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response = self.client.post(url, {'file': excel_file}, HTTP_AUTHORIZATION=self.admin_token)
+        self.assertEqual(response.status_code, 200)
+        json_data = response.json()
+        self.assertIn("advertencias", json_data)
+        self.assertTrue(len(json_data["advertencias"]) > 0)
+        nota = Nota.objects.get(estudiante=est)
+        self.assertEqual(float(nota.definitiva), 3.6)
+
+    def test_importar_historial_materia_no_esta_en_pensum_error(self):
+        """Materia que no está en el pensum: error de fila y no se guarda nada."""
+        est = Estudiante.objects.create(codigo="1152005", nombre="Alumno No Pensum", semestre=1, numero_documento="DOC_T5")
+        url = reverse('import-history-individual')
+        data = {
+            "Periodo": ["2025-1"],
+            "Materia Base": ["9999999"],
+            "Codigo Materia": ["9999999A"],
+            "Nombre Materia": ["Materia Inexistente"],
+            "Corte 1": [4.0],
+            "Corte 2": [4.0],
+            "Corte 3": [4.0],
+            "Examen Final": [4.0],
+            "Definitiva": [4.0]
+        }
+        excel_content = self.generate_excel_file(data)
+        excel_file = SimpleUploadedFile("historial_1152005.xlsx", excel_content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response = self.client.post(url, {'file': excel_file}, HTTP_AUTHORIZATION=self.admin_token)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Nota.objects.filter(estudiante=est).count(), 0)
+
+    def test_importar_historial_nota_fuera_de_rango_error(self):
+        """Nota fuera de rango (por ejemplo 5.5): error de fila."""
+        est = Estudiante.objects.create(codigo="1152006", nombre="Alumno Fuera Rango", semestre=1, numero_documento="DOC_T6")
+        Materia.objects.create(codigo="1155106", nombre="Biologia", creditos=3, tipo="linea", semestre=1)
+        url = reverse('import-history-individual')
+        data = {
+            "Periodo": ["2025-1"],
+            "Materia Base": ["1155106"],
+            "Codigo Materia": ["1155106"],
+            "Nombre Materia": ["Biologia"],
+            "Corte 1": [5.5],
+            "Corte 2": [3.0],
+            "Corte 3": [3.0],
+            "Examen Final": [3.0],
+            "Definitiva": [3.5]
+        }
+        excel_content = self.generate_excel_file(data)
+        excel_file = SimpleUploadedFile("historial_1152006.xlsx", excel_content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response = self.client.post(url, {'file': excel_file}, HTTP_AUTHORIZATION=self.admin_token)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Nota.objects.filter(estudiante=est).count(), 0)
+
+    def test_importar_historial_reimportar_actualiza_sin_duplicar(self):
+        """Reimportar el archivo con un corte cambiado: actualiza la nota sin duplicarla."""
+        est = Estudiante.objects.create(codigo="1152007", nombre="Alumno Reimportar", semestre=1, numero_documento="DOC_T7")
+        Materia.objects.create(codigo="1155107", nombre="Geometria", creditos=3, tipo="linea", semestre=1)
+        url = reverse('import-history-individual')
+        data_v1 = {
+            "Periodo": ["2025-1"],
+            "Materia Base": ["1155107"],
+            "Codigo Materia": ["1155107A"],
+            "Nombre Materia": ["Geometria"],
+            "Corte 1": [3.0],
+            "Corte 2": [3.0],
+            "Corte 3": [3.0],
+            "Examen Final": [3.0],
+            "Definitiva": [""]
+        }
+        excel_v1 = SimpleUploadedFile("historial_1152007.xlsx", self.generate_excel_file(data_v1), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        resp1 = self.client.post(url, {'file': excel_v1}, HTTP_AUTHORIZATION=self.admin_token)
+        self.assertEqual(resp1.status_code, 200)
+        self.assertEqual(Nota.objects.filter(estudiante=est).count(), 1)
+        self.assertEqual(float(Nota.objects.get(estudiante=est).corte1), 3.0)
+
+        # Cambiamos Corte 1 a 4.5
+        data_v2 = {
+            "Periodo": ["2025-1"],
+            "Materia Base": ["1155107"],
+            "Codigo Materia": ["1155107A"],
+            "Nombre Materia": ["Geometria"],
+            "Corte 1": [4.5],
+            "Corte 2": [3.0],
+            "Corte 3": [3.0],
+            "Examen Final": [3.0],
+            "Definitiva": [""]
+        }
+        excel_v2 = SimpleUploadedFile("historial_1152007.xlsx", self.generate_excel_file(data_v2), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        resp2 = self.client.post(url, {'file': excel_v2}, HTTP_AUTHORIZATION=self.admin_token)
+        self.assertEqual(resp2.status_code, 200)
+        self.assertEqual(Nota.objects.filter(estudiante=est).count(), 1)
+        self.assertEqual(float(Nota.objects.get(estudiante=est).corte1), 4.5)
+
+    def test_atraso_electiva_con_semestre_no_cuenta_como_atrasada(self):
+        """ATRASO: una electiva con semestre asignado no cuenta como materia atrasada."""
+        from alertas.views.alert_generation_views import _evaluar_regla_para_estudiante
+        est = Estudiante.objects.create(codigo="1152008", nombre="Alumno Atraso", semestre=3, numero_documento="DOC_T8")
+        periodo = Periodo.objects.create(anio=2024, semestre=1)
+        
+        # Materia de línea de semestre 1 (aprobada)
+        docente = Docente.objects.create(
+            codigo="01799",
+            nombre="Docente Test",
+            usuario=self.docente_user
+        )
+        m1 = Materia.objects.create(codigo="1155108", nombre="Materia Linea 1", creditos=3, tipo="linea", semestre=1)
+        curso1 = Curso.objects.create(materia=m1, grupo="A", docente=docente)
+        Nota.objects.create(estudiante=est, curso=curso1, periodo=periodo, definitiva=3.5)
+        
+        # Materia electiva (profesional) con semestre 1 asignado pero sin aprobar
+        Materia.objects.create(codigo="1155109", nombre="Electiva I", creditos=3, tipo="profesional", semestre=1)
+        
+        # Regla de atraso
+        regla_atraso = Regla.objects.create(nombre="Atraso > 0", tipo="ATRASO", valor_umbral=0, operador=">", nivel="high")
+        
+        aplica, val, meta = _evaluar_regla_para_estudiante(est, regla_atraso)
+        self.assertEqual(val, 0)
+        self.assertFalse(aplica)
+
+
+

@@ -67,7 +67,7 @@ def calcular_nivel_riesgo(estudiante, promedio=None, reglas=None):
             aprobadas_ids = aprobadas_materia_ids | set(equiv_satisfechas)
             valor_comparar = Materia.objects.filter(
                 semestre__lt=estudiante.semestre
-            ).exclude(codigo__in=aprobadas_ids).exclude(tipo__icontains='electiva').count()
+            ).exclude(codigo__in=aprobadas_ids).filter(tipo='linea').count()
 
         # Evaluación de la condición
         try:
