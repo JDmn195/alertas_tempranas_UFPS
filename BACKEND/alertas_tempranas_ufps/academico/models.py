@@ -1,5 +1,6 @@
 from django.db import models
 
+
 class Periodo(models.Model):
     anio = models.IntegerField()
     semestre = models.SmallIntegerField()
@@ -166,3 +167,62 @@ class BitacoraImportacion(models.Model):
 
     def __str__(self):
         return f"{self.tipo} - {self.fecha} - {self.archivo_nombre}"
+
+
+# HU-33: Registro de asistencia
+class Asistencia(models.Model):
+    """
+    Registra la asistencia de un estudiante a una clase de un curso en una fecha concreta.
+    La clave única es (estudiante, curso, fecha_clase), de modo que registrar de nuevo
+    la misma fecha actualiza el estado (upsert) sin crear duplicados.
+    Los índices sobre (curso, periodo) y (estudiante, periodo) quedan preparados para HU-34.
+    """
+
+    ESTADO_CHOICES = [
+        ('ASISTIO',           'Asistió'),
+        ('FALTA',             'Falta'),
+        ('FALTA_JUSTIFICADA', 'Falta justificada'),
+    ]
+
+    estudiante     = models.ForeignKey(
+        Estudiante,
+        on_delete=models.CASCADE,
+        db_column='codigo_estudiante',
+        related_name='asistencias',
+    )
+    curso          = models.ForeignKey(
+        Curso,
+        on_delete=models.CASCADE,
+        related_name='asistencias',
+    )
+    periodo        = models.ForeignKey(
+        Periodo,
+        on_delete=models.PROTECT,
+    )
+    fecha_clase    = models.DateField()
+    estado         = models.CharField(
+        max_length=20,
+        choices=ESTADO_CHOICES,
+        default='ASISTIO',
+    )
+    registrado_por = models.ForeignKey(
+        'usuarios.Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    fecha_registro = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table        = 'asistencia'
+        unique_together = ('estudiante', 'curso', 'fecha_clase')
+        indexes = [
+            # HU-34: cálculo de porcentaje de inasistencia por curso y periodo
+            models.Index(fields=['curso', 'periodo'], name='asistencia_curso_periodo_idx'),
+            models.Index(fields=['estudiante', 'periodo'], name='asistencia_est_periodo_idx'),
+        ]
+        verbose_name        = 'Asistencia'
+        verbose_name_plural = 'Asistencias'
+
+    def __str__(self):
+        return f"{self.estudiante_id} | {self.curso_id} | {self.fecha_clase} | {self.estado}"

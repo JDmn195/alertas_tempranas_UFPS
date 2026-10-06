@@ -217,3 +217,59 @@ class NotificacionInterna(models.Model):
 
     def __str__(self):
         return f"Notificación para {self.usuario.nombre} - {self.leida}"
+
+
+class EjecucionReevaluacion(models.Model):
+    """
+    HU-29: Registro de cada ejecución de la re-evaluación periódica del riesgo.
+    Cada intento (incluidos los reintentos) queda como una fila independiente,
+    enlazada al intento anterior mediante `reintento_de`.
+    """
+    ORIGEN_CHOICES = [
+        ('PROGRAMADA', 'Programada'),
+        ('MANUAL', 'Manual'),
+    ]
+
+    ESTADO_CHOICES = [
+        ('EN_CURSO', 'En curso'),
+        ('EXITOSA', 'Exitosa'),
+        ('PARCIAL', 'Parcial (con errores)'),
+        ('FALLIDA', 'Fallida'),
+    ]
+
+    origen = models.CharField(max_length=20, choices=ORIGEN_CHOICES, default='PROGRAMADA')
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='EN_CURSO')
+    usuario = models.ForeignKey('usuarios.Usuario', on_delete=models.SET_NULL, null=True, blank=True)
+    intento = models.PositiveSmallIntegerField(default=1)
+    reintento_de = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='reintentos'
+    )
+    fecha_inicio = models.DateTimeField(auto_now_add=True)
+    fecha_fin = models.DateTimeField(null=True, blank=True)
+
+    # Alcance: estudiantes y reglas considerados en la ejecución
+    alcance = models.JSONField(default=dict, blank=True)
+
+    # Totales
+    total_estudiantes = models.IntegerField(default=0)
+    procesados = models.IntegerField(default=0)
+    total_errores = models.IntegerField(default=0)
+    cambios_riesgo = models.IntegerField(default=0)
+    alertas_generadas = models.IntegerField(default=0)
+    alertas_actualizadas = models.IntegerField(default=0)
+    alertas_cerradas = models.IntegerField(default=0)
+    estudiantes_por_nivel = models.JSONField(default=dict, blank=True)
+
+    # Detalle (listas acotadas para no crecer sin límite)
+    detalle_cambios = models.JSONField(default=list, blank=True)
+    errores = models.JSONField(default=list, blank=True)
+    mensaje_error = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'ejecucion_reevaluacion'
+        verbose_name = 'Ejecución de Re-evaluación'
+        verbose_name_plural = 'Ejecuciones de Re-evaluación'
+        ordering = ['-fecha_inicio']
+
+    def __str__(self):
+        return f"Re-evaluación {self.id} ({self.origen}) intento {self.intento} - {self.estado}"
