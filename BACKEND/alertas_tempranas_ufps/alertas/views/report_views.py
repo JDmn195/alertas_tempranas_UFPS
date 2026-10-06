@@ -1,3 +1,4 @@
+import logging
 import datetime
 from io import BytesIO
 
@@ -8,6 +9,8 @@ from django.db.models import Count, Avg, Q
 
 from alertas.models import Alerta, Intervencion, RiesgoEstudiante, RiesgoEstudiantePeriodo
 from academico.models import Estudiante, Curso, Nota
+
+logger = logging.getLogger(__name__)
 
 
 def _get_docente_filter(request):
@@ -380,8 +383,9 @@ def export_report_data(request):
         return JsonResponse({'data': data})
     except ValueError as e:
         return JsonResponse({'error': str(e)}, status=400)
-    except Exception as e:
-        return JsonResponse({'error': f'Error al consultar la base de datos: {str(e)}'}, status=500)
+    except Exception:
+        logger.exception("Error al consultar los datos del reporte %s", tipo)
+        return JsonResponse({'error': 'Error al consultar los datos del reporte.'}, status=500)
 
 
 # ─── Vista: exportación PDF / Excel ──────────────────────────────────────────
@@ -411,8 +415,9 @@ def exportar_reporte(request):
         data_list = _get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids)
     except ValueError as e:
         return JsonResponse({'error': str(e)}, status=400)
-    except Exception as e:
-        return JsonResponse({'error': f'Error al obtener datos: {str(e)}'}, status=500)
+    except Exception:
+        logger.exception("Error al obtener los datos para exportar el reporte %s", tipo)
+        return JsonResponse({'error': 'Error al obtener los datos del reporte.'}, status=500)
 
     # ── Filtros opcionales ────────────────────────────────────────────────────
     if fecha_desde:

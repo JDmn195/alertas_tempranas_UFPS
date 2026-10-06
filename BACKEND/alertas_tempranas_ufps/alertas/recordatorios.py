@@ -31,6 +31,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.db.models import Count, Max, Q
 from django.utils import timezone
+from django.utils.html import escape
 
 from alertas.models import Alerta, ConfiguracionRecordatorio, Intervencion, Recordatorio
 from alertas.services import NotificationService
@@ -237,13 +238,13 @@ def generar_html_resumen(destinatario, recordatorios_correo):
     for r in visibles:
         alerta = r.alerta
         if r.tipo_caso == 'INTERVENCION':
-            caso = f"Intervención {r.intervencion.get_tipo_display()} (responsable: {r.intervencion.usuario.nombre})"
+            caso = escape(f"Intervención {r.intervencion.get_tipo_display()} (responsable: {r.intervencion.usuario.nombre})")
         else:
             caso = 'Alerta sin intervenciones'
         filas.append(
-            f'<tr><td style="{celda}">{alerta.estudiante.nombre}<br><small>{alerta.estudiante.codigo}</small></td>'
+            f'<tr><td style="{celda}">{escape(alerta.estudiante.nombre)}<br><small>{escape(alerta.estudiante.codigo)}</small></td>'
             f'<td style="{celda}">{caso}</td>'
-            f'<td style="{celda}">{alerta.regla.nombre}<br><small>{alerta.regla.get_nivel_display()}</small></td>'
+            f'<td style="{celda}">{escape(alerta.regla.nombre)}<br><small>{escape(alerta.regla.get_nivel_display())}</small></td>'
             f'<td style="{celda} text-align: center;"><strong>{r.dias_inactivo}</strong></td></tr>'
         )
     filas_html = ''.join(filas)
@@ -265,7 +266,7 @@ def generar_html_resumen(destinatario, recordatorios_correo):
                     <h2 style="color: #d97706; margin: 0;">Recordatorio: casos sin seguimiento</h2>
                 </div>
                 <div style="padding: 30px;">
-                    <p>Hola, <strong>{destinatario.nombre}</strong>.</p>
+                    <p>Hola, <strong>{escape(destinatario.nombre)}</strong>.</p>
                     <p>{intro}</p>
                     <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin: 20px 0;">
                         <thead>

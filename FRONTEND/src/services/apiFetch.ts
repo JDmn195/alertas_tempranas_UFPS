@@ -1,17 +1,17 @@
 // src/services/apiFetch.ts
+import { cerrarSesionLocal } from './session';
 
 export async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const userStr = localStorage.getItem('user');
   const headers = new Headers(options.headers || {});
-  
+  let conToken = false;
+
   if (userStr) {
     try {
       const user = JSON.parse(userStr);
       if (user && user.token) {
         headers.set('Authorization', `Bearer ${user.token}`);
-      } else if (user && user.id) {
-        // Fallback temporal si el token no existe
-        headers.set('X-User-Id', String(user.id));
+        conToken = true;
       }
     } catch (e) {
       console.error('Error parsing user from localStorage', e);
@@ -23,8 +23,16 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
     headers.set('Content-Type', 'application/json');
   }
 
-  return fetch(url, {
+  const response = await fetch(url, {
     ...options,
     headers
   });
+
+  // Token expirado o inválido: cerrar la sesión local y volver al login
+  if (response.status === 401 && conToken) {
+    cerrarSesionLocal();
+    window.location.assign('/login');
+  }
+
+  return response;
 }

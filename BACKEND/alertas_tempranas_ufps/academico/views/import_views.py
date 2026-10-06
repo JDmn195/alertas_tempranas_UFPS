@@ -1,4 +1,5 @@
 from django.http import JsonResponse
+from django.contrib.auth.hashers import make_password
 from django.core.files.storage import FileSystemStorage
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction, reset_queries
@@ -101,7 +102,7 @@ def _leer_dataframe(archivo, dtype=None):
         return df, None
     except Exception as e:
         logger.warning("Error leyendo archivo '%s': %s", archivo.name, e, exc_info=True)
-        return None, JsonResponse({"error": f"Error leyendo archivo: {str(e)}"}, status=400)
+        return None, JsonResponse({"error": "Error leyendo archivo: verifica que sea un Excel o CSV válido y no esté dañado."}, status=400)
 
 
 def _validar_columnas(df, columnas_requeridas, nombre_archivo, tipo_bitacora, request, nombre_formato):
@@ -165,20 +166,11 @@ def _normalizar_codigo_docente(codigo_raw):
 # ==============================================================================
 
 def _registrar_bitacora(request, archivo_nombre, tipo, total_procesados, errores, exitoso, advertencias=None):
-    # Leer usuario del JWT (inyectado por el decorador) o del POST body como fallback
+    # Usuario del JWT (inyectado por @requiere_rol); nunca de datos del cliente
     usuario = getattr(request, 'usuario', None)
-    if not usuario:
-        usuario_id = request.POST.get('usuario_id')
-        if usuario_id:
-            try:
-                usuario = Usuario.objects.get(id=usuario_id)
-            except Usuario.DoesNotExist:
-                pass
 
+    # total_procesados = registros realmente guardados: 0 si la importación se canceló
     num_errores = len(errores) if isinstance(errores, list) else 0
-    # Fix 1.1: total_procesados debe ser 0 cuando la importación falla completamente
-    # (evita que "exitosos = total_procesados - errores" dé negativo en el frontend)
-    procesados_real = total_procesados if exitoso else max(0, total_procesados)
 
     detalles = errores if isinstance(errores, list) else []
     if advertencias and isinstance(advertencias, list):
@@ -188,7 +180,7 @@ def _registrar_bitacora(request, archivo_nombre, tipo, total_procesados, errores
         usuario=usuario,
         archivo_nombre=archivo_nombre,
         tipo=tipo,
-        total_procesados=procesados_real,
+        total_procesados=total_procesados,
         total_errores=num_errores,
         detalles_errores=detalles,
         exitoso=exitoso
@@ -368,23 +360,19 @@ def importar_estudiantes_dirplan(request):
                     processed_count = len(estudiantes_objs)
 
                     # Fix 1.4: Para los estudiantes que tienen notas registradas,
-                    # recalcular el promedio a partir de sus notas reales.
-                    # Los que no tienen notas conservan el promedio del archivo.
-                    from django.db.models import Avg as _Avg
-                    from django.db.models import OuterRef, Subquery
+                    # recalcular el promedio (PPA ponderado por créditos) a partir
+                    # de sus notas reales. Los que no tienen notas conservan el
+                    # promedio del archivo.
+                    from alertas.evaluacion import actualizar_promedio
                     codigos_importados = [est.codigo for est in estudiantes_objs]
-                    # Obtener promedios calculados desde notas para los estudiantes importados
-                    notas_con_prom = (
+                    codigos_con_notas = (
                         Nota.objects
-                        .filter(estudiante_id__in=codigos_importados)
-                        .exclude(definitiva__isnull=True)
-                        .values('estudiante_id')
-                        .annotate(ppa=_Avg('definitiva'))
+                        .filter(estudiante_id__in=codigos_importados, definitiva__isnull=False)
+                        .values_list('estudiante_id', flat=True)
+                        .distinct()
                     )
-                    for row in notas_con_prom:
-                        Estudiante.objects.filter(codigo=row['estudiante_id']).update(
-                            promedio=round(row['ppa'], 2)
-                        )
+                    for est in Estudiante.objects.filter(codigo__in=codigos_con_notas):
+                        actualizar_promedio(est)
 
             # AUTOMATIZACIÓN: Generar alertas para los estudiantes procesados
             # Fix 1.2: se ejecuta en background para no demorar la respuesta HTTP
@@ -421,7 +409,7 @@ def importar_estudiantes_dirplan(request):
                          e, exc_info=True)
             if 'file' in locals() and hasattr(file, 'name'):
                 _registrar_bitacora(request, file.name, 'ESTUDIANTES', 0, [{"mensaje": str(e)}], False)
-            return JsonResponse({"status": "error", "message": str(e)}, status=500)
+            return JsonResponse({"status": "error", "mensaje": "Error inesperado al procesar la importación. Revisa la bitácora o contacta al administrador."}, status=500)
 
     return JsonResponse({"status": "error", "message": "Método no permitido o archivo faltante"}, status=400)
 
@@ -540,7 +528,7 @@ def importar_historial_academico(request):
                     defaults={
                         'nombre': 'Docente por Asignar',
                         'rol': 'DOCENTE',
-                        'contrasena': '00000',
+                        'contrasena': make_password(None),  # cuenta de relleno, sin acceso
                         'activo': True
                     }
                 )
@@ -677,16 +665,9 @@ def importar_historial_academico(request):
             )
             creados = len(nota_objs)
 
-            # Actualizar promedio del estudiante (solo notas con definitiva)
-            from django.db.models import Avg as _Avg
-            ppa_result = Nota.objects.filter(
-                estudiante=estudiante
-            ).exclude(definitiva__isnull=True).aggregate(ppa=_Avg('definitiva'))
-            if ppa_result['ppa'] is not None:
-                Estudiante.objects.filter(codigo=estudiante.codigo).update(
-                    promedio=round(ppa_result['ppa'], 2)
-                )
-                estudiante.refresh_from_db()
+            # Actualizar promedio del estudiante (PPA ponderado, solo notas con definitiva)
+            from alertas.evaluacion import actualizar_promedio
+            actualizar_promedio(estudiante)
 
         _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', creados, [], True, advertencias=advertencias)
         registrar_auditoria(
@@ -721,7 +702,7 @@ def importar_historial_academico(request):
                      e, exc_info=True)
         if 'nombre_archivo' in locals():
             _registrar_bitacora(request, nombre_archivo, 'HISTORIAL', 0, [{"mensaje": str(e)}], False)
-        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+        return JsonResponse({"status": "error", "mensaje": "Error inesperado al procesar la importación. Revisa la bitácora o contacta al administrador."}, status=500)
 
 
 @csrf_exempt
@@ -792,9 +773,9 @@ def importar_oferta_academica(request):
             "docente": docente_obj, "horario": horario, "matriculados": matriculados,
         })
 
-    # CANCELAR SI HAY ERRORES
+    # CANCELAR SI HAY ERRORES (no se guarda nada)
     if errores:
-        _registrar_bitacora(request, nombre_archivo, 'OFERTA', len(registros_validos), errores, False)
+        _registrar_bitacora(request, nombre_archivo, 'OFERTA', 0, errores, False)
         return JsonResponse({"status": "error", "mensaje": "Se encontraron errores.", "total_errores": len(errores), "errores": errores}, status=400)
 
     # 5. GUARDAR
@@ -838,7 +819,7 @@ def importar_oferta_academica(request):
     except Exception as e:
         logger.error("Error inesperado al importar oferta académica desde '%s': %s", nombre_archivo, e, exc_info=True)
         _registrar_bitacora(request, nombre_archivo, 'OFERTA', 0, [{"mensaje": str(e)}], False)
-        return JsonResponse({"status": "error", "mensaje": str(e)}, status=500)
+        return JsonResponse({"status": "error", "mensaje": "Error inesperado al procesar la importación. Revisa la bitácora o contacta al administrador."}, status=500)
 
 
 @csrf_exempt
@@ -916,7 +897,8 @@ def importar_docentes(request):
                 correo_usuario = correo_institucional or correo_personal or f"{codigo}@ufps.edu.co"
                 usuario_obj, usuario_creado = Usuario.objects.get_or_create(
                     correo=correo_usuario,
-                    defaults={"nombre": nombre, "rol": "DOCENTE", "contrasena": codigo, "activo": True},
+                    # Sin contraseña utilizable: el docente define la suya con el enlace de recuperación
+                    defaults={"nombre": nombre, "rol": "DOCENTE", "contrasena": make_password(None), "activo": True},
                 )
                 if usuario_creado:
                     usuarios_creados += 1
@@ -1109,7 +1091,7 @@ def importar_asistencia(request):
     except Exception as e:
         logger.error("Error inesperado al guardar asistencia desde '%s': %s", nombre_archivo, e, exc_info=True)
         _registrar_bitacora(request, nombre_archivo, 'ASISTENCIA', 0, [{"mensaje": str(e)}], False)
-        return JsonResponse({"status": "error", "mensaje": str(e)}, status=500)
+        return JsonResponse({"status": "error", "mensaje": "Error inesperado al procesar la importación. Revisa la bitácora o contacta al administrador."}, status=500)
 
 
 @csrf_exempt
@@ -1274,4 +1256,4 @@ def importar_pensum(request):
     except Exception as e:
         logger.error("Error inesperado al importar pensum desde '%s': %s", nombre_archivo, e, exc_info=True)
         _registrar_bitacora(request, nombre_archivo, 'PENSUM', 0, [{"mensaje": str(e)}], False)
-        return JsonResponse({"status": "error", "mensaje": str(e)}, status=500)
+        return JsonResponse({"status": "error", "mensaje": "Error inesperado al procesar la importación. Revisa la bitácora o contacta al administrador."}, status=500)

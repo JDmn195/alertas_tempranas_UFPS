@@ -25,22 +25,32 @@ load_dotenv(BASE_DIR / '.env')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-om79t4&_8=o0^c--314xy+nbzy%8=wz^qi5m^6lubf-o22qes&')
+import sys
+from django.core.exceptions import ImproperlyConfigured
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+EJECUTANDO_TESTS = 'test' in sys.argv
 
-ALLOWED_HOSTS = [h for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h]
+# Producción por defecto: el modo debug hay que activarlo explícitamente (DEBUG=True en .env)
+DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+
+# Con esta clave se firman los JWT y los enlaces de recuperación: en producción es obligatoria
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    if not (DEBUG or EJECUTANDO_TESTS):
+        raise ImproperlyConfigured('Define la variable de entorno SECRET_KEY (obligatoria con DEBUG=False).')
+    SECRET_KEY = 'django-insecure-solo-desarrollo-local'
+
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()]
 
 # Render proporciona automáticamente el hostname externo
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
-# Si la lista sigue vacía, permitimos todo (útil para desarrollo)
 if not ALLOWED_HOSTS:
-    ALLOWED_HOSTS = ['*']
+    if not (DEBUG or EJECUTANDO_TESTS):
+        raise ImproperlyConfigured('Define ALLOWED_HOSTS (o RENDER_EXTERNAL_HOSTNAME) con DEBUG=False.')
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
 
 
 # Application definition
@@ -126,15 +136,14 @@ else:
     }
 
 # Usar SQLite para las pruebas automatizadas (evita problemas de permisos y es más rápido)
-import sys
-if 'test' in sys.argv:
+if EJECUTANDO_TESTS:
     DATABASES['default'] = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 
 # En los tests las tareas en segundo plano corren síncronas (ver alertas/tareas.py)
-TAREAS_EN_SEGUNDO_PLANO = 'test' not in sys.argv
+TAREAS_EN_SEGUNDO_PLANO = not EJECUTANDO_TESTS
 
 
 # Password validation

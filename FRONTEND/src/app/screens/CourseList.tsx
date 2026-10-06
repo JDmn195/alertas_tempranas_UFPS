@@ -131,9 +131,6 @@ export default function CourseList() {
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const userJson = localStorage.getItem('user');
-  const user = userJson ? JSON.parse(userJson) : null;
-  const usuarioId = user?.id;
 
   const countCriticos = allCourses.filter(c => c.es_critico).length;
   const countMedio = allCourses.filter(c => !c.es_critico && getRiskLevel(c.tasa_reprobacion) === 'medium').length;
@@ -170,7 +167,6 @@ export default function CourseList() {
     const params = new URLSearchParams({
       page: String(currentPage),
       page_size: String(PAGE_SIZE),
-      usuario_id: String(usuarioId),
       periodo_anio: periodoAnio,
       periodo_semestre: periodoSemestre,
     });
@@ -190,13 +186,12 @@ export default function CourseList() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, debouncedSearch, estadoFilter, periodoAnio, periodoSemestre, usuarioId]);
+  }, [currentPage, debouncedSearch, estadoFilter, periodoAnio, periodoSemestre]);
 
   const fetchAllForCharts = useCallback(async () => {
     try {
       const params = new URLSearchParams({
         page: '1', page_size: '500',
-        usuario_id: String(usuarioId),
         periodo_anio: periodoAnio,
         periodo_semestre: periodoSemestre,
       });
@@ -208,7 +203,7 @@ export default function CourseList() {
       const data: ApiResponse = await res.json();
       setAllCourses(data.results);
     } catch { /* silencioso */ }
-  }, [periodoAnio, periodoSemestre, usuarioId]);
+  }, [periodoAnio, periodoSemestre]);
 
   useEffect(() => { fetchCourses(); }, [fetchCourses]);
   useEffect(() => { fetchAllForCharts(); }, [fetchAllForCharts]);

@@ -11,15 +11,15 @@ export default function ResetPassword() {
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isForced, setIsForced] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [forcedToken, setForcedToken] = useState<string | null>(null);
 
   useEffect(() => {
     // Si no hay token, verificamos si es un cambio obligatorio (guardado en localStorage temporalmente)
     if (!token) {
       const forcedData = localStorage.getItem('temp_forced_change');
       if (forcedData) {
-        const { id } = JSON.parse(forcedData);
-        setUserId(id);
+        const { token: tokenCambio } = JSON.parse(forcedData);
+        setForcedToken(tokenCambio);
         setIsForced(true);
       } else {
         // Si no hay nada, redirigir a login
@@ -36,8 +36,8 @@ export default function ResetPassword() {
       return;
     }
 
-    if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres.');
+    if (password.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres.');
       return;
     }
 
@@ -51,10 +51,10 @@ export default function ResetPassword() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          token, 
+        body: JSON.stringify({
+          // Del enlace de recuperación o, en el cambio obligatorio, del login
+          token: token || forcedToken,
           password,
-          user_id: userId // Solo para cambio obligatorio
         }),
       });
 

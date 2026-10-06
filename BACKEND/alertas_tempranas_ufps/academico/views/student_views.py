@@ -1,90 +1,45 @@
+import logging
 from django.http import JsonResponse
 from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import csrf_exempt
 
-from academico.models import Estudiante, Nota, Materia
+from academico.models import Estudiante, Nota
+from alertas.evaluacion import calcular_indicadores, calcular_ppa, nivel_de_riesgo
 from alertas.models import Alerta, Regla
 from usuarios.decorators import requiere_rol
+from usuarios.utils import registrar_auditoria
+
+logger = logging.getLogger(__name__)
 
 
-
-def calcular_nivel_riesgo(estudiante, promedio=None, reglas=None):
+def _acceso_denegado_docente(request, estudiante):
     """
-    Calcula el nivel de riesgo de un estudiante basado en las reglas activas.
-    Si no se pasan reglas, se consultan las activas de la BD.
-
-    Retorna 'unknown' solo si el estudiante no tiene promedio ni notas
-    registradas (no hay datos suficientes para evaluar ninguna regla).
-
-    Si el estudiante no tiene notas, solo se evalúan reglas de PROMEDIO
-    para evitar que el atraso calculado sobre materias sin historial
-    dispare un nivel de riesgo incorrecto.
+    RBAC (HU-27): un docente solo ve estudiantes de sus cursos.
+    Devuelve la respuesta 403 si no tiene acceso, o None si puede continuar.
     """
-    if promedio is None and hasattr(estudiante, 'promedio'):
-        promedio = estudiante.promedio
+    if request.usuario.rol != 'DOCENTE':
+        return None
+    if Nota.objects.filter(estudiante=estudiante, curso__docente__usuario=request.usuario).exists():
+        return None
+    registrar_auditoria(
+        request.usuario, 'ACCESO_DENEGADO',
+        f"Docente intentó acceder a datos del estudiante {estudiante.codigo} sin tenerlo en sus cursos"
+    )
+    return JsonResponse({'error': 'Prohibido. No tiene acceso a los datos de este estudiante.'}, status=403)
 
+
+
+def calcular_nivel_riesgo(estudiante, reglas=None):
+    """
+    Nivel de riesgo del estudiante con las reglas activas (o las indicadas),
+    con el mismo cálculo que usa la generación de alertas.
+    'unknown' si no tiene promedio ni notas registradas.
+    """
     if reglas is None:
         reglas = list(Regla.objects.filter(activo=True))
-
-    tiene_notas = Nota.objects.filter(estudiante=estudiante).exists()
-
-    # Sin promedio y sin notas: no hay datos suficientes para evaluar
-    if promedio is None and not tiene_notas:
-        return 'unknown'
-
-    # Ordenamos por nivel de severidad para retornar el más alto que aplique
-    # high > medium > low
-    orden_niveles = {'high': 3, 'medium': 2, 'low': 1}
-    nivel_actual = 'low'
-    valor_max_nivel = 0
-
-    for regla in reglas:
-        aplica = False
-        valor_comparar = 0
-
-        if regla.tipo == 'PROMEDIO':
-            if promedio is None:
-                continue  # No evaluar reglas de promedio si no hay promedio
-            valor_comparar = float(promedio)
-        elif regla.tipo == 'REPROBACION':
-            if not tiene_notas:
-                continue  # Sin notas, REPROBACION = 0 pero no es dato real
-            valor_comparar = Nota.objects.filter(estudiante=estudiante, definitiva__lt=3.0).count()
-        elif regla.tipo == 'ATRASO':
-            if not tiene_notas:
-                continue  # Sin notas, el atraso calculado sería espurio
-            aprobadas_materia_ids = set(
-                Nota.objects.filter(
-                    estudiante=estudiante, definitiva__gte=3.0
-                ).values_list('curso__materia_id', flat=True)
-            )
-            from academico.models import EquivalenciaMateria
-            equiv_satisfechas = EquivalenciaMateria.objects.filter(
-                materia_equivalente_id__in=aprobadas_materia_ids
-            ).values_list('materia_pensum_id', flat=True)
-            aprobadas_ids = aprobadas_materia_ids | set(equiv_satisfechas)
-            valor_comparar = Materia.objects.filter(
-                semestre__lt=estudiante.semestre
-            ).exclude(codigo__in=aprobadas_ids).filter(tipo='linea').count()
-
-        # Evaluación de la condición
-        try:
-            if regla.operador == '<': aplica = valor_comparar < float(regla.valor_umbral)
-            elif regla.operador == '>': aplica = valor_comparar > float(regla.valor_umbral)
-            elif regla.operador == '<=': aplica = valor_comparar <= float(regla.valor_umbral)
-            elif regla.operador == '>=': aplica = valor_comparar >= float(regla.valor_umbral)
-            elif regla.operador == '==': aplica = valor_comparar == float(regla.valor_umbral)
-        except:
-            continue
-
-        if aplica:
-            if orden_niveles.get(regla.nivel, 0) > valor_max_nivel:
-                nivel_actual = regla.nivel
-                valor_max_nivel = orden_niveles[regla.nivel]
-
-    return nivel_actual
+    return nivel_de_riesgo(reglas, calcular_indicadores(estudiante))[0]
 
 
 def _calcular_historial_promedios(estudiante):
@@ -112,8 +67,10 @@ def _calcular_historial_promedios(estudiante):
         creditos_semestre = 0
         
         for n in notas_periodo:
+            if n.definitiva is None:
+                continue  # sin nota definitiva no cuenta para el promedio (igual que el PPA guardado)
             creditos = n.curso.materia.creditos or 0
-            definitiva = float(n.definitiva or 0)
+            definitiva = float(n.definitiva)
             puntos_semestre += definitiva * creditos
             creditos_semestre += creditos
             
@@ -347,13 +304,9 @@ def obtener_detalle_estudiante(request, codigo):
         e = Estudiante.objects.get(codigo=codigo)
         
         # Filtro RBAC según rol del usuario (HU-27)
-        if request.usuario.rol == 'DOCENTE':
-            # Verificar si el docente tiene acceso a este estudiante
-            tiene_acceso = Nota.objects.filter(estudiante=e, curso__docente__usuario=request.usuario).exists()
-            if not tiene_acceso:
-                from usuarios.utils import registrar_auditoria
-                registrar_auditoria(request.usuario, 'ACCESO_DENEGADO', f"Docente intentó acceder al detalle del estudiante {codigo} sin tenerlo en sus cursos")
-                return JsonResponse({'error': 'Prohibido. No tiene acceso a los datos de este estudiante.'}, status=403)
+        denegado = _acceso_denegado_docente(request, e)
+        if denegado:
+            return denegado
 
         # Anotar conteo de alertas activas
         total_alertas = Alerta.objects.filter(
@@ -376,18 +329,11 @@ def obtener_detalle_estudiante(request, codigo):
         except Exception:
             nivel = calcular_nivel_riesgo(e)
 
-        # Calcular PPA real desde notas (promedio ponderado por créditos)
-        from django.db.models import Sum as _DSum, F as _DF
-        _row = Nota.objects.filter(
-            estudiante=e, definitiva__isnull=False
-        ).aggregate(
-            puntos=_DSum(_DF('definitiva') * _DF('curso__materia__creditos')),
-            creditos=_DSum('curso__materia__creditos'),
-        )
-        if _row['creditos']:
-            ppa_calculado = round(float(_row['puntos']) / float(_row['creditos']), 2)
-        else:
-            ppa_calculado = float(e.promedio) if e.promedio is not None else None
+        # PPA real desde notas (ponderado por créditos); sin notas, el promedio importado
+        ppa_calculado = calcular_ppa(Nota.objects.filter(estudiante=e))
+        if ppa_calculado is None:
+            ppa_calculado = e.promedio
+        ppa_calculado = float(ppa_calculado) if ppa_calculado is not None else None
 
         return JsonResponse({
             'codigo':              e.codigo,
@@ -409,11 +355,13 @@ def obtener_detalle_estudiante(request, codigo):
         })
     except Estudiante.DoesNotExist:
         return JsonResponse({'error': f'Estudiante con código {codigo} no encontrado'}, status=404)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        logger.exception("Error al obtener el detalle del estudiante %s", codigo)
+        return JsonResponse({'error': 'Error al obtener los datos del estudiante.'}, status=500)
 
 
 @require_GET
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def obtener_indicadores_estudiante(request, codigo):
     """
     Calcula los indicadores académicos para un estudiante específico:
@@ -423,6 +371,9 @@ def obtener_indicadores_estudiante(request, codigo):
     - Porcentaje de progreso basado en el total de créditos del sistema
     """
     estudiante = get_object_or_404(Estudiante, codigo=codigo)
+    denegado = _acceso_denegado_docente(request, estudiante)
+    if denegado:
+        return denegado
     
     # 1. Total de créditos del programa (Valor fijo: 165)
     TOTAL_CREDITOS_SISTEMA = 165
@@ -505,12 +456,16 @@ def obtener_indicadores_estudiante(request, codigo):
 
 
 @require_GET
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def obtener_historial_academico(request, codigo):
     """
     GET /api/academico/students/<codigo>/history/
     Devuelve el historial académico agrupado por periodos.
     """
     estudiante = get_object_or_404(Estudiante, codigo=codigo)
+    denegado = _acceso_denegado_docente(request, estudiante)
+    if denegado:
+        return denegado
     notas = Nota.objects.filter(estudiante=estudiante).select_related(
         'periodo', 'curso__materia', 'curso__docente'
     ).order_by('periodo__anio', 'periodo__semestre')
@@ -574,6 +529,7 @@ def obtener_historial_academico(request, codigo):
 
 
 @require_GET
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def obtener_intervenciones_estudiante(request, codigo):
     """
     GET /api/academico/students/<codigo>/intervenciones/
@@ -581,6 +537,9 @@ def obtener_intervenciones_estudiante(request, codigo):
     ordenadas de forma descendente por fecha.
     """
     estudiante = get_object_or_404(Estudiante, codigo=codigo)
+    denegado = _acceso_denegado_docente(request, estudiante)
+    if denegado:
+        return denegado
     
     from alertas.models import Intervencion
     intervenciones = Intervencion.objects.filter(alerta__estudiante=estudiante).select_related(

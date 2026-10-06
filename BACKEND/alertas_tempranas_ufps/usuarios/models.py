@@ -1,3 +1,4 @@
+from django.contrib.auth.hashers import check_password, make_password
 from django.db import models
 
 class Usuario(models.Model):
@@ -10,9 +11,12 @@ class Usuario(models.Model):
 
     nombre = models.CharField(max_length=150)
     correo = models.EmailField(max_length=150, unique=True)
+    # Hash de la contraseña (formato de django.contrib.auth.hashers), nunca texto plano
     contrasena = models.CharField(max_length=255)
     rol = models.CharField(max_length=150, default='DOCENTE')
     activo = models.BooleanField(default=True)
+    # True cuando la contraseña es temporal (asignada por un admin) y debe cambiarse al entrar
+    debe_cambiar_contrasena = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'usuario'
@@ -21,6 +25,20 @@ class Usuario(models.Model):
 
     def __str__(self):
         return f"{self.nombre} ({self.rol})"
+
+    def set_password(self, raw_password):
+        self.contrasena = make_password(raw_password)
+
+    def set_unusable_password(self):
+        """El usuario solo podrá entrar tras definir su contraseña con el enlace de recuperación."""
+        self.contrasena = make_password(None)
+
+    def check_password(self, raw_password):
+        def actualizar_hash(raw):
+            # Re-hashea si cambió el algoritmo o las iteraciones por defecto
+            self.set_password(raw)
+            self.save(update_fields=['contrasena'])
+        return check_password(raw_password, self.contrasena, actualizar_hash)
 
 class Auditoria(models.Model):
     TIPO_ACCION_CHOICES = [
@@ -41,6 +59,10 @@ class Auditoria(models.Model):
         ('REGISTRO_ASISTENCIA', 'Registro de Asistencia'),  # HU-33
         ('ENVIO_RECORDATORIOS', 'Envío de Recordatorios'),  # HU-30
         ('CONFIGURAR_RECORDATORIOS', 'Configurar Recordatorios'),  # HU-30
+        ('REEVALUAR_ALERTAS', 'Reevaluar Alertas'),
+        ('RECALCULAR_RIESGO', 'Recalcular Riesgo de Estudiante'),
+        ('REEVALUACION_RIESGO', 'Re-evaluación Periódica del Riesgo'),  # HU-29
+        ('MIGRAR_RIESGO_PERIODOS', 'Migrar Riesgo por Periodos'),
     ]
 
     usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True)

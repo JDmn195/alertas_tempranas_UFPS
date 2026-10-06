@@ -5,6 +5,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from alertas.models import Intervencion, Evidencia
+from usuarios.decorators import requiere_rol
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ def get_supabase():
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def upload_evidence(request, intervencion_id):
     """
     POST /api/alertas/intervenciones/<id>/evidencias/upload/
@@ -104,10 +106,11 @@ def upload_evidence(request, intervencion_id):
     except Exception as e:
         logger.error("Error inesperado al subir evidencia para intervención %s: %s",
                      intervencion_id, e, exc_info=True)
-        return JsonResponse({'error': f'Error en el proceso de subida: {str(e)}'}, status=500)
+        return JsonResponse({'error': 'Error en el proceso de subida del archivo.'}, status=500)
 
 
 @require_http_methods(["GET"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def list_evidence(request, intervencion_id):
     """
     GET /api/alertas/intervenciones/<id>/evidencias/
@@ -142,6 +145,7 @@ def list_evidence(request, intervencion_id):
 
 @csrf_exempt
 @require_http_methods(["DELETE"])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def delete_evidence(request, evidencia_id):
     """
     DELETE /api/alertas/evidencias/<id>/

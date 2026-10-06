@@ -16,10 +16,11 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import close_old_connections, transaction
-from django.db.models import Avg, Q
+from django.db.models import Q
 from django.utils import timezone
 
-from academico.models import Estudiante, Nota
+from academico.models import Estudiante
+from alertas.evaluacion import actualizar_promedio
 from alertas.models import Alerta, EjecucionReevaluacion, Regla, RiesgoEstudiante
 from alertas.services import NotificationService
 from usuarios.utils import registrar_auditoria
@@ -56,24 +57,15 @@ def hay_ejecucion_en_curso():
 
 def recalcular_indicadores_estudiante(estudiante):
     """
-    Recalcula el promedio (PPA) desde las notas registradas y lo persiste si cambió.
-    Los indicadores por periodo (PPA acumulado, reprobadas, atraso) se recalculan
-    en calcular_y_guardar_riesgo_por_periodos.
+    Recalcula el promedio (PPA ponderado por créditos) desde las notas registradas
+    y lo persiste si cambió. Los indicadores por periodo (PPA acumulado, reprobadas,
+    atraso) se recalculan en calcular_y_guardar_riesgo_por_periodos.
     """
-    ppa = (
-        Nota.objects.filter(estudiante=estudiante)
-        .exclude(definitiva__isnull=True)
-        .aggregate(ppa=Avg('definitiva'))['ppa']
-    )
-    if ppa is not None:
-        ppa = round(ppa, 2)
-        if estudiante.promedio is None or estudiante.promedio != ppa:
-            Estudiante.objects.filter(codigo=estudiante.codigo).update(promedio=ppa)
-            estudiante.promedio = ppa
-    return {'promedio': float(estudiante.promedio) if estudiante.promedio is not None else None}
+    promedio = actualizar_promedio(estudiante)
+    return {'promedio': float(promedio) if promedio is not None else None}
 
 
-def reevaluar_estudiante(estudiante, reglas):
+def reevaluar_estudiante(estudiante, reglas, solo_regla=None):
     """
     Re-evalúa un estudiante con las reglas activas:
       1. Recalcula indicadores y riesgo (por periodo + snapshot).
@@ -82,10 +74,13 @@ def reevaluar_estudiante(estudiante, reglas):
       4. Crea alertas nuevas (la regla de mayor prioridad por tipo) si no hay
          una alerta abierta de esa regla.
     Las alertas nuevas se notifican después de confirmar la transacción.
+
+    solo_regla: si se pasa, solo se crean/actualizan/cierran alertas de esa regla
+    (el riesgo se recalcula igual con todas las reglas activas).
     """
     from alertas.views.alert_generation_views import (
-        _evaluar_regla_para_estudiante,
         calcular_y_guardar_riesgo_por_periodos,
+        evaluar_reglas_estudiante,
     )
 
     reglas_por_id = {r.id: r for r in reglas}
@@ -104,9 +99,11 @@ def reevaluar_estudiante(estudiante, reglas):
         recalcular_indicadores_estudiante(estudiante)
         resultado['nivel_nuevo'] = calcular_y_guardar_riesgo_por_periodos(estudiante, reglas)
 
-        evaluacion = {r.id: _evaluar_regla_para_estudiante(estudiante, r) for r in reglas}
+        evaluacion = evaluar_reglas_estudiante(estudiante, reglas)
 
         abiertas = Alerta.objects.filter(estudiante=estudiante, estado__in=ESTADOS_ALERTA_ABIERTOS)
+        if solo_regla is not None:
+            abiertas = abiertas.filter(regla_id=solo_regla.id)
         reglas_con_alerta_abierta = set()
         for alerta in abiertas:
             aplica, val, metadata = evaluacion.get(alerta.regla_id, (False, None, None))
@@ -129,6 +126,8 @@ def reevaluar_estudiante(estudiante, reglas):
                 continue
             tipos_cubiertos.add(r.tipo)
             if r.id in reglas_con_alerta_abierta:
+                continue
+            if solo_regla is not None and r.id != solo_regla.id:
                 continue
             nuevas.append(Alerta.objects.create(
                 estudiante=estudiante, regla=r, estado='activa',

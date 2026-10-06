@@ -263,7 +263,9 @@ class EnvioTests(RecordatoriosBaseTestCase):
 
     def test_historial_de_notificaciones_expone_el_tipo(self):
         self._procesar()
-        data = self.client.get(reverse('historial-notificaciones') + '?tipo=recordatorio').json()
+        data = self.client.get(
+            reverse('historial-notificaciones') + '?tipo=recordatorio', **self._auth(self.admin)
+        ).json()
         self.assertEqual(len(data['historial']), 6)
         self.assertTrue(all(n['tipo'] == 'RECORDATORIO' for n in data['historial']))
 
@@ -362,8 +364,9 @@ class CancelacionTests(RecordatoriosBaseTestCase):
     def test_anotacion_cancela_recordatorios_de_la_intervencion(self):
         resp = self.client.post(
             reverse('gestionar-anotaciones', args=[self.intervencion.id]),
-            data=json.dumps({'usuario_id': self.bienestar.id, 'texto': 'Se contactó al estudiante'}),
+            data=json.dumps({'texto': 'Se contactó al estudiante'}),
             content_type='application/json',
+            **self._auth(self.bienestar),
         )
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(self._estados(tipo_caso='INTERVENCION'), {'CANCELADO'})

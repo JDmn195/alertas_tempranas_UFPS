@@ -1,3 +1,4 @@
+import logging
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import csrf_exempt
@@ -5,7 +6,9 @@ from django.db.models import Q, Count, Avg, Subquery, OuterRef
 
 from academico.models import Curso, Nota, Periodo, Estudiante
 from alertas.models import RiesgoEstudiante, RiesgoEstudiantePeriodo, Alerta, Regla
-from usuarios.models import Usuario
+from usuarios.decorators import requiere_rol
+
+logger = logging.getLogger(__name__)
 
 # Umbral para marcar un curso como crítico (configurable aquí)
 UMBRAL_CRITICO = 30.0       # tasa de reprobación >= 30% → CRÍTICO
@@ -102,12 +105,12 @@ def _calcular_indicadores_curso_global(curso):
 
 @csrf_exempt
 @require_GET
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
 def listar_indicadores_cursos(request):
     """
     GET /api/academico/courses/indicators/
 
     Query params:
-        usuario_id       – id del usuario logueado (requerido)
         periodo_anio     – año del periodo (default: 2025)
         periodo_semestre – semestre 1 o 2   (default: 1)
         search           – buscar por nombre o código de materia
@@ -122,7 +125,6 @@ def listar_indicadores_cursos(request):
     """
 
     # ── Leer parámetros ───────────────────────────────────────────────────────
-    usuario_id       = request.GET.get('usuario_id', '').strip()
     periodo_anio     = request.GET.get('periodo_anio', '2025').strip()
     periodo_semestre = request.GET.get('periodo_semestre', '1').strip()
     search           = request.GET.get('search', '').strip()
@@ -134,11 +136,8 @@ def listar_indicadores_cursos(request):
     except ValueError:
         page, page_size = 1, 15
 
-    # ── Validar usuario ───────────────────────────────────────────────────────
-    try:
-        usuario = Usuario.objects.get(id=int(usuario_id))
-    except (Usuario.DoesNotExist, ValueError, TypeError):
-        return JsonResponse({'error': 'usuario_id inválido o no encontrado'}, status=400)
+    # El rol se toma del usuario autenticado, nunca de parámetros del cliente
+    usuario = request.usuario
 
     # ── Obtener periodos ──────────────────────────────────────────────────────
     usar_global = (periodo_anio.lower() == 'todos')
@@ -320,8 +319,6 @@ def listar_indicadores_cursos(request):
     return JsonResponse(response_data)
 
 
-from usuarios.decorators import requiere_rol
-
 @csrf_exempt
 @require_GET
 @requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'DIRECTOR', 'BIENESTAR'])
@@ -375,6 +372,7 @@ def detalle_curso(request, curso_id):
 
 @csrf_exempt
 @require_GET
+@requiere_rol(['ADMINISTRADOR', 'DIRECTOR'])
 def director_indicadores(request):
     """
     GET /api/academico/indicadores/
@@ -537,5 +535,6 @@ def director_indicadores(request):
             'cursos_criticos': cursos_criticos_list,
         })
 
-    except Exception as e:
-        return JsonResponse({'error': f'Error al calcular indicadores: {str(e)}'}, status=500)
+    except Exception:
+        logger.exception("Error al calcular los indicadores del director")
+        return JsonResponse({'error': 'Error al calcular indicadores.'}, status=500)

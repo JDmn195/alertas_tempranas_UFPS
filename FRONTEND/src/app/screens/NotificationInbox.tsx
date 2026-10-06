@@ -9,13 +9,10 @@ export default function NotificationInbox() {
   const [filterPriority, setFilterPriority] = useState<string>('all');
 
   const fetchNotifications = async () => {
-    const userStr = localStorage.getItem('user');
-    if (!userStr) return;
-    
     try {
-      const user = JSON.parse(userStr);
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const response = await apiFetch(`${baseUrl}/api/alertas/notificaciones/internas/?usuario_id=${user.id}`);
+      // El backend devuelve las notificaciones del usuario del token
+      const response = await apiFetch(`${baseUrl}/api/alertas/notificaciones/internas/`);
       const data = await response.json();
       setNotifications(data.notificaciones || []);
     } catch (error) {
