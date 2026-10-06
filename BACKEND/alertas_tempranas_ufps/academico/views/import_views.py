@@ -1063,3 +1063,168 @@ def importar_asistencia(request):
         logger.error("Error inesperado al guardar asistencia desde '%s': %s", nombre_archivo, e, exc_info=True)
         _registrar_bitacora(request, nombre_archivo, 'ASISTENCIA', 0, [{"mensaje": str(e)}], False)
         return JsonResponse({"status": "error", "mensaje": str(e)}, status=500)
+
+
+@csrf_exempt
+@requiere_rol(['ADMINISTRADOR'])
+def importar_pensum(request):
+    archivo, error = _validar_request_archivo(request, extensiones_permitidas=['.xlsx', '.xls', '.csv'])
+    if error:
+        return error
+
+    nombre_archivo = archivo.name
+    df, error = _leer_dataframe(archivo, dtype={'Codigo': str, 'Equivale A': str})
+    if error:
+        return error
+
+    # Validar columnas (las requeridas estrictamente)
+    columnas_requeridas = ['Codigo', 'Nombre', 'Creditos', 'Tipo']
+    error = _validar_columnas(df, columnas_requeridas, nombre_archivo, 'PENSUM', request, 'Pensum')
+    if error:
+        return error
+
+    # Asegurar columnas opcionales
+    if 'Semestre' not in df.columns:
+        df['Semestre'] = pd.NA
+    if 'Equivale A' not in df.columns:
+        df['Equivale A'] = pd.NA
+
+    errores = []
+    registros_validos = []
+    codigos_en_archivo = set()
+
+    for index, row in df.iterrows():
+        fila_num = index + 2
+        codigo_raw = str(row.get('Codigo', '')).strip()
+        
+        if not codigo_raw or codigo_raw.lower() == 'nan':
+            errores.append({"fila": fila_num, "campo": "Codigo", "valor": codigo_raw, "mensaje": "Código vacío."})
+            continue
+            
+        try:
+            codigo = str(int(float(codigo_raw)))
+        except (ValueError, TypeError):
+            codigo = codigo_raw
+
+        if codigo in codigos_en_archivo:
+            errores.append({"fila": fila_num, "campo": "Codigo", "valor": codigo, "mensaje": "Código repetido en el archivo."})
+            continue
+        codigos_en_archivo.add(codigo)
+
+        nombre = str(row.get('Nombre', '')).strip()
+        if not nombre or nombre.lower() == 'nan':
+            errores.append({"fila": fila_num, "campo": "Nombre", "valor": nombre, "mensaje": "Nombre vacío."})
+            continue
+
+        creditos_raw = row.get('Creditos')
+        try:
+            creditos = int(float(creditos_raw))
+            if creditos <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            errores.append({"fila": fila_num, "campo": "Creditos", "valor": str(creditos_raw), "mensaje": "Debe ser un entero mayor que 0."})
+            continue
+
+        semestre_raw = row.get('Semestre')
+        semestre = None
+        if pd.notna(semestre_raw) and str(semestre_raw).strip() != '' and str(semestre_raw).strip().lower() != 'nan':
+            try:
+                semestre = int(float(semestre_raw))
+                if not (1 <= semestre <= 10):
+                    raise ValueError
+            except (ValueError, TypeError):
+                errores.append({"fila": fila_num, "campo": "Semestre", "valor": str(semestre_raw), "mensaje": "Debe ser un entero entre 1 y 10."})
+                continue
+
+        tipo_raw = str(row.get('Tipo', '')).strip().lower()
+        tipo_choices_keys = [choice[0] for choice in Materia.TIPO_CHOICES]
+        if tipo_raw not in tipo_choices_keys:
+            errores.append({"fila": fila_num, "campo": "Tipo", "valor": tipo_raw, "mensaje": f"Tipo no válido. Debe ser uno de: {', '.join(tipo_choices_keys)}."})
+            continue
+
+        equivale_raw = str(row.get('Equivale A', '')).strip()
+        equivale_a = None
+        if equivale_raw and equivale_raw.lower() != 'nan':
+            try:
+                equivale_a = str(int(float(equivale_raw)))
+            except (ValueError, TypeError):
+                equivale_a = equivale_raw
+            
+            if equivale_a == codigo:
+                errores.append({"fila": fila_num, "campo": "Equivale A", "valor": equivale_a, "mensaje": "Equivale A igual al propio Código."})
+                continue
+
+        registros_validos.append({
+            "fila": fila_num,
+            "codigo": codigo,
+            "nombre": nombre,
+            "creditos": creditos,
+            "semestre": semestre,
+            "tipo": tipo_raw,
+            "equivale_a": equivale_a
+        })
+
+    # Segunda pasada de validación: comprobar Equivale A existe
+    for reg in registros_validos:
+        if reg['equivale_a']:
+            equiv = reg['equivale_a']
+            if equiv not in codigos_en_archivo:
+                if not Materia.objects.filter(codigo=equiv).exists():
+                    errores.append({"fila": reg['fila'], "campo": "Equivale A", "valor": equiv, "mensaje": "Materia equivalente no existe en archivo ni BD."})
+
+    if errores:
+        _registrar_bitacora(request, nombre_archivo, 'PENSUM', 0, errores, False)
+        return JsonResponse({"status": "error", "mensaje": "Se encontraron errores.", "total_errores": len(errores), "errores": errores}, status=400)
+
+    try:
+        materias_creadas = 0
+        materias_actualizadas = 0
+        equivalencias_creadas = 0
+        
+        with transaction.atomic():
+            # Primera pasada: crear/actualizar materias
+            for reg in registros_validos:
+                _, created = Materia.objects.update_or_create(
+                    codigo=reg['codigo'],
+                    defaults={
+                        'nombre': reg['nombre'],
+                        'creditos': reg['creditos'],
+                        'semestre': reg['semestre'],
+                        'tipo': reg['tipo']
+                    }
+                )
+                if created:
+                    materias_creadas += 1
+                else:
+                    materias_actualizadas += 1
+
+            # Segunda pasada: crear equivalencias
+            for reg in registros_validos:
+                if reg['equivale_a']:
+                    materia_pensum = Materia.objects.get(codigo=reg['equivale_a'])
+                    materia_equivalente = Materia.objects.get(codigo=reg['codigo'])
+                    _, created = EquivalenciaMateria.objects.get_or_create(
+                        materia_pensum=materia_pensum,
+                        materia_equivalente=materia_equivalente
+                    )
+                    if created:
+                        equivalencias_creadas += 1
+
+        _registrar_bitacora(request, nombre_archivo, 'PENSUM', len(registros_validos), [], True)
+        registrar_auditoria(
+            request.usuario, 'IMPORTACION',
+            f"Importación de PENSUM exitosa: {len(registros_validos)} registros desde '{nombre_archivo}'."
+        )
+        return JsonResponse({
+            "status": "success",
+            "mensaje": "Pensum importado correctamente.",
+            "materias_creadas": materias_creadas,
+            "materias_actualizadas": materias_actualizadas,
+            "equivalencias_creadas": equivalencias_creadas,
+            "total_procesados": len(registros_validos)
+        })
+
+    except Exception as e:
+        logger.error("Error inesperado al importar pensum desde '%s': %s", nombre_archivo, e, exc_info=True)
+        _registrar_bitacora(request, nombre_archivo, 'PENSUM', 0, [{"mensaje": str(e)}], False)
+        return JsonResponse({"status": "error", "mensaje": str(e)}, status=500)

@@ -297,3 +297,88 @@ class ImportViewsTestCase(TestCase):
         self.assertEqual(len(json_data['alertas']), 1)
         self.assertEqual(json_data['alertas'][0]['studentCode'], "1151234")
         self.assertEqual(json_data['conteos']['activa'], 1)
+
+    def test_importar_pensum_success(self):
+        url = reverse('import-pensum')
+        data = {
+            "Codigo": ["1155101.0", "1155102", "1155103"],
+            "Nombre": ["Matematicas I", "Programacion I", "Electiva"],
+            "Creditos": [4, 4, 3],
+            "Semestre": [1, 1, ""],
+            "Tipo": ["linea", "linea", "profesional"],
+            "Equivale A": ["", "", ""]
+        }
+        excel_content = self.generate_excel_file(data)
+        excel_file = SimpleUploadedFile("pensum.xlsx", excel_content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response = self.client.post(url, {'file': excel_file}, HTTP_AUTHORIZATION=self.admin_token)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Materia.objects.count(), 3)
+        self.assertEqual(Materia.objects.get(codigo="1155101").nombre, "Matematicas I")
+
+    def test_importar_pensum_actualiza_existente(self):
+        Materia.objects.create(codigo="1155101", nombre="Matematicas I", creditos=3, tipo="linea")
+        url = reverse('import-pensum')
+        data = {
+            "Codigo": ["1155101"],
+            "Nombre": ["Matematicas 1",],
+            "Creditos": [4],
+            "Semestre": [1],
+            "Tipo": ["linea"],
+            "Equivale A": [""]
+        }
+        excel_content = self.generate_excel_file(data)
+        excel_file = SimpleUploadedFile("pensum2.xlsx", excel_content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response = self.client.post(url, {'file': excel_file}, HTTP_AUTHORIZATION=self.admin_token)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Materia.objects.count(), 1)
+        self.assertEqual(Materia.objects.get(codigo="1155101").creditos, 4)
+
+    def test_importar_pensum_con_equivalencia_y_orden(self):
+        url = reverse('import-pensum')
+        data = {
+            "Codigo": ["1155201", "1155101"],
+            "Nombre": ["Materia equivalente", "Materia original"],
+            "Creditos": [4, 4],
+            "Semestre": [2, 1],
+            "Tipo": ["linea", "linea"],
+            "Equivale A": ["1155101", ""]
+        }
+        excel_content = self.generate_excel_file(data)
+        excel_file = SimpleUploadedFile("pensum_equiv.xlsx", excel_content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response = self.client.post(url, {'file': excel_file}, HTTP_AUTHORIZATION=self.admin_token)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Materia.objects.filter(codigo="1155101").exists())
+        self.assertTrue(Materia.objects.filter(codigo="1155201").exists())
+        self.assertEqual(Materia.objects.get(codigo="1155101").equivalencias_entrantes.count(), 1)
+
+    def test_importar_pensum_error_tipo_invalido(self):
+        url = reverse('import-pensum')
+        data = {
+            "Codigo": ["1155101"],
+            "Nombre": ["Matematicas I"],
+            "Creditos": [4],
+            "Semestre": [1],
+            "Tipo": ["invalido"],
+            "Equivale A": [""]
+        }
+        excel_content = self.generate_excel_file(data)
+        excel_file = SimpleUploadedFile("pensum_err.xlsx", excel_content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response = self.client.post(url, {'file': excel_file}, HTTP_AUTHORIZATION=self.admin_token)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Materia.objects.count(), 0)
+
+    def test_importar_pensum_rol_denegado(self):
+        url = reverse('import-pensum')
+        data = {
+            "Codigo": ["1155101"],
+            "Nombre": ["Matematicas I"],
+            "Creditos": [4],
+            "Semestre": [1],
+            "Tipo": ["linea"],
+            "Equivale A": [""]
+        }
+        excel_content = self.generate_excel_file(data)
+        excel_file = SimpleUploadedFile("pensum_denied.xlsx", excel_content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response = self.client.post(url, {'file': excel_file}, HTTP_AUTHORIZATION=self.docente_token)
+        self.assertEqual(response.status_code, 403)
+
