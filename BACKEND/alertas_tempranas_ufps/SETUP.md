@@ -156,6 +156,34 @@ python manage.py reevaluar_riesgo --max-intentos 1 --codigos 1151234
 
 ---
 
+## Recordatorios de casos sin seguimiento (HU-30)
+
+El sistema detecta los casos desatendidos y envía recordatorios por los canales existentes (correo Brevo + notificación interna):
+
+- **Alerta sin intervenciones:** alerta `activa` generada hace más de `dias_inactividad_alerta` días (por defecto 7).
+- **Intervención sin seguimiento:** intervención no concluida cuya última actividad (registro, anotación o evidencia) tiene más de `dias_inactividad_intervencion` días (por defecto 15).
+
+Los recordatorios llegan a los roles de `roles_destinatarios` (por defecto `DIRECTOR`) y, en las intervenciones, también a quien la registró. Si no hay destinatarios activos, se envían a los administradores. Mientras el caso siga sin seguimiento, se vuelve a recordar cada `dias_entre_recordatorios` días.
+
+**Parámetros:** `GET` / `PUT /api/alertas/recordatorios/configuracion/` (ADMINISTRADOR o DIRECTOR). Los valores iniciales salen de las variables `RECORDATORIOS_*` del `.env`.
+
+**Ejecutarlo a mano (local):**
+```bash
+python manage.py enviar_recordatorios
+```
+
+**Programación en producción:** el workflow `.github/workflows/recordatorios-seguimiento.yml` llama cada 6 horas a `POST /api/alertas/recordatorios/programada/` con el mismo token de la re-evaluación (`REEVALUACION_CRON_TOKEN`), salvo que se defina `RECORDATORIOS_CRON_TOKEN`.
+
+**Un correo por destinatario:** en cada ejecución cada destinatario recibe un solo correo de resumen con todos sus casos (ordenados por días sin seguimiento) y una notificación interna por caso. Dos ejecuciones no pueden correr a la vez, aunque vengan de workers distintos (bloqueo en la BD; se libera solo tras `RECORDATORIOS_BLOQUEO_HORAS`).
+
+**Registro, estado y reintentos:** cada recordatorio queda en la tabla `recordatorio` con su estado (`PENDIENTE`, `ENVIADO`, `PARCIAL`, `FALLIDO` o `CANCELADO`), el resultado por canal y el historial de intentos. Si un canal falla, en la siguiente ejecución se reintenta solo ese canal, hasta `max_intentos`. Los envíos también aparecen en el historial de notificaciones con `tipo=RECORDATORIO`.
+
+**Cancelación:** al registrar una intervención, anotación o evidencia, al concluir la intervención o al cerrar la alerta, los recordatorios pendientes del caso pasan a `CANCELADO`. Antes de cada reintento también se revalida el caso.
+
+**Consultas:** `GET /api/alertas/recordatorios/` (filtros `estado`, `tipo_caso`, `alerta_id`, `intervencion_id`, `destinatario_id`), `GET /api/alertas/recordatorios/casos-sin-seguimiento/` (vista previa de la detección) y `POST /api/alertas/recordatorios/ejecutar/` para lanzarlo a mano.
+
+---
+
 ## ❗ Errores comunes
 
 | Error | Causa probable | Solución |

@@ -8,13 +8,14 @@ from ..models import NotificacionHistorial, NotificacionInterna
 def listar_historial_notificaciones(request):
     """
     GET /api/alertas/notificaciones/historial/
-    Filtros: alerta_id, resultado, canal, fecha_inicio, fecha_fin
+    Filtros: alerta_id, resultado, canal, tipo (ALERTA | RECORDATORIO), fecha_inicio, fecha_fin
     """
     qs = NotificacionHistorial.objects.select_related('alerta__estudiante').all()
     
     alerta_id = request.GET.get('alerta_id')
     resultado = request.GET.get('resultado')
     canal = request.GET.get('canal')
+    tipo = request.GET.get('tipo')
     
     if alerta_id:
         qs = qs.filter(alerta_id=alerta_id)
@@ -22,6 +23,8 @@ def listar_historial_notificaciones(request):
         qs = qs.filter(resultado=resultado)
     if canal:
         qs = qs.filter(canal=canal)
+    if tipo:
+        qs = qs.filter(tipo=tipo.upper())
         
     data = []
     for n in qs:
@@ -32,6 +35,7 @@ def listar_historial_notificaciones(request):
             'destinatario': n.destinatario,
             'rol_destinatario': n.rol_destinatario,
             'canal': n.canal,
+            'tipo': n.tipo,
             'fecha_envio': n.fecha_envio.isoformat(),
             'resultado': n.resultado,
             'detalle_error': n.detalle_error

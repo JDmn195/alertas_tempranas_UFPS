@@ -259,3 +259,20 @@ REEVALUACION_MAX_INTENTOS = int(os.environ.get('REEVALUACION_MAX_INTENTOS', 3))
 REEVALUACION_ESPERA_SEGUNDOS = int(os.environ.get('REEVALUACION_ESPERA_SEGUNDOS', 60))
 # Una ejecución EN_CURSO más antigua que esto se considera abandonada y no bloquea
 REEVALUACION_BLOQUEO_HORAS = int(os.environ.get('REEVALUACION_BLOQUEO_HORAS', 2))
+
+# ==============================================================================
+# HU-30: RECORDATORIOS DE ALERTAS E INTERVENCIONES SIN SEGUIMIENTO
+# ==============================================================================
+# Valores iniciales de ConfiguracionRecordatorio; luego se ajustan desde la API
+# (GET/PUT /api/alertas/recordatorios/configuracion/).
+RECORDATORIOS_DIAS_INACTIVIDAD_ALERTA = int(os.environ.get('RECORDATORIOS_DIAS_INACTIVIDAD_ALERTA', 7))
+RECORDATORIOS_DIAS_INACTIVIDAD_INTERVENCION = int(os.environ.get('RECORDATORIOS_DIAS_INACTIVIDAD_INTERVENCION', 15))
+RECORDATORIOS_DIAS_ENTRE_RECORDATORIOS = int(os.environ.get('RECORDATORIOS_DIAS_ENTRE_RECORDATORIOS', 7))
+RECORDATORIOS_MAX_INTENTOS = int(os.environ.get('RECORDATORIOS_MAX_INTENTOS', 3))
+RECORDATORIOS_ROLES_DESTINATARIOS = [
+    r.strip().upper() for r in os.environ.get('RECORDATORIOS_ROLES_DESTINATARIOS', 'DIRECTOR').split(',') if r.strip()
+]
+# Una ejecución en curso más antigua que esto se considera abandonada y no bloquea
+RECORDATORIOS_BLOQUEO_HORAS = int(os.environ.get('RECORDATORIOS_BLOQUEO_HORAS', 2))
+# Token del programador externo (header X-Cron-Token). Por defecto, el mismo de la re-evaluación.
+RECORDATORIOS_CRON_TOKEN = os.environ.get('RECORDATORIOS_CRON_TOKEN', REEVALUACION_CRON_TOKEN)

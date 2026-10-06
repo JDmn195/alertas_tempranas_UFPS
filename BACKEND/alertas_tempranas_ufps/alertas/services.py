@@ -17,19 +17,23 @@ class NotificationService:
         }
 
     @staticmethod
-    def enviar_correo_brevo(to_email, subject, html_content, alerta, rol_destinatario):
-        config = NotificationService.get_brevo_config()
+    def registrar_historial(alerta, destinatario, rol_destinatario, canal, resultado, detalle_error=None, tipo='ALERTA'):
+        return NotificacionHistorial.objects.create(
+            alerta=alerta,
+            destinatario=destinatario,
+            rol_destinatario=rol_destinatario,
+            canal=canal,
+            tipo=tipo,
+            resultado=resultado,
+            detalle_error=detalle_error,
+        )
+
+    @classmethod
+    def enviar_brevo(cls, to_email, subject, html_content):
+        """Envía el correo por Brevo sin registrar historial. Retorna (resultado, detalle_error)."""
+        config = cls.get_brevo_config()
         if not config['api_key']:
-            # Log as failure if no API key
-            NotificacionHistorial.objects.create(
-                alerta=alerta,
-                destinatario=to_email,
-                rol_destinatario=rol_destinatario,
-                canal='EMAIL',
-                resultado='fallido',
-                detalle_error='BREVO_API_KEY no configurada'
-            )
-            return False
+            return 'fallido', 'BREVO_API_KEY no configurada'
 
         url = "https://api.brevo.com/v3/smtp/email"
         headers = {
@@ -47,61 +51,37 @@ class NotificationService:
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=10)
             if response.status_code in [201, 202]:
-                NotificacionHistorial.objects.create(
-                    alerta=alerta,
-                    destinatario=to_email,
-                    rol_destinatario=rol_destinatario,
-                    canal='EMAIL',
-                    resultado='exitoso'
-                )
-                return True
-            else:
-                NotificacionHistorial.objects.create(
-                    alerta=alerta,
-                    destinatario=to_email,
-                    rol_destinatario=rol_destinatario,
-                    canal='EMAIL',
-                    resultado='fallido',
-                    detalle_error=f"Error API Brevo: {response.status_code} - {response.text}"
-                )
-                return False
+                return 'exitoso', None
+            return 'fallido', f"Error API Brevo: {response.status_code} - {response.text}"
         except Exception as e:
-            NotificacionHistorial.objects.create(
-                alerta=alerta,
-                destinatario=to_email,
-                rol_destinatario=rol_destinatario,
-                canal='EMAIL',
-                resultado='reintento',
-                detalle_error=str(e)
-            )
-            return False
+            return 'reintento', str(e)
 
-    @staticmethod
-    def crear_notificacion_interna(usuario, alerta, mensaje):
+    @classmethod
+    def enviar_correo(cls, to_email, subject, html_content, alerta, rol_destinatario, tipo='ALERTA'):
+        """Envía el correo por Brevo y retorna el NotificacionHistorial registrado."""
+        resultado, detalle_error = cls.enviar_brevo(to_email, subject, html_content)
+        return cls.registrar_historial(alerta, to_email, rol_destinatario, 'EMAIL', resultado, detalle_error, tipo)
+
+    @classmethod
+    def enviar_correo_brevo(cls, to_email, subject, html_content, alerta, rol_destinatario, tipo='ALERTA'):
+        return cls.enviar_correo(to_email, subject, html_content, alerta, rol_destinatario, tipo).resultado == 'exitoso'
+
+    @classmethod
+    def enviar_interna(cls, usuario, alerta, mensaje, tipo='ALERTA'):
+        """Crea la notificación interna y retorna el NotificacionHistorial registrado."""
         try:
             NotificacionInterna.objects.create(
                 usuario=usuario,
                 alerta=alerta,
                 mensaje=mensaje
             )
-            NotificacionHistorial.objects.create(
-                alerta=alerta,
-                destinatario=usuario.correo,
-                rol_destinatario=usuario.rol,
-                canal='INTERNA',
-                resultado='exitoso'
-            )
-            return True
+            return cls.registrar_historial(alerta, usuario.correo, usuario.rol, 'INTERNA', 'exitoso', tipo=tipo)
         except Exception as e:
-            NotificacionHistorial.objects.create(
-                alerta=alerta,
-                destinatario=usuario.correo,
-                rol_destinatario=usuario.rol,
-                canal='INTERNA',
-                resultado='fallido',
-                detalle_error=str(e)
-            )
-            return False
+            return cls.registrar_historial(alerta, usuario.correo, usuario.rol, 'INTERNA', 'fallido', str(e), tipo)
+
+    @classmethod
+    def crear_notificacion_interna(cls, usuario, alerta, mensaje, tipo='ALERTA'):
+        return cls.enviar_interna(usuario, alerta, mensaje, tipo).resultado == 'exitoso'
 
     @staticmethod
     def generar_html_basico(alerta, destinatario_nombre):
