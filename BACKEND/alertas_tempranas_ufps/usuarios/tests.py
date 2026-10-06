@@ -210,3 +210,14 @@ class AutenticacionTestCase(TestCase):
         self.assertTrue(propia.check_password('Clave-propia-9'))
         self.assertFalse(con_correo.check_password('b@ufps.edu.co'))
         self.assertFalse(docente.check_password('D123'))
+
+
+class SesionActualTestCase(TestCase):
+
+    def test_devuelve_el_rol_del_token(self):
+        usuario = Usuario.objects.create(nombre='Doc', correo='doc@ufps.edu.co', rol='DOCENTE', contrasena='x')
+        resp = self.client.get(reverse('sesion_actual'), HTTP_AUTHORIZATION=f'Bearer {_make_token(usuario)}')
+        self.assertEqual(resp.json(), {'id': usuario.id, 'nombre': 'Doc', 'correo': 'doc@ufps.edu.co', 'rol': 'DOCENTE'})
+
+    def test_sin_token_responde_401(self):
+        self.assertEqual(self.client.get(reverse('sesion_actual')).status_code, 401)

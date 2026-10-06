@@ -13,7 +13,7 @@ from django.conf import settings
 from django.utils.crypto import constant_time_compare, salted_hmac
 from django.views.decorators.http import require_http_methods
 from .models import Usuario
-from .decorators import requiere_rol
+from .decorators import obtener_usuario_de_request, requiere_rol
 from .utils import registrar_auditoria
 
 logger = logging.getLogger(__name__)
@@ -160,6 +160,19 @@ def cambiar_contrasena(request):
 
     return JsonResponse({'mensaje': 'Contraseña actualizada correctamente.'}, status=200)
 
+
+
+@require_http_methods(["GET"])
+def sesion_actual(request):
+    """
+    GET /api/usuarios/me/
+    Datos del usuario según el JWT. El frontend toma el rol de aquí y no de
+    localStorage, que el usuario puede modificar.
+    """
+    u = obtener_usuario_de_request(request)
+    if not u:
+        return JsonResponse({'error': 'No autorizado. Se requiere inicio de sesión.'}, status=401)
+    return JsonResponse({'id': u.id, 'nombre': u.nombre, 'correo': u.correo, 'rol': u.rol})
 
 
 # --- CRUD de Usuarios (HU-26) ---

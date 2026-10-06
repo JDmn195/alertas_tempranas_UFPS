@@ -53,19 +53,7 @@ export default function AdminDashboard() {
   const uploadFile = async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
-    
-    // Adjuntar ID de usuario desde localStorage
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        if (user && user.id) {
-          formData.append("usuario_id", user.id);
-        }
-      } catch (e) {
-        console.error("Error parsing user from localStorage", e);
-      }
-    }
+    // El usuario que importa lo identifica el backend por el token
 
     const endpointMap: Record<string, string> = {
       pensum: "import/pensum/",

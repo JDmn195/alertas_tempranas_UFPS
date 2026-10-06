@@ -71,9 +71,6 @@ function ModalRegistrar({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const userJson = localStorage.getItem('user');
-  const user = userJson ? JSON.parse(userJson) : null;
-
   const handleSubmit = async () => {
     if (!tipo) { setError('Selecciona el tipo de intervención'); return; }
     if (!observaciones.trim()) { setError('Las observaciones son obligatorias'); return; }
@@ -85,7 +82,6 @@ function ModalRegistrar({
       const res = await apiFetch(`${API_BASE}/${alerta.id}/intervenciones/registrar/`, {
         method: 'POST',
         body: JSON.stringify({
-          usuario_id: user?.id,
           tipo,
           observaciones: observaciones.trim(),
         }),

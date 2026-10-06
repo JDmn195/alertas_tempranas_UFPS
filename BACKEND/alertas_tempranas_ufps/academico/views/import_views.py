@@ -166,15 +166,8 @@ def _normalizar_codigo_docente(codigo_raw):
 # ==============================================================================
 
 def _registrar_bitacora(request, archivo_nombre, tipo, total_procesados, errores, exitoso, advertencias=None):
-    # Leer usuario del JWT (inyectado por el decorador) o del POST body como fallback
+    # Usuario del JWT (inyectado por @requiere_rol); nunca de datos del cliente
     usuario = getattr(request, 'usuario', None)
-    if not usuario:
-        usuario_id = request.POST.get('usuario_id')
-        if usuario_id:
-            try:
-                usuario = Usuario.objects.get(id=usuario_id)
-            except Usuario.DoesNotExist:
-                pass
 
     # total_procesados = registros realmente guardados: 0 si la importación se canceló
     num_errores = len(errores) if isinstance(errores, list) else 0

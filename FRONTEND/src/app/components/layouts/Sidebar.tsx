@@ -13,6 +13,7 @@ import {
   FileText,
   ClipboardList,
 } from 'lucide-react';
+import { cerrarSesionLocal } from '../../../services/session';
 
 type NavItem = {
   path: string;
@@ -49,7 +50,7 @@ export function Sidebar() {
   });
 
   const handleLogout = () => {
-    localStorage.removeItem('user');
+    cerrarSesionLocal();
     window.location.href = '/login';
   };
 
