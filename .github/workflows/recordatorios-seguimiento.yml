@@ -1,0 +1,38 @@
+# HU-30: Programación de los recordatorios de alertas e intervenciones sin seguimiento.
+#
+# Cada 6 horas llama al endpoint programado del backend, que detecta los casos
+# sin seguimiento, envía los recordatorios y reintenta los envíos fallidos.
+# Un caso ya recordado no se vuelve a recordar hasta que pasen
+# `dias_entre_recordatorios`, así que la frecuencia solo acelera los reintentos.
+#
+# Secretos requeridos en GitHub (Settings → Secrets and variables → Actions):
+#   BACKEND_URL              URL base del backend, p. ej. https://mi-backend.onrender.com
+#   REEVALUACION_CRON_TOKEN  Mismo valor que RECORDATORIOS_CRON_TOKEN del backend
+#                            (por defecto el backend usa REEVALUACION_CRON_TOKEN)
+name: Recordatorios de casos sin seguimiento
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:       # Permite lanzarlo a mano desde la pestaña Actions
+
+jobs:
+  recordatorios:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar envío de recordatorios
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          CRON_TOKEN: ${{ secrets.REEVALUACION_CRON_TOKEN }}
+        run: |
+          # Reintentos para tolerar el arranque en frío de Render y fallos de red.
+          # 202 = iniciado, 409 = ya había uno en curso (no es un error).
+          status=$(curl --silent --output response.json --write-out '%{http_code}' \
+            --retry 5 --retry-delay 30 --retry-all-errors --max-time 120 \
+            -X POST "$BACKEND_URL/api/alertas/recordatorios/programada/" \
+            -H "X-Cron-Token: $CRON_TOKEN")
+          cat response.json; echo
+          echo "HTTP $status"
+          if [ "$status" != "202" ] && [ "$status" != "409" ]; then
+            exit 1
+          fi
