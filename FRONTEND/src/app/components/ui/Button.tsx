@@ -1,12 +1,7 @@
-type ButtonProps = {
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
-  children: React.ReactNode;
-  onClick?: () => void;
-  type?: 'button' | 'submit';
-  disabled?: boolean;
   fullWidth?: boolean;
-  className?: string;
 };
 
 export function Button({
@@ -18,6 +13,7 @@ export function Button({
   disabled = false,
   fullWidth = false,
   className = '',
+  ...rest
 }: ButtonProps) {
   const variants = {
     primary: 'bg-[#C8102E] text-white hover:bg-[#A00D25] border-transparent',
@@ -40,6 +36,7 @@ export function Button({
       className={`rounded-md border font-medium transition-colors ${variants[variant]} ${sizes[size]} ${
         fullWidth ? 'w-full' : ''
       } ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+      {...rest}
     >
       {children}
     </button>
