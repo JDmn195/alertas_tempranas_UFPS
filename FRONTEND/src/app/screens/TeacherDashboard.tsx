@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router';
 import {
   AlertTriangle, BookOpen, Users, ChevronLeft, ChevronRight,
   RefreshCw, X, TrendingUp, CheckCircle2, BarChart2,
-  Activity, BookX, ExternalLink, CheckSquare,
+  Activity, BookX, ExternalLink, CheckSquare, CalendarX,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -26,6 +26,8 @@ interface EstudianteRiesgo {
   curso: string;
   nivel_riesgo: 'high' | 'medium';
   alertas_activas: number;
+  porcentaje_inasistencia?: number | null;    // HU-34, solo en la lista del curso
+  supera_umbral_inasistencia?: boolean;
 }
 
 interface CursoDoc {
@@ -39,6 +41,7 @@ interface CursoDoc {
   promedio_curso: number | null;
   en_riesgo: number;
   estado: string;
+  inasistencia_sobre_umbral: number;          // HU-34
 }
 
 interface MateriaCritica {
@@ -65,6 +68,7 @@ interface DashboardData {
   materias_criticas: MateriaCritica[];
   distribucion_riesgo: DistribucionRiesgo;
   cursos_criticos: number;
+  umbral_inasistencia: number;                 // HU-34
   page: number;
   pages: number;
   page_size: number;
@@ -407,6 +411,14 @@ export default function TeacherDashboard() {
                     <AlertTriangle className="w-3.5 h-3.5" />
                     <span>{curso.en_riesgo} en riesgo</span>
                   </div>
+                  <div className={`flex items-center gap-1 col-span-2 ${
+                    curso.inasistencia_sobre_umbral > 0 ? 'text-red-600 font-semibold' : 'text-gray-500'
+                  }`}>
+                    <CalendarX className="w-3.5 h-3.5" />
+                    <span>
+                      {curso.inasistencia_sobre_umbral} sobre el umbral de inasistencia ({data.umbral_inasistencia}%)
+                    </span>
+                  </div>
                   {curso.tasa_reprobacion > 0 && (
                     <div className="flex items-center gap-1 text-orange-600 col-span-2">
                       <BookX className="w-3.5 h-3.5" />
@@ -478,7 +490,7 @@ export default function TeacherDashboard() {
                       <table className="w-full text-sm">
                         <thead className="bg-[#C8102E] text-white">
                           <tr>
-                            {['Estudiante', 'Código', 'Nivel Riesgo', 'Alertas', 'Acciones'].map(h => (
+                            {['Estudiante', 'Código', 'Nivel Riesgo', '% Inasistencia', 'Alertas', 'Acciones'].map(h => (
                               <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">{h}</th>
                             ))}
                           </tr>
@@ -491,6 +503,20 @@ export default function TeacherDashboard() {
                               <td className="px-4 py-3">
                                 {est.nivel_riesgo === 'high'   && <Badge variant="high">ALTO</Badge>}
                                 {est.nivel_riesgo === 'medium' && <Badge variant="medium">MEDIO</Badge>}
+                              </td>
+                              <td className="px-4 py-3">
+                                {est.porcentaje_inasistencia == null ? (
+                                  <span className="text-xs text-gray-400">Sin registros</span>
+                                ) : (
+                                  <span
+                                    className={`font-mono text-xs font-bold px-2 py-1 rounded ${
+                                      est.supera_umbral_inasistencia ? 'bg-red-100 text-red-700' : 'bg-green-50 text-green-700'
+                                    }`}
+                                    title={est.supera_umbral_inasistencia ? 'Supera el umbral de inasistencia' : undefined}
+                                  >
+                                    {est.porcentaje_inasistencia.toFixed(2)}%
+                                  </span>
+                                )}
                               </td>
                               <td className="px-4 py-3">
                                 <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#C8102E] text-white text-xs font-bold">

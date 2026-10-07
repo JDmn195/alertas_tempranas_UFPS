@@ -10,3 +10,4 @@ from .student_views import listar_estudiantes, obtener_detalle_estudiante, obten
 from .indicator_views import listar_indicadores_cursos, detalle_curso  # HU-11
 from .teacher_views import teacher_dashboard, teacher_course_students  # Panel del Docente
 from .attendance_views import asistencia_curso  # HU-33
+from .inasistencia_views import inasistencia_estudiante, inasistencia_curso  # HU-34
