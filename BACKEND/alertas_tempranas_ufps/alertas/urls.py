@@ -2,7 +2,7 @@ from django.urls import path
 from .views import rule_views
 from .views.intervencion_views import registrar_intervencion, listar_intervenciones, gestionar_anotaciones, eliminar_anotacion, concluir_intervencion
 from .views.evidence_views import upload_evidence, list_evidence, delete_evidence
-from .views.alert_generation_views import generar_alertas, listar_alertas, cerrar_alerta, reevaluar_alertas, migrar_riesgo_periodos, recalcular_riesgo_estudiante
+from .views.alert_generation_views import generar_alertas, listar_alertas, cerrar_alerta, reevaluar_alertas, migrar_riesgo_periodos, recalcular_riesgo_estudiante, evaluar_cortes
 from .views import notification_views
 from .views import reevaluacion_views
 from .views import recordatorio_views
@@ -13,6 +13,8 @@ urlpatterns = [
     path('reglas/', rule_views.listar_crear_reglas, name='listar_crear_reglas'),
     path('reglas/<int:pk>/', rule_views.detalle_regla, name='detalle_regla'),
     path('generar/', generar_alertas, name='generar-alertas'),
+    # HU-32: Evaluación manual de alertas por corte
+    path('corte/evaluar/', evaluar_cortes, name='evaluar-cortes'),
     path('reevaluar/', reevaluar_alertas, name='reevaluar-alertas'),
     path('migrar-riesgo-periodos/', migrar_riesgo_periodos, name='migrar-riesgo-periodos'),
     # HU-29: Re-evaluación periódica del riesgo

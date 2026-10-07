@@ -53,6 +53,16 @@ class Command(BaseCommand):
             if ej.mensaje_error:
                 self.stdout.write(self.style.ERROR(f'  {ej.mensaje_error}'))
 
+        # HU-32: Evaluar alertas por corte para el periodo actual
+        try:
+            from alertas.alertas_corte import evaluar_cortes_periodo_actual
+            alertas_corte = evaluar_cortes_periodo_actual()
+            self.stdout.write(self.style.SUCCESS(
+                f'Alertas por corte procesadas en periodo actual: {len(alertas_corte)}'
+            ))
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'Error al evaluar alertas por corte: {e}'))
+
         if not ejecuciones or ejecuciones[-1].estado == 'FALLIDA':
             # Código de salida != 0 para que el programador marque la ejecución como fallida
             raise CommandError('La re-evaluación terminó en estado FALLIDA.')

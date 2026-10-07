@@ -22,12 +22,10 @@ from academico.services.asistencia import periodo_desde_fecha, normalizar_estado
 
 logger = logging.getLogger(__name__)
 
-PESO_CORTES = Decimal('0.7')
-PESO_EXAMEN = Decimal('0.3')
-DECIMALES_REDONDEO = Decimal('0.1')
+from academico.constants import NOTA_APROBATORIA, PESO_CORTES, PESO_EXAMEN, DECIMALES_REDONDEO, CANTIDAD_CORTES
 
 def calcular_definitiva(c1, c2, c3, examen):
-    cortes = (Decimal(str(c1)) + Decimal(str(c2)) + Decimal(str(c3))) / Decimal('3')
+    cortes = (Decimal(str(c1)) + Decimal(str(c2)) + Decimal(str(c3))) / CANTIDAD_CORTES
     nota = (cortes * PESO_CORTES) + (Decimal(str(examen)) * PESO_EXAMEN)
     return float(nota.quantize(DECIMALES_REDONDEO, rounding=ROUND_HALF_UP))
 
@@ -813,6 +811,7 @@ def importar_historial_academico(request):
         # Recalcular riesgo en segundo plano
         try:
             from alertas.views.alert_generation_views import calcular_y_guardar_riesgo_por_periodos, reprocesar_alertas_completas
+            from alertas.alertas_corte import evaluar_cortes_estudiante
             from alertas.tareas import ejecutar_en_segundo_plano
             _codigo = codigo_estudiante
             _est = estudiante
@@ -821,6 +820,7 @@ def importar_historial_academico(request):
                 reprocesar_alertas_completas(
                     Estudiante.objects.filter(codigo=_codigo), usuario=None
                 )
+                evaluar_cortes_estudiante(_est, usuario=None)
             ejecutar_en_segundo_plano(_recalcular_bg)
         except Exception as ae:
             logger.warning("Error en generación automática de alertas tras importar historial de '%s': %s",
