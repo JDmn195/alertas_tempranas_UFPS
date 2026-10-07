@@ -67,7 +67,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('MODO SIMULACIÓN — no se escribirá nada en la BD.'))
 
         # ── 1. Cargar reglas activas una sola vez ─────────────────────────────
-        reglas = list(Regla.objects.filter(activo=True).order_by('-prioridad'))
+        reglas = list(Regla.objects.filter(activo=True).exclude(tipo='CORTE').order_by('-prioridad'))
         if not reglas:
             self.stdout.write(self.style.ERROR(
                 'No hay reglas activas. Ejecuta "python manage.py reset_reglas" primero.'

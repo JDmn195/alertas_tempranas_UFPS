@@ -90,6 +90,37 @@ class NotificationService:
         estudiante = alerta.estudiante
         regla = alerta.regla
         destinatario_nombre = escape(destinatario_nombre)
+
+        if regla.tipo == 'CORTE':
+            meta = alerta.metadata or {}
+            materia_nombre = escape(str(meta.get('materia_nombre', '')))
+            materia_codigo = escape(str(meta.get('materia_codigo', '')))
+            grupo = escape(str(meta.get('grupo', '')))
+            periodo = escape(str(meta.get('periodo', '')))
+            notas = meta.get('notas', {})
+
+            notas_list = []
+            if notas.get('corte1') is not None:
+                notas_list.append(f"Corte 1: {notas['corte1']}")
+            if notas.get('corte2') is not None:
+                notas_list.append(f"Corte 2: {notas['corte2']}")
+            if notas.get('corte3') is not None:
+                notas_list.append(f"Corte 3: {notas['corte3']}")
+            notas_str = escape(", ".join(notas_list) if notas_list else "Sin cortes registrados")
+
+            bloque_extra = ""
+            if meta.get('nota_necesaria') is not None:
+                bloque_extra = f'<p style="margin: 5px 0;"><strong>Nota Necesaria en Examen Final:</strong> {escape(str(meta["nota_necesaria"]))}</p>'
+
+            bloque_causa = f"""
+                <p style="margin: 5px 0;"><strong>Materia:</strong> {materia_nombre} ({materia_codigo}) - Grupo {grupo}</p>
+                <p style="margin: 5px 0;"><strong>Periodo:</strong> {periodo}</p>
+                <p style="margin: 5px 0;"><strong>Mensaje:</strong> {escape(regla.nombre)}</p>
+                <p style="margin: 5px 0;"><strong>Cortes Registrados:</strong> {notas_str}</p>
+                {bloque_extra}
+            """
+        else:
+            bloque_causa = f'<p style="margin: 5px 0;"><strong>Causa:</strong> {escape(str(alerta.valor_causa))}</p>'
         
         # Estilos embebidos para compatibilidad con clientes de correo
         html = f"""
@@ -105,9 +136,9 @@ class NotificationService:
                     
                     <div style="background-color: #fff8f8; padding: 15px; border-left: 4px solid #aa1916; margin: 20px 0;">
                         <p style="margin: 5px 0;"><strong>Estudiante:</strong> {escape(estudiante.nombre)} ({escape(estudiante.codigo)})</p>
-                        <p style="margin: 5px 0;"><strong>Tipo de Alerta:</strong> {escape(regla.nombre)}</p>
+                        <p style="margin: 5px 0;"><strong>Tipo de Alerta:</strong> {escape(regla.get_tipo_display() if hasattr(regla, 'get_tipo_display') else regla.tipo)}</p>
                         <p style="margin: 5px 0;"><strong>Severidad:</strong> {escape(regla.get_nivel_display())}</p>
-                        <p style="margin: 5px 0;"><strong>Causa:</strong> {escape(alerta.valor_causa)}</p>
+                        {bloque_causa}
                     </div>
 
                     <p>Por favor, revisa el sistema para realizar el seguimiento correspondiente.</p>
@@ -157,7 +188,18 @@ class NotificationService:
             ).select_related('curso__docente__usuario')
             
             for nota in notas_reprobadas:
-                docentes_involucrados.add(nota.curso.docente.usuario)
+                if getattr(nota.curso.docente, 'usuario', None):
+                    docentes_involucrados.add(nota.curso.docente.usuario)
+
+        elif regla.tipo == 'CORTE':
+            # HU-32: Notificar al docente del curso de metadata["curso_id"] si tiene usuario asociado
+            meta = alerta.metadata or {}
+            curso_id = meta.get('curso_id')
+            if curso_id:
+                from academico.models import Curso as _Curso
+                curso_obj = _Curso.objects.filter(pk=curso_id).select_related('docente__usuario').first()
+                if curso_obj and getattr(curso_obj.docente, 'usuario', None):
+                    docentes_involucrados.add(curso_obj.docente.usuario)
         
         for u_docente in docentes_involucrados:
             destinatarios.append({
@@ -188,6 +230,26 @@ class NotificationService:
                 'usuario_obj': admin
             })
 
+        # Construir mensaje para notificación interna
+        if regla.tipo == 'CORTE':
+            meta = alerta.metadata or {}
+            m_nom = meta.get('materia_nombre', '')
+            m_grp = meta.get('grupo', '')
+            m_per = meta.get('periodo', '')
+            notas = meta.get('notas', {})
+            partes_notas = [f"{k}={v}" for k, v in notas.items() if v is not None]
+            str_notas = f" (Notas: {', '.join(partes_notas)})" if partes_notas else ""
+            extra_nn = f" - Requiere {meta['nota_necesaria']} en examen final" if meta.get('nota_necesaria') is not None else ""
+            mensaje_interna = (
+                f"Alerta de corte ({regla.get_nivel_display()}): {regla.nombre} para {estudiante.nombre} "
+                f"en {m_nom} (Grup. {m_grp}, Per. {m_per}){str_notas}{extra_nn}."
+            )
+        else:
+            mensaje_interna = (
+                f"Se ha generado una alerta de nivel {regla.get_nivel_display()} para el estudiante "
+                f"{estudiante.nombre} por la regla: {regla.nombre} (Valor: {alerta.valor_causa})."
+            )
+
         # Ejecutar envíos
         for dest in destinatarios:
             html = cls.generar_html_basico(alerta, dest['nombre'])
@@ -198,7 +260,6 @@ class NotificationService:
             
             # Notificación Interna (si tiene usuario)
             if dest['usuario_obj']:
-                mensaje = f"Se ha generado una alerta de nivel {regla.get_nivel_display()} para el estudiante {estudiante.nombre} por la regla: {regla.nombre} (Valor: {alerta.valor_causa})."
-                cls.crear_notificacion_interna(dest['usuario_obj'], alerta, mensaje)
+                cls.crear_notificacion_interna(dest['usuario_obj'], alerta, mensaje_interna)
 
         return True

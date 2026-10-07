@@ -38,7 +38,7 @@ def calcular_nivel_riesgo(estudiante, reglas=None):
     'unknown' si no tiene promedio ni notas registradas.
     """
     if reglas is None:
-        reglas = list(Regla.objects.filter(activo=True))
+        reglas = list(Regla.objects.filter(activo=True).exclude(tipo='CORTE'))
     return nivel_de_riesgo(reglas, calcular_indicadores(estudiante))[0]
 
 

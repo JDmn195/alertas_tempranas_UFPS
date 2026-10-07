@@ -1,8 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Plus, Settings, X, Trash2 } from 'lucide-react';
+import { Plus, Settings, X, Trash2, AlertTriangle, Play, CheckCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { ruleService, Rule } from '../../services/ruleService';
+
+const CORTE_CLAVE_LABEL: Record<string, string> = {
+  C1: 'Corte 1 — Alerta temprana',
+  C2A: 'Corte 2 — Sostenido bajo',
+  C2B: 'Corte 2 — Bajo con Corte 1 bajo',
+  C3: 'Corte 3 — Nota necesaria moderada',
+  C4: 'Corte 3 — Nota necesaria crítica',
+};
+
+const EVALUA_LABEL: Record<string, string> = {
+  CORTE: 'Nota del corte',
+  NOTA_NECESARIA: 'Nota necesaria en examen final',
+};
 
 export default function RiskRules() {
   const [rules, setRules] = useState<Rule[]>([]);
@@ -10,7 +23,9 @@ export default function RiskRules() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [errorModal, setErrorModal] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
-  
+  const [evaluandoCortes, setEvaluandoCortes] = useState(false);
+  const [evaluacionOk, setEvaluacionOk] = useState(false);
+
   // Obtener usuario de la sesión real (localStorage)
   const getSessionUser = () => {
     const savedUser = localStorage.getItem('user');
@@ -52,7 +67,7 @@ export default function RiskRules() {
       return;
     }
     try {
-      await ruleService.updateRule(rule.id, { activo: !rule.activo }, usuarioId);
+      await ruleService.updateRule(rule.id, { activo: !rule.activo });
       loadRules();
     } catch (error) {
       alert('Error al cambiar estado de la regla');
@@ -81,6 +96,19 @@ export default function RiskRules() {
     }
   };
 
+  const handleUpdateUmbral = async (rule: Rule) => {
+    if (!rule.id) return;
+    try {
+      await ruleService.updateRule(rule.id, {
+        valor_umbral: rule.valor_umbral,
+        parametros: rule.parametros,
+      });
+      loadRules();
+    } catch (error: any) {
+      alert(error.message || 'Error al actualizar el umbral');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!usuarioId) {
@@ -89,15 +117,29 @@ export default function RiskRules() {
     }
     try {
       if (editingId) {
-        await ruleService.updateRule(editingId, formData, usuarioId);
+        await ruleService.updateRule(editingId, formData);
       } else {
-        await ruleService.createRule(formData, usuarioId);
+        await ruleService.createRule(formData);
       }
       setShowModal(false);
       resetForm();
       loadRules();
     } catch (error: any) {
       alert(error.message || 'Error al guardar la regla');
+    }
+  };
+
+  const handleEvaluarCortes = async () => {
+    setEvaluandoCortes(true);
+    setEvaluacionOk(false);
+    try {
+      await ruleService.evaluarCortes();
+      setEvaluacionOk(true);
+      setTimeout(() => setEvaluacionOk(false), 4000);
+    } catch (error: any) {
+      alert(error.message || 'Error al evaluar alertas por corte');
+    } finally {
+      setEvaluandoCortes(false);
     }
   };
 
@@ -123,13 +165,17 @@ export default function RiskRules() {
       nivel: rule.nivel,
       activo: rule.activo,
       descripcion: rule.descripcion || '',
+      parametros: rule.parametros,
     });
     setEditingId(rule.id || null);
     setShowModal(true);
   };
 
+  const rulesGeneral = rules.filter(r => r.tipo !== 'CORTE');
+  const rulesCorte = rules.filter(r => r.tipo === 'CORTE');
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Page header */}
       <div className="border-l-4 border-[#C8102E] pl-4 flex items-center justify-between">
         <div>
@@ -144,16 +190,122 @@ export default function RiskRules() {
         </Button>
       </div>
 
-      {/* Rules list */}
-      <div className="space-y-4">
+      {/* ── SECCIÓN HU-32: Alertas por Corte ── */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-500" />
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">Alertas Tempranas por Corte</h2>
+              <p className="text-xs text-gray-500">
+                Reglas automáticas administradas por el sistema. Solo se puede editar el umbral y el estado.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {evaluacionOk && (
+              <span className="flex items-center gap-1 text-green-600 text-sm font-medium">
+                <CheckCircle className="w-4 h-4" /> Evaluación iniciada
+              </span>
+            )}
+            <Button
+              variant="outline"
+              onClick={handleEvaluarCortes}
+              disabled={evaluandoCortes}
+              id="btn-evaluar-cortes"
+            >
+              <Play className="w-4 h-4 mr-2" />
+              {evaluandoCortes ? 'Evaluando…' : 'Evaluar ahora'}
+            </Button>
+          </div>
+        </div>
+
         {loading ? (
-          <div className="text-center py-12 text-gray-500">Cargando reglas...</div>
-        ) : rules.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">Cargando reglas de corte…</div>
+        ) : rulesCorte.length === 0 ? (
+          <div className="text-center py-8 bg-amber-50 rounded-lg border border-dashed border-amber-300 text-amber-700 text-sm">
+            No hay reglas de corte configuradas.
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {rulesCorte.map((rule) => {
+              const params = rule.parametros || {};
+              const clave = params.clave || '—';
+              const evalua = params.evalua ? EVALUA_LABEL[params.evalua] || params.evalua : '—';
+              const corteLabel = params.corte ? `Corte ${params.corte}` : null;
+              const previoLabel = params.corte_previo
+                ? `si Corte ${params.corte_previo} ${params.operador_previo} ${params.umbral_previo}`
+                : null;
+              return (
+                <div
+                  key={rule.id}
+                  className={`bg-white rounded-lg border border-amber-200 p-5 hover:shadow-sm transition-shadow ${!rule.activo ? 'opacity-60' : ''}`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="text-xs font-mono font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                          {clave}
+                        </span>
+                        <h3 className="text-base font-semibold text-gray-900 truncate">
+                          {CORTE_CLAVE_LABEL[clave] || rule.nombre}
+                        </h3>
+                        <Badge variant={rule.nivel}>
+                          {rule.nivel === 'high' ? 'Alta' : rule.nivel === 'medium' ? 'Media' : 'Baja'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-gray-600 mb-1">
+                        <span className="font-medium">Evalúa:</span> {evalua}
+                        {corteLabel && <span className="ml-2 text-gray-400">— {corteLabel}</span>}
+                        {previoLabel && <span className="ml-2 text-gray-400">({previoLabel})</span>}
+                      </p>
+                      <p className="text-xs text-gray-500 italic">{rule.descripcion}</p>
+                    </div>
+
+                    {/* Umbral editable */}
+                    <div className="flex flex-col items-end gap-3 shrink-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 font-medium">Umbral:</span>
+                        <UmbralInline rule={rule} onSave={handleUpdateUmbral} />
+                      </div>
+                      {/* Toggle activo */}
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={rule.activo}
+                          onChange={() => handleToggleActive(rule)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                        <span className="ml-2 text-xs font-medium text-gray-600">
+                          {rule.activo ? 'Activa' : 'Inactiva'}
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ── Reglas Generales ── */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Settings className="w-5 h-5 text-gray-500" />
+          <h2 className="text-lg font-semibold text-gray-800">Reglas de Riesgo General</h2>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-12 text-gray-500">Cargando reglas…</div>
+        ) : rulesGeneral.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300 text-gray-500">
             No hay reglas configuradas. Haz clic en "Añadir Regla" para empezar.
           </div>
         ) : (
-          rules.map((rule) => (
+          rulesGeneral.map((rule) => (
             <div
               key={rule.id}
               className={`bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow ${!rule.activo ? 'opacity-60' : ''}`}
@@ -206,7 +358,7 @@ export default function RiskRules() {
             </div>
           ))
         )}
-      </div>
+      </section>
 
       {/* Add/Edit Rule Modal */}
       {showModal && (
@@ -368,5 +520,56 @@ export default function RiskRules() {
         </div>
       )}
     </div>
+  );
+}
+
+// ── Componente inline para editar umbral de una regla CORTE ──
+function UmbralInline({ rule, onSave }: { rule: Rule; onSave: (r: Rule) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(rule.valor_umbral);
+
+  const handleSave = () => {
+    onSave({ ...rule, valor_umbral: val });
+    setEditing(false);
+  };
+
+  if (!editing) {
+    return (
+      <button
+        className="text-sm font-mono font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 hover:bg-amber-100 transition-colors"
+        title="Haz clic para editar el umbral"
+        onClick={() => setEditing(true)}
+      >
+        {rule.operador} {val}
+      </button>
+    );
+  }
+
+  return (
+    <span className="flex items-center gap-1">
+      <span className="text-xs text-gray-500">{rule.operador}</span>
+      <input
+        type="number"
+        step="0.1"
+        min="0"
+        max="5"
+        value={val}
+        autoFocus
+        onChange={(e) => setVal(parseFloat(e.target.value))}
+        className="w-16 text-sm border border-amber-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-amber-400"
+      />
+      <button
+        onClick={handleSave}
+        className="text-xs bg-amber-500 text-white px-2 py-0.5 rounded hover:bg-amber-600"
+      >
+        ✓
+      </button>
+      <button
+        onClick={() => { setVal(rule.valor_umbral); setEditing(false); }}
+        className="text-xs text-gray-500 hover:text-gray-700"
+      >
+        ✕
+      </button>
+    </span>
   );
 }

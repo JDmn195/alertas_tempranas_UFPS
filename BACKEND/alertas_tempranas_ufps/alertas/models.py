@@ -5,6 +5,7 @@ class Regla(models.Model):
         ('PROMEDIO', 'Promedio Acumulado'),
         ('REPROBACION', 'Número de Materias Reprobadas'),
         ('ATRASO', 'Atraso Curricular'),
+        ('CORTE', 'Alerta por Corte'),
     ]
 
     NIVEL_CHOICES = [
@@ -29,6 +30,7 @@ class Regla(models.Model):
     prioridad = models.IntegerField(default=0)
     activo = models.BooleanField(default=True)
     descripcion = models.TextField(null=True, blank=True)
+    parametros = models.JSONField(default=dict, blank=True)
 
     class Meta:
         db_table = 'regla'

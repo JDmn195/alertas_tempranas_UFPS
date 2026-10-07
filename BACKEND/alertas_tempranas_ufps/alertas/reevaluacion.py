@@ -155,7 +155,7 @@ def _ejecutar_intento(origen, usuario, intento, codigos, reintento_de):
 
     try:
         close_old_connections()
-        reglas = list(Regla.objects.filter(activo=True).order_by('-prioridad'))
+        reglas = list(Regla.objects.filter(activo=True).exclude(tipo='CORTE').order_by('-prioridad'))
         if not reglas:
             raise ErrorNoReintentable('No hay reglas activas configuradas.')
 

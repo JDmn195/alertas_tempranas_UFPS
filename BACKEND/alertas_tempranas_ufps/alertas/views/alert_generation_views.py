@@ -41,7 +41,7 @@ def calcular_y_guardar_riesgo_por_periodos(estudiante, reglas=None):
     Retorna el nivel del periodo más reciente (o calculado desde promedio).
     """
     if reglas is None:
-        reglas = list(Regla.objects.filter(activo=True).order_by('-prioridad'))
+        reglas = list(Regla.objects.filter(activo=True).exclude(tipo='CORTE').order_by('-prioridad'))
 
     # Periodos en los que el estudiante tiene notas, ordenados cronológicamente
     periodos = (
@@ -106,7 +106,7 @@ def reprocesar_alertas_completas(estudiantes_qs=None, usuario=None, regla_especi
     """
     from alertas.reevaluacion import estudiantes_evaluables, reevaluar_estudiante
 
-    reglas = list(Regla.objects.filter(activo=True).order_by('-prioridad'))
+    reglas = list(Regla.objects.filter(activo=True).exclude(tipo='CORTE').order_by('-prioridad'))
     if estudiantes_qs is None:
         estudiantes_qs = estudiantes_evaluables()
 
@@ -156,12 +156,14 @@ def reevaluar_alertas_activas(usuario=None):
     Fix 3.5/3.7: Recorre todas las alertas activas/en_seguimiento/atendidas y
     verifica si el estudiante sigue cumpliendo la regla.
     Si ya no la cumple → cierra la alerta automáticamente.
+    Excluye alertas de reglas CORTE (tienen su propio ciclo de vida).
     Retorna un resumen del proceso.
     """
     estados_abiertos = ['activa', 'active', 'en_seguimiento', 'atendida']
     alertas = (
         Alerta.objects
         .filter(estado__in=estados_abiertos)
+        .exclude(regla__tipo='CORTE')
         .select_related('estudiante', 'regla', 'estudiante__riesgo')
     )
 
@@ -296,7 +298,7 @@ def migrar_riesgo_periodos(request):
     try:
         solo_vacios = request.GET.get('solo_vacios', 'true').lower() != 'false'
 
-        reglas = list(Regla.objects.filter(activo=True).order_by('-prioridad'))
+        reglas = list(Regla.objects.filter(activo=True).exclude(tipo='CORTE').order_by('-prioridad'))
         if not reglas:
             return JsonResponse({'error': 'No hay reglas activas configuradas.'}, status=400)
 
@@ -483,4 +485,26 @@ def cerrar_alerta(request, alerta_id):
     )
     
     return JsonResponse({'mensaje': 'Alerta cerrada correctamente'})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@requiere_rol(['ADMINISTRADOR', 'DIRECTOR'])
+def evaluar_cortes(request):
+    """
+    POST /api/alertas/corte/evaluar/
+    Dispara manualmente la evaluación de alertas por corte para el periodo actual.
+    """
+    from alertas.tareas import ejecutar_en_segundo_plano
+    from alertas.alertas_corte import evaluar_cortes_periodo_actual
+
+    ejecutar_en_segundo_plano(evaluar_cortes_periodo_actual, request.usuario)
+    registrar_auditoria(
+        request.usuario,
+        'GENERAR_ALERTAS',
+        "Evaluación manual de alertas por corte disparada para el periodo actual."
+    )
+    return JsonResponse({
+        'mensaje': 'Evaluación de alertas por corte iniciada. Los resultados estarán disponibles en breve.'
+    })
 
