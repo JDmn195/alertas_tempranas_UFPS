@@ -16,6 +16,7 @@ def _recalcular_en_background(usuario, regla_id=None):
     Recalcula el riesgo tras crear/modificar una regla (se lanza en segundo plano).
     Fix 3.3: si se pasa regla_id, solo reprocesa alertas de esa regla.
     Para reglas de tipo CORTE, ejecuta evaluar_cortes_periodo_actual en segundo plano.
+    Para la regla INASISTENCIA, evaluar_inasistencia_periodo_actual (HU-36).
     """
     from alertas.views.alert_generation_views import reprocesar_alertas_completas
     from alertas.models import Regla as _Regla
@@ -27,7 +28,9 @@ def _recalcular_en_background(usuario, regla_id=None):
             pass
 
     if regla_obj and regla_obj.tipo == 'INASISTENCIA':
-        # HU-35: el motor general no evalúa el umbral de inasistencia (lo hará la HU-36)
+        # HU-36: el motor general no evalúa la inasistencia; tiene su propio ciclo
+        from alertas.alertas_inasistencia import evaluar_inasistencia_periodo_actual
+        evaluar_inasistencia_periodo_actual(usuario=usuario)
         return
 
     if regla_obj and regla_obj.tipo == 'CORTE':

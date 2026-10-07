@@ -66,6 +66,12 @@ def umbral_inasistencia_curso(request, curso_id):
         f"anterior {_texto_umbral(anterior)}, nuevo {_texto_umbral(nuevo)}.",
     )
 
+    # HU-36: el cambio de umbral puede generar o cerrar alertas del curso
+    from academico.services.asistencia import periodo_actual
+    from alertas.alertas_inasistencia import evaluar_inasistencia_curso
+    from alertas.tareas import ejecutar_en_segundo_plano
+    ejecutar_en_segundo_plano(evaluar_inasistencia_curso, curso, periodo_actual(), request.usuario)
+
     umbral, origen = obtener_umbral_inasistencia(curso)
     return JsonResponse({
         'curso_id':        curso.id,

@@ -6,7 +6,8 @@ from django.views.decorators.http import require_http_methods
 from django.shortcuts import get_object_or_404
 
 from academico.models import Estudiante, Nota, Curso, Periodo
-from alertas.evaluacion import actualizar_promedio, calcular_indicadores, evaluar_regla, nivel_de_riesgo
+from alertas.alertas_inasistencia import factor_inasistencia, obtener_regla_inasistencia, periodos_con_asistencia
+from alertas.evaluacion import ORDEN_NIVELES, actualizar_promedio, calcular_indicadores, evaluar_regla, nivel_de_riesgo
 from alertas.permisos import denegar_acceso_alerta, puede_acceder_alerta
 from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, Regla, Alerta, RiesgoEstudiante, RiesgoEstudiantePeriodo
 
@@ -16,16 +17,25 @@ from usuarios.utils import registrar_auditoria
 logger = logging.getLogger(__name__)
 
 
-def _calcular_nivel_para_periodo(estudiante, periodo, reglas, semestre_en_periodo=None):
+def _calcular_nivel_para_periodo(estudiante, periodo, reglas, semestre_en_periodo=None, regla_inasistencia=None):
     """
     Nivel de riesgo del estudiante con sus notas hasta el periodo indicado.
 
     semestre_en_periodo: semestre que cursaba el estudiante en ese periodo
     (posición ordinal desde su primer periodo con notas). Si no se pasa,
     se usa estudiante.semestre (snapshot actual).
+
+    HU-36: si se pasa regla_inasistencia, cuenta como una regla aplicable más cuando
+    el estudiante supera el umbral de inasistencia en al menos un curso del periodo.
     """
     indicadores = calcular_indicadores(estudiante, periodo=periodo, semestre_ref=semestre_en_periodo)
     nivel, reglas_aplicadas = nivel_de_riesgo(reglas, indicadores)
+    if regla_inasistencia is not None:
+        factor = factor_inasistencia(estudiante, periodo, regla_inasistencia)
+        if factor:
+            reglas_aplicadas.append(factor)
+            if ORDEN_NIVELES.get(factor['nivel'], 0) > ORDEN_NIVELES.get(nivel, 0):
+                nivel = factor['nivel']
     return nivel, reglas_aplicadas, indicadores['ppa']
 
 
@@ -54,11 +64,16 @@ def calcular_y_guardar_riesgo_por_periodos(estudiante, reglas=None):
     nivel_actual = None
     reglas_actuales = []
 
+    # HU-36: la inasistencia es un factor más en los periodos con asistencia registrada
+    regla_inasistencia = obtener_regla_inasistencia()
+    con_asistencia = periodos_con_asistencia(estudiante) if regla_inasistencia else set()
+
     for idx, periodo in enumerate(periodos):
         # Semestre que cursaba el estudiante en este periodo:
         # el primer periodo con notas = semestre 1, el siguiente = 2, etc.
         nivel, reglas_ap, _ = _calcular_nivel_para_periodo(
-            estudiante, periodo, reglas, semestre_en_periodo=idx + 1
+            estudiante, periodo, reglas, semestre_en_periodo=idx + 1,
+            regla_inasistencia=regla_inasistencia if periodo.pk in con_asistencia else None,
         )
         RiesgoEstudiantePeriodo.objects.update_or_create(
             estudiante=estudiante,
