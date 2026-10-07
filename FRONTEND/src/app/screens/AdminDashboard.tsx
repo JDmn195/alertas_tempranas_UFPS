@@ -207,12 +207,12 @@ export default function AdminDashboard() {
             {importType === 'teachers' && 'Profesores.'}
             {importType === 'attendance' && (
               <div className="mt-1">
-                Columnas requeridas: codigo, materia, grupo, fecha, estado<br/>
-                Formato fecha: DD/MM/YYYY o YYYY-MM-DD<br/>
-                Estados: ASISTIO (A), FALTA (F), FALTA_JUSTIFICADA (FJ)<br/>
+                Columnas requeridas: <strong>Periodo | Codigo Estudiante | Materia | Fecha | Estado</strong><br/>
+                Materia: código y grupo como en la oferta (ej. 1155501A). Fecha: fecha de Excel o AAAA-MM-DD<br/>
+                Estados: ASISTIO (A), FALTA (F), FALTA_JUSTIFICADA (FJ). Los estudiantes deben estar matriculados en el curso.<br/>
                 <button 
                   onClick={() => {
-                    const csvContent = "data:text/csv;charset=utf-8,codigo,materia,grupo,fecha,estado\n1151234,1150301,A,15/09/2026,A";
+                    const csvContent = "data:text/csv;charset=utf-8,Periodo,Codigo Estudiante,Materia,Fecha,Estado\n2026-2,1152001,1155501A,2026-09-01,A";
                     const encodedUri = encodeURI(csvContent);
                     const link = document.createElement("a");
                     link.setAttribute("href", encodedUri);

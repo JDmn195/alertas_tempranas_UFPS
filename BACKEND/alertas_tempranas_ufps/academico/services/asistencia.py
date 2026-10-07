@@ -1,81 +1,65 @@
-﻿"""
+"""
 academico/services/asistencia.py
 
 HU-33: Helpers reutilizables para el registro de asistencia.
-Usados tanto en attendance_views.py (docente) como en import_views.py (admin).
+Usados tanto en attendance_views.py (registro manual) como en import_views.py (importación).
 """
 import unicodedata
-from datetime import date
 
 from academico.models import Periodo, Nota
 
 
-# ── SDAT-201 / SDAT-204 ───────────────────────────────────────────────────────
+ESTADOS_ASISTENCIA = ('ASISTIO', 'FALTA', 'FALTA_JUSTIFICADA')
 
-def periodo_desde_fecha(fecha: date):
+_ABREVIATURAS = {
+    'A':  'ASISTIO',
+    'F':  'FALTA',
+    'FJ': 'FALTA_JUSTIFICADA',
+}
+
+
+def periodo_actual():
     """
-    Deriva el Periodo correspondiente a una fecha usando la regla:
-      - meses 1-6  → semestre 1
-      - meses 7-12 → semestre 2
-
-    Busca el Periodo en BD. Devuelve None si no existe;
-    NUNCA lo crea (decisión HU-33).
+    Devuelve el Periodo más reciente registrado (por año y semestre) o None.
+    La asistencia se toma siempre sobre la matrícula de este periodo.
     """
-    semestre = 1 if fecha.month <= 6 else 2
-    try:
-        return Periodo.objects.get(anio=fecha.year, semestre=semestre)
-    except Periodo.DoesNotExist:
-        return None
+    return Periodo.objects.order_by('-anio', '-semestre').first()
 
 
-def normalizar_estado(valor: str):
+def normalizar_estado(valor):
     """
     Normaliza un valor de estado de asistencia:
       - Elimina espacios, convierte a mayúsculas y quita tildes.
       - Acepta abreviaturas: A → ASISTIO, F → FALTA, FJ → FALTA_JUSTIFICADA.
       - Acepta nombres canónicos directamente.
-      - Devuelve el valor canónico ('ASISTIO', 'FALTA', 'FALTA_JUSTIFICADA')
-        o None si el valor no es reconocido.
-
-    SDAT-204: controlar estados de asistió, falta y falta justificada.
+      - Devuelve el valor canónico o None si el valor no es reconocido.
     """
     if not valor or not isinstance(valor, str):
         return None
 
-    # Quitar tildes, strip, mayúsculas
     nfd = unicodedata.normalize('NFD', valor)
-    limpio = ''.join(c for c in nfd if unicodedata.category(c) != 'Mn')
-    limpio = limpio.strip().upper()
+    limpio = ''.join(c for c in nfd if unicodedata.category(c) != 'Mn').strip().upper()
 
-    # Abreviaturas
-    ABREVIATURAS = {
-        'A':  'ASISTIO',
-        'F':  'FALTA',
-        'FJ': 'FALTA_JUSTIFICADA',
-    }
-    if limpio in ABREVIATURAS:
-        return ABREVIATURAS[limpio]
-
-    # Nombres canónicos (sin tilde ya)
-    CANONICOS = {'ASISTIO', 'FALTA', 'FALTA_JUSTIFICADA'}
-    if limpio in CANONICOS:
+    if limpio in _ABREVIATURAS:
+        return _ABREVIATURAS[limpio]
+    if limpio in ESTADOS_ASISTENCIA:
         return limpio
-
     return None
 
 
-# ── SDAT-201 / SDAT-205 ───────────────────────────────────────────────────────
-
 def estudiantes_del_curso(curso, periodo) -> set:
     """
-    Retorna el conjunto de códigos de estudiantes que pertenecen a un curso
-    en un periodo, determinado por la existencia de una Nota con ese
-    (estudiante, curso, periodo). Decisión HU-33.
-
-    SDAT-205: la pertenencia al curso es la fuente de verdad para validar
-    si se puede registrar asistencia de un estudiante.
+    Retorna el conjunto de códigos de estudiantes matriculados en un curso en un periodo:
+    los que tienen una Nota con ese (estudiante, curso, periodo), aunque sus notas sean null.
     """
     return set(
         Nota.objects.filter(curso=curso, periodo=periodo)
         .values_list('estudiante_id', flat=True)
     )
+
+
+def puede_gestionar_curso(usuario, curso) -> bool:
+    """ADMINISTRADOR gestiona cualquier curso; DOCENTE solo los que tiene asignados."""
+    if usuario.rol == 'ADMINISTRADOR':
+        return True
+    return usuario.rol == 'DOCENTE' and curso.docente.usuario_id == usuario.id

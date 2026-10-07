@@ -205,6 +205,7 @@ class Asistencia(models.Model):
         choices=ESTADO_CHOICES,
         default='ASISTIO',
     )
+    observacion    = models.CharField(max_length=255, null=True, blank=True)
     registrado_por = models.ForeignKey(
         'usuarios.Usuario',
         on_delete=models.SET_NULL,

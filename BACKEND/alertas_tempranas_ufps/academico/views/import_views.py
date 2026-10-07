@@ -9,7 +9,7 @@ import re
 import unicodedata
 import traceback
 import logging
-from datetime import date
+from datetime import date, datetime
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
 from decimal import Decimal, ROUND_HALF_UP
@@ -18,7 +18,7 @@ from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia,
 from usuarios.models import Usuario
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
-from academico.services.asistencia import periodo_desde_fecha, normalizar_estado, estudiantes_del_curso
+from academico.services.asistencia import normalizar_estado, estudiantes_del_curso, puede_gestionar_curso
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +167,24 @@ def _normalizar_codigo_docente(codigo_raw):
 # La autenticación y autorización real la provee el decorador @requiere_rol,
 # que valida y decodifica el JWT en cada petición.
 # ==============================================================================
+
+# Periodo 'AAAA-S' (historial y asistencia) y materia + grupo como en la oferta ('1155501A')
+_RE_PERIODO = re.compile(r'^(\d{4})\s*[-/]\s*([12])$')
+_RE_MATERIA_GRUPO = re.compile(r'^(\d+)(.*)$')
+
+
+def _periodo_mas_reciente(periodos_archivo=()):
+    """
+    Devuelve (anio, semestre) del periodo más reciente entre los registrados en la BD
+    y los valores válidos de periodos_archivo, o None si no hay ninguno.
+    """
+    candidatos = list(Periodo.objects.values_list('anio', 'semestre'))
+    for valor in periodos_archivo:
+        match = _RE_PERIODO.match(str(valor).strip())
+        if match:
+            candidatos.append((int(match.group(1)), int(match.group(2))))
+    return max(candidatos) if candidatos else None
+
 
 def _registrar_bitacora(request, archivo_nombre, tipo, total_procesados, errores, exitoso, advertencias=None):
     # Usuario del JWT (inyectado por @requiere_rol); nunca de datos del cliente
@@ -594,6 +612,10 @@ def importar_historial_academico(request):
         advertencias = []
         filas_validas = []
 
+        # HU-33: el periodo más reciente (de la BD o del archivo) admite filas sin notas,
+        # que representan la matrícula del estudiante en el curso.
+        periodo_reciente = _periodo_mas_reciente(df['Periodo'])
+
         for index, row in df.iterrows():
             fila_num = index + 2
 
@@ -602,7 +624,7 @@ def importar_historial_academico(request):
 
             # --- Parsear Periodo ---
             periodo_raw = str(row.get('Periodo', '')).strip()
-            periodo_match = re.match(r'^(\d{4})\s*[-/]\s*([12])$', periodo_raw)
+            periodo_match = _RE_PERIODO.match(periodo_raw)
 
             if not periodo_match:
                 errores.append({
@@ -742,11 +764,13 @@ def importar_historial_academico(request):
                 definitiva_final = definitiva_archivo
 
             elif ninguna_nota and definitiva_archivo is None:
-                # Fila completamente vacía
-                errores.append({
-                    "fila": fila_num, "campo": "Notas", "mensaje": "Fila sin notas."
-                })
-                continue
+                # HU-33: en el periodo más reciente es la matrícula (Nota con todas las notas en null)
+                if (anio, semestre_num) != periodo_reciente:
+                    errores.append({
+                        "fila": fila_num, "campo": "Notas", "mensaje": "Fila sin notas."
+                    })
+                    continue
+                definitiva_final = None
 
             elif not todas_notas and definitiva_archivo is None:
                 # Semestre en curso: cortes parciales, definitiva vacía → aceptar con null
@@ -871,7 +895,7 @@ def importar_oferta_academica(request):
         fila_num = index + 2
         codigo_materia_grupo = str(row['Materia']).strip()
 
-        match = re.match(r'^(\d+)(.*)$', codigo_materia_grupo)
+        match = _RE_MATERIA_GRUPO.match(codigo_materia_grupo)
         if not match:
             errores.append({"fila": fila_num, "campo": "Materia", "valor": codigo_materia_grupo, "mensaje": "Formato inválido."})
             continue
@@ -1071,11 +1095,41 @@ def importar_docentes(request):
     })
 
 
+def _leer_fecha_clase(valor):
+    """
+    Convierte la celda Fecha (fecha de Excel o texto AAAA-MM-DD) a date.
+    Devuelve None si el valor está vacío o no tiene un formato válido.
+    """
+    if valor is None or (not isinstance(valor, str) and pd.isna(valor)):
+        return None
+    if isinstance(valor, datetime):  # incluye pd.Timestamp
+        return valor.date()
+    if isinstance(valor, date):
+        return valor
+    texto = str(valor).strip()
+    # Excel puede guardar la fecha como número de serie
+    if re.fullmatch(r'\d+(\.0+)?', texto):
+        try:
+            return (pd.Timestamp('1899-12-30') + pd.Timedelta(days=int(float(texto)))).date()
+        except (ValueError, OverflowError):
+            return None
+    # Texto AAAA-MM-DD; se ignora una hora en cero si Excel la agregó
+    texto = re.sub(r'[ T]00:00(:00)?$', '', texto)
+    try:
+        return datetime.strptime(texto, '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
 @csrf_exempt
-@requiere_rol(['ADMINISTRADOR'])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE'])
 def importar_asistencia(request):
     """
     HU-33: IMPORTAR ASISTENCIA DESDE ARCHIVO
+
+    Columnas: Periodo | Codigo Estudiante | Materia | Fecha | Estado.
+    El DOCENTE solo puede importar asistencia de sus cursos. Con cualquier error
+    no se guarda nada; sin errores se crean o actualizan los registros.
     """
     archivo, error = _validar_request_archivo(request, extensiones_permitidas=['.csv', '.xlsx', '.xls'])
     if error:
@@ -1083,144 +1137,149 @@ def importar_asistencia(request):
 
     nombre_archivo = archivo.name
 
-    df, error = _leer_dataframe(archivo, dtype={'codigo': str, 'materia': str, 'grupo': str})
+    df, error = _leer_dataframe(archivo, dtype={'Periodo': str, 'Codigo Estudiante': str, 'Materia': str, 'Estado': str})
     if error:
         return error
 
-    columnas_requeridas = ['codigo', 'materia', 'grupo', 'fecha', 'estado']
+    columnas_requeridas = ['Periodo', 'Codigo Estudiante', 'Materia', 'Fecha', 'Estado']
     error = _validar_columnas(df, columnas_requeridas, nombre_archivo, 'ASISTENCIA', request, 'Asistencia')
     if error:
         return error
 
-    # Limpiar columnas obligatorias tipo string
-    for col in ['codigo', 'materia', 'grupo']:
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
-            # Limpiar el .0 al final en caso de que excel lo haya convertido
-            df[col] = df[col].apply(lambda x: str(int(float(x))) if x.endswith('.0') else x)
+    df = df.dropna(how='all')
+    usuario = request.usuario
+    hoy = date.today()
+
+    periodos = {(p.anio, p.semestre): p for p in Periodo.objects.all()}
+    cursos = {
+        (c.materia_id, c.grupo): c
+        for c in Curso.objects.select_related('docente')
+    }
+    cache_matricula = {}
 
     errores = []
-    registros_validos = []
-    seen_keys = {}
-    
-    # Precargar datos para no consultar en el ciclo
-    codigos = df['codigo'].dropna().unique()
-    estudiantes_dict = {est.codigo: est for est in Estudiante.objects.filter(codigo__in=codigos)}
-    
-    materias = df['materia'].dropna().unique()
-    grupos = df['grupo'].dropna().unique()
-    cursos_qs = Curso.objects.filter(materia__codigo__in=materias, grupo__in=grupos)
-    cursos_dict = {(c.materia.codigo, c.grupo): c for c in cursos_qs}
-    
-    # Pre-calcular periodos y pertenencia a curso
-    # para evitar N consultas
-    cache_periodos = {}
-    cache_pertenencia = {}
+    filas_validas = []
+    vistas = {}
 
     for index, row in df.iterrows():
         fila_num = index + 2
-        codigo = row.get('codigo')
-        materia_cod = row.get('materia')
-        grupo = row.get('grupo')
-        fecha_raw = row.get('fecha')
-        estado_raw = row.get('estado')
+        fila_con_error = False
 
-        if not codigo or codigo == 'nan':
-            errores.append({"fila": fila_num, "campo": "codigo", "mensaje": "Código vacío"})
-            continue
+        def _error(campo, valor, mensaje):
+            errores.append({"fila": fila_num, "campo": campo, "valor": valor, "mensaje": mensaje})
 
-        estudiante = estudiantes_dict.get(codigo)
-        if not estudiante:
-            errores.append({"fila": fila_num, "campo": "codigo", "valor": codigo, "mensaje": "El estudiante no existe"})
-            continue
-
-        if not materia_cod or not grupo or materia_cod == 'nan' or grupo == 'nan':
-            errores.append({"fila": fila_num, "campo": "curso", "mensaje": "Materia o grupo vacío"})
-            continue
-            
-        curso = cursos_dict.get((materia_cod, grupo))
-        if not curso:
-            errores.append({"fila": fila_num, "campo": "curso", "valor": f"{materia_cod}-{grupo}", "mensaje": "El curso no existe"})
-            continue
-
-        try:
-            fecha_clase = pd.to_datetime(fecha_raw, dayfirst=True).date()
-        except (ValueError, TypeError):
-            errores.append({"fila": fila_num, "campo": "fecha", "valor": fecha_raw, "mensaje": "Formato de fecha inválido"})
-            continue
-            
-        if fecha_clase > date.today():
-            errores.append({"fila": fila_num, "campo": "fecha", "valor": str(fecha_clase), "mensaje": "No se pueden registrar asistencias futuras"})
-            continue
-
-        if fecha_clase not in cache_periodos:
-            cache_periodos[fecha_clase] = periodo_desde_fecha(fecha_clase)
-            
-        periodo = cache_periodos[fecha_clase]
+        # --- Periodo ---
+        periodo_raw = '' if pd.isna(row['Periodo']) else str(row['Periodo']).strip()
+        periodo_match = _RE_PERIODO.match(periodo_raw)
+        periodo = periodos.get((int(periodo_match.group(1)), int(periodo_match.group(2)))) if periodo_match else None
         if not periodo:
-            errores.append({"fila": fila_num, "campo": "fecha", "valor": str(fecha_clase), "mensaje": "No existe un periodo académico configurado para esta fecha"})
+            _error("Periodo", periodo_raw, "Periodo inválido o no registrado. Se espera 'AAAA-S'.")
+            fila_con_error = True
+
+        # --- Estudiante ---
+        codigo = '' if pd.isna(row['Codigo Estudiante']) else str(row['Codigo Estudiante']).strip()
+        if codigo.endswith('.0'):
+            codigo = codigo[:-2]
+        if not codigo:
+            _error("Codigo Estudiante", codigo, "Código de estudiante vacío.")
+            fila_con_error = True
+
+        # --- Curso (código + grupo, como en la oferta) ---
+        materia_raw = '' if pd.isna(row['Materia']) else str(row['Materia']).strip()
+        match = _RE_MATERIA_GRUPO.match(materia_raw)
+        curso = cursos.get((match.group(1), match.group(2))) if match and match.group(2) else None
+        if not curso:
+            _error("Materia", materia_raw, "El curso no existe.")
+            fila_con_error = True
+        elif not puede_gestionar_curso(usuario, curso):
+            _error("Materia", materia_raw, "El curso no está asignado a usted.")
+            fila_con_error = True
+
+        # --- Fecha ---
+        fecha_clase = _leer_fecha_clase(row['Fecha'])
+        if not fecha_clase:
+            _error("Fecha", str(row['Fecha']), "Fecha inválida. Use AAAA-MM-DD.")
+            fila_con_error = True
+        elif fecha_clase > hoy:
+            _error("Fecha", str(fecha_clase), "No se puede registrar asistencia en una fecha futura.")
+            fila_con_error = True
+
+        # --- Estado ---
+        estado_raw = '' if pd.isna(row['Estado']) else str(row['Estado'])
+        estado = normalizar_estado(estado_raw)
+        if not estado:
+            _error("Estado", estado_raw, "Estado inválido. Use A, F, FJ o ASISTIO, FALTA, FALTA_JUSTIFICADA.")
+            fila_con_error = True
+
+        if fila_con_error:
             continue
 
-        # Verificar si el estudiante pertenece al curso
-        clave_curso_periodo = (curso.id, periodo.id)
-        if clave_curso_periodo not in cache_pertenencia:
-            cache_pertenencia[clave_curso_periodo] = estudiantes_del_curso(curso, periodo)
-            
-        if codigo not in cache_pertenencia[clave_curso_periodo]:
-            errores.append({"fila": fila_num, "campo": "estudiante", "valor": codigo, "mensaje": "El estudiante no pertenece al curso en este periodo"})
+        # --- Matrícula del estudiante en el curso y periodo ---
+        clave_matricula = (curso.id, periodo.id)
+        if clave_matricula not in cache_matricula:
+            cache_matricula[clave_matricula] = estudiantes_del_curso(curso, periodo)
+        if codigo not in cache_matricula[clave_matricula]:
+            _error("Codigo Estudiante", codigo, f"El estudiante no está matriculado en {materia_raw} en {periodo}.")
             continue
 
-        estado_norm = normalizar_estado(estado_raw)
-        if not estado_norm:
-            errores.append({"fila": fila_num, "campo": "estado", "valor": estado_raw, "mensaje": "Estado inválido. Use ASISTIO, FALTA o FALTA_JUSTIFICADA (o A, F, FJ)"})
+        # --- Filas repetidas en el archivo ---
+        clave = (codigo, curso.id, fecha_clase)
+        if clave in vistas:
+            _error("Fila", None, f"Fila repetida: mismo estudiante, curso y fecha que la fila {vistas[clave]}.")
             continue
+        vistas[clave] = fila_num
 
-        clave_unica = (codigo, curso.id, fecha_clase)
-        if clave_unica in seen_keys:
-            # Buscar en qué fila se vio primero
-            errores.append({"fila": fila_num, "campo": "fila", "mensaje": f"Duplicado en el archivo: la fila {fila_num} repite la fila {seen_keys[clave_unica]}"})
-            continue
-            
-        seen_keys[clave_unica] = fila_num
-
-        registros_validos.append(
-            Asistencia(
-                estudiante=estudiante,
-                curso=curso,
-                periodo=periodo,
-                fecha_clase=fecha_clase,
-                estado=estado_norm,
-                registrado_por=request.usuario
-            )
-        )
+        filas_validas.append(Asistencia(
+            estudiante_id=codigo,
+            curso=curso,
+            periodo=periodo,
+            fecha_clase=fecha_clase,
+            estado=estado,
+            registrado_por=usuario,
+        ))
 
     if errores:
         _registrar_bitacora(request, nombre_archivo, 'ASISTENCIA', 0, errores, False)
         return JsonResponse({
             "status": "error",
-            "mensaje": "Errores encontrados en el archivo.",
-            "errores": errores
+            "mensaje": "Errores encontrados en el archivo. No se guardó ningún registro.",
+            "creados": 0,
+            "actualizados": 0,
+            "errores": errores,
         }, status=400)
 
     try:
         with transaction.atomic():
+            existentes = set(
+                Asistencia.objects.filter(
+                    curso_id__in={a.curso_id for a in filas_validas},
+                    fecha_clase__in={a.fecha_clase for a in filas_validas},
+                ).values_list('estudiante_id', 'curso_id', 'fecha_clase')
+            )
+            actualizados = sum(
+                1 for a in filas_validas if (a.estudiante_id, a.curso_id, a.fecha_clase) in existentes
+            )
+            creados = len(filas_validas) - actualizados
+
             Asistencia.objects.bulk_create(
-                registros_validos,
+                filas_validas,
                 batch_size=500,
                 update_conflicts=True,
-                unique_fields=['estudiante_id', 'curso_id', 'fecha_clase'],
-                update_fields=['estado', 'periodo', 'registrado_por']
+                unique_fields=['estudiante', 'curso', 'fecha_clase'],
+                update_fields=['estado', 'periodo', 'registrado_por', 'fecha_registro'],
             )
 
-        _registrar_bitacora(request, nombre_archivo, 'ASISTENCIA', len(registros_validos), [], True)
+        _registrar_bitacora(request, nombre_archivo, 'ASISTENCIA', len(filas_validas), [], True)
         registrar_auditoria(
-            request.usuario, 'IMPORTACION',
-            f"Importación de ASISTENCIA exitosa: {len(registros_validos)} registros desde '{nombre_archivo}'."
+            usuario, 'IMPORTACION',
+            f"Importación de ASISTENCIA exitosa desde '{nombre_archivo}': {creados} creados, {actualizados} actualizados."
         )
         return JsonResponse({
             "status": "success",
-            "mensaje": "Asistencia importada correctamente.",
-            "creados": len(registros_validos)
+            "mensaje": f"Asistencia importada correctamente: {creados} creados, {actualizados} actualizados.",
+            "creados": creados,
+            "actualizados": actualizados,
+            "errores": [],
         })
     except Exception as e:
         logger.error("Error inesperado al guardar asistencia desde '%s': %s", nombre_archivo, e, exc_info=True)
