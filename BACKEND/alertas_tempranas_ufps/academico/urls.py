@@ -15,7 +15,7 @@ from .views import (
     detalle_curso,
     teacher_dashboard,
     teacher_course_students,
-    asistencia_docente,
+    asistencia_curso,
 )
 from .views.bitacora_views import listar_bitacoras, detalle_bitacora
 from .views.indicator_views import director_indicadores
@@ -36,7 +36,7 @@ urlpatterns = [
     path('courses/<int:curso_id>/detail/',       detalle_curso,                  name='course-detail'),
     path('teacher/dashboard/',                  teacher_dashboard,              name='teacher-dashboard'),
     path('teacher/course/<int:curso_id>/students/', teacher_course_students,     name='teacher-course-students'),
-    path('teacher/course/<int:curso_id>/asistencia/', asistencia_docente, name='teacher-attendance'),
+    path('cursos/<int:curso_id>/asistencia/',   asistencia_curso,               name='course-attendance'),
     path('bitacora/',                           listar_bitacoras,               name='list-bitacoras'),
     path('bitacora/<int:id>/',                  detalle_bitacora,               name='detail-bitacora'),
     path('indicadores/',                        director_indicadores,           name='director-indicadores'),

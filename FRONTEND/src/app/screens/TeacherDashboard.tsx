@@ -13,6 +13,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { apiFetch } from '../../services/apiFetch';
 import AttendanceModal from '../components/AttendanceModal';
+import AttendanceImport from '../components/AttendanceImport';
 
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -439,6 +440,9 @@ export default function TeacherDashboard() {
 
         )}
       </div>
+
+      {/* ── Carga de asistencia por archivo (HU-33) ────────────── */}
+      <AttendanceImport />
 
       {/* ── Modal: Estudiantes en riesgo del curso ────────────── */}
       {selectedCurso && (

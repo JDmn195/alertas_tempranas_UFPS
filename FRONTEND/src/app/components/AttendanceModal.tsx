@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Save, AlertTriangle, Users, CheckSquare } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 import { Button } from './ui/Button';
@@ -13,18 +13,35 @@ interface EstudianteAsistencia {
   codigo: string;
   nombre: string;
   estado: string | null;
+  observacion: string | null;
 }
 
 interface AttendanceResponse {
   fecha: string;
+  periodo: string;
   ya_registrada: boolean;
+  fechas_registradas: string[];
   estudiantes: EstudianteAsistencia[];
 }
 
+interface ErrorEstudiante {
+  codigo_estudiante: string | null;
+  campo: string;
+  mensaje: string;
+}
+
+// Fecha local en formato AAAA-MM-DD (toISOString usa UTC y puede adelantar un día)
+const hoyLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export default function AttendanceModal({ curso, onClose }: AttendanceModalProps) {
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(hoyLocal());
   const [attendanceData, setAttendanceData] = useState<AttendanceResponse | null>(null);
   const [records, setRecords] = useState<Record<string, string>>({});
+  const [observaciones, setObservaciones] = useState<Record<string, string>>({});
+  const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +58,7 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch(`${BASE_URL}/api/academico/teacher/course/${curso.curso_id}/asistencia/?fecha=${selectedDate}`);
+      const res = await apiFetch(`${BASE_URL}/api/academico/cursos/${curso.curso_id}/asistencia/?fecha=${selectedDate}`);
       const json = await res.json();
       
       if (!res.ok) {
@@ -51,10 +68,14 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
       setAttendanceData(json);
       
       const newRecords: Record<string, string> = {};
+      const newObservaciones: Record<string, string> = {};
       json.estudiantes.forEach((est: EstudianteAsistencia) => {
         newRecords[est.codigo] = est.estado || 'ASISTIO';
+        newObservaciones[est.codigo] = est.observacion || '';
       });
       setRecords(newRecords);
+      setObservaciones(newObservaciones);
+      setSaveErrors({});
     } catch (err: any) {
       setError(err.message);
       setAttendanceData(null);
@@ -77,25 +98,36 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveErrors({});
     try {
       const payload = {
         fecha: selectedDate,
-        registros: Object.entries(records).map(([codigo, estado]) => ({ codigo, estado }))
+        registros: Object.entries(records).map(([codigo, estado]) => ({
+          codigo_estudiante: codigo,
+          estado,
+          observacion: observaciones[codigo]?.trim() || null,
+        }))
       };
 
-      const res = await apiFetch(`${BASE_URL}/api/academico/teacher/course/${curso.curso_id}/asistencia/`, {
+      const res = await apiFetch(`${BASE_URL}/api/academico/cursos/${curso.curso_id}/asistencia/`, {
         method: 'POST',
         body: JSON.stringify(payload)
       });
       
       const json = await res.json();
       if (!res.ok) {
-        const errorMsg = json.errores ? json.errores.join(', ') : (json.mensaje || 'Error al guardar');
-        throw new Error(errorMsg);
+        if (Array.isArray(json.errores)) {
+          const porEstudiante: Record<string, string> = {};
+          json.errores.forEach((e: ErrorEstudiante) => {
+            if (e.codigo_estudiante) porEstudiante[e.codigo_estudiante] = e.mensaje;
+          });
+          setSaveErrors(porEstudiante);
+        }
+        throw new Error(json.mensaje || json.error || 'Error al guardar');
       }
       
-      toast.success(json.mensaje || 'Asistencia guardada con éxito');
-      fetchAttendance(); // Refresh to update "ya_registrada"
+      toast.success(`Asistencia guardada: ${json.creados} nuevos, ${json.actualizados} actualizados.`);
+      fetchAttendance(); // Refresca "ya_registrada" y las fechas registradas
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -128,7 +160,7 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
                   <input 
                     type="date" 
                     value={selectedDate}
-                    max={new Date().toISOString().split('T')[0]}
+                    max={hoyLocal()}
                     onChange={(e) => setSelectedDate(e.target.value)}
                     className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-[#C8102E] focus:border-[#C8102E] outline-none"
                   />
@@ -155,6 +187,26 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
               )}
             </div>
 
+            {attendanceData && attendanceData.fechas_registradas.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-bold text-gray-600 mb-1">
+                  Fechas registradas en {attendanceData.periodo} (selecciona una para corregirla)
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {attendanceData.fechas_registradas.map(f => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setSelectedDate(f)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-mono border transition-colors ${f === selectedDate ? 'bg-[#C8102E] border-[#C8102E] text-white' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex-1 overflow-y-auto border border-gray-200 rounded-xl">
               {loading ? (
                 <div className="py-12 text-center text-gray-400">Cargando estudiantes...</div>
@@ -165,14 +217,15 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
               ) : !attendanceData?.estudiantes || attendanceData.estudiantes.length === 0 ? (
                 <div className="py-12 text-center text-gray-400 flex flex-col items-center">
                   <Users className="w-12 h-12 mb-3 opacity-20" />
-                  <p>No hay estudiantes registrados en este curso para el periodo correspondiente a la fecha.</p>
+                  <p>No hay estudiantes matriculados en este curso en el periodo actual.</p>
                 </div>
               ) : (
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 text-gray-700 sticky top-0 z-10 shadow-sm">
                     <tr>
-                      <th className="px-4 py-3 text-left font-bold w-1/2">Estudiante</th>
+                      <th className="px-4 py-3 text-left font-bold">Estudiante</th>
                       <th className="px-4 py-3 text-left font-bold">Estado de Asistencia</th>
+                      <th className="px-4 py-3 text-left font-bold">Observación</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -181,6 +234,9 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
                         <td className="px-4 py-3">
                           <p className="font-semibold text-gray-900">{est.nombre}</p>
                           <p className="text-gray-500 font-mono text-xs">{est.codigo}</p>
+                          {saveErrors[est.codigo] && (
+                            <p className="text-xs text-red-600 mt-1">{saveErrors[est.codigo]}</p>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2">
@@ -215,6 +271,16 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
                               Falta Just.
                             </label>
                           </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="text"
+                            maxLength={255}
+                            value={observaciones[est.codigo] || ''}
+                            onChange={(e) => setObservaciones(prev => ({ ...prev, [est.codigo]: e.target.value }))}
+                            placeholder="Opcional"
+                            className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#C8102E]"
+                          />
                         </td>
                       </tr>
                     ))}

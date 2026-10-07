@@ -1,160 +1,204 @@
-﻿from django.http import JsonResponse
+from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction
 import json
-from datetime import datetime
+from datetime import date, datetime
 
-from academico.models import Curso, Asistencia
+from academico.models import Curso, Asistencia, Estudiante
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
-from academico.services.asistencia import periodo_desde_fecha, normalizar_estado, estudiantes_del_curso
+from academico.services.asistencia import (
+    periodo_actual, normalizar_estado, estudiantes_del_curso, puede_gestionar_curso,
+)
+
+MAX_OBSERVACION = Asistencia._meta.get_field('observacion').max_length
+
+
+def _parsear_fecha(fecha_str):
+    """Devuelve (fecha, None) o (None, JsonResponse) si la fecha falta, es inválida o es futura."""
+    if not fecha_str:
+        return None, JsonResponse({'status': 'error', 'mensaje': 'Debe proveer una fecha.'}, status=400)
+    try:
+        fecha_clase = datetime.strptime(str(fecha_str), '%Y-%m-%d').date()
+    except ValueError:
+        return None, JsonResponse({'status': 'error', 'mensaje': 'Formato de fecha inválido. Use AAAA-MM-DD.'}, status=400)
+    if fecha_clase > date.today():
+        return None, JsonResponse({'status': 'error', 'mensaje': 'No se puede registrar asistencia en una fecha futura.'}, status=400)
+    return fecha_clase, None
+
 
 @csrf_exempt
-@requiere_rol(['DOCENTE'])
-def asistencia_docente(request, curso_id):
+@requiere_rol(['DOCENTE', 'ADMINISTRADOR'])
+def asistencia_curso(request, curso_id):
+    """
+    HU-33: /api/academico/cursos/<curso_id>/asistencia/
+
+    GET ?fecha=AAAA-MM-DD: estudiantes matriculados en el periodo más reciente con su
+    estado en esa fecha, y las fechas ya registradas del curso en ese periodo.
+    POST {"fecha", "registros": [{"codigo_estudiante", "estado", "observacion"}]}:
+    crea o actualiza los registros de esa fecha. Con un solo error no se guarda nada.
+    """
+    if request.method not in ('GET', 'POST'):
+        return JsonResponse({'status': 'error', 'mensaje': 'Método no permitido.'}, status=405)
+
     usuario = request.usuario
     try:
-        docente = usuario.docente
-    except Exception:
-        return JsonResponse({'error': 'El usuario no tiene perfil de docente.'}, status=404)
-
-    try:
-        curso = Curso.objects.get(id=curso_id, docente=docente)
+        curso = Curso.objects.select_related('materia', 'docente').get(id=curso_id)
     except Curso.DoesNotExist:
-        return JsonResponse({'error': 'El curso no existe o no está asignado a usted.'}, status=404)
+        return JsonResponse({'error': 'El curso no existe.'}, status=404)
+
+    if not puede_gestionar_curso(usuario, curso):
+        registrar_auditoria(usuario, 'ACCESO_DENEGADO', f"Intento de registrar asistencia en el curso {curso_id}, no asignado al docente.")
+        return JsonResponse({'error': 'Prohibido. El curso no está asignado a usted.'}, status=403)
+
+    periodo = periodo_actual()
+    if not periodo:
+        return JsonResponse({'status': 'error', 'mensaje': 'No hay un periodo académico registrado.'}, status=400)
 
     if request.method == 'GET':
-        fecha_str = request.GET.get('fecha')
-        if not fecha_str:
-            return JsonResponse({'status': 'error', 'mensaje': 'Debe proveer una fecha.'}, status=400)
-        
-        try:
-            fecha_clase = datetime.strptime(fecha_str, '%Y-%m-%d').date()
-        except ValueError:
-            return JsonResponse({'status': 'error', 'mensaje': 'Formato de fecha inválido. Use YYYY-MM-DD.'}, status=400)
-            
-        if fecha_clase > datetime.now().date():
-            return JsonResponse({'status': 'error', 'mensaje': 'No se pueden registrar asistencias para fechas futuras.'}, status=400)
+        return _consultar_asistencia(request, curso, periodo)
+    return _registrar_asistencia(request, curso, periodo)
 
-        periodo = periodo_desde_fecha(fecha_clase)
-        if not periodo:
-            return JsonResponse({'status': 'error', 'mensaje': 'No existe un periodo académico configurado para esta fecha.'}, status=400)
 
-        estudiantes_ids = estudiantes_del_curso(curso, periodo)
-        
-        from academico.models import Estudiante
-        estudiantes = Estudiante.objects.filter(codigo__in=estudiantes_ids).order_by('nombre')
-        
-        asistencias = Asistencia.objects.filter(curso=curso, fecha_clase=fecha_clase)
-        asistencias_map = {a.estudiante_id: a.estado for a in asistencias}
-        
-        estudiantes_data = []
-        for est in estudiantes:
-            estudiantes_data.append({
+def _consultar_asistencia(request, curso, periodo):
+    fecha_clase, error = _parsear_fecha(request.GET.get('fecha') or date.today().isoformat())
+    if error:
+        return error
+
+    matriculados = estudiantes_del_curso(curso, periodo)
+    estudiantes = Estudiante.objects.filter(codigo__in=matriculados).order_by('nombre')
+    registros = {
+        a.estudiante_id: a
+        for a in Asistencia.objects.filter(curso=curso, fecha_clase=fecha_clase)
+    }
+    fechas_registradas = (
+        Asistencia.objects.filter(curso=curso, periodo=periodo)
+        .values_list('fecha_clase', flat=True)
+        .distinct()
+        .order_by('-fecha_clase')
+    )
+
+    return JsonResponse({
+        'curso': {
+            'id': curso.id,
+            'materia': curso.materia.nombre,
+            'codigo': curso.materia.codigo,
+            'grupo': curso.grupo,
+        },
+        'periodo': str(periodo),
+        'fecha': fecha_clase.isoformat(),
+        'ya_registrada': bool(registros),
+        'fechas_registradas': [f.isoformat() for f in fechas_registradas],
+        'estudiantes': [
+            {
                 'codigo': est.codigo,
                 'nombre': est.nombre,
-                'estado': asistencias_map.get(est.codigo, None)
-            })
-            
-        return JsonResponse({
-            'curso': {
-                'id': curso.id,
-                'materia': curso.materia.nombre,
-                'codigo': curso.materia.codigo,
-                'grupo': curso.grupo
-            },
-            'fecha': fecha_str,
-            'periodo': {
-                'anio': periodo.anio,
-                'semestre': periodo.semestre
-            },
-            'ya_registrada': len(asistencias) > 0,
-            'estudiantes': estudiantes_data
-        })
+                'estado': registros[est.codigo].estado if est.codigo in registros else None,
+                'observacion': registros[est.codigo].observacion if est.codigo in registros else None,
+            }
+            for est in estudiantes
+        ],
+    })
 
-    elif request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            fecha_str = data.get('fecha')
-            registros = data.get('registros', [])
-        except json.JSONDecodeError:
-            return JsonResponse({'status': 'error', 'mensaje': 'Cuerpo JSON inválido.'}, status=400)
 
-        if not fecha_str:
-            return JsonResponse({'status': 'error', 'mensaje': 'Debe proveer una fecha.'}, status=400)
+def _registrar_asistencia(request, curso, periodo):
+    usuario = request.usuario
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({'status': 'error', 'mensaje': 'Cuerpo JSON inválido.'}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse({'status': 'error', 'mensaje': 'Cuerpo JSON inválido.'}, status=400)
 
-        try:
-            fecha_clase = datetime.strptime(fecha_str, '%Y-%m-%d').date()
-        except ValueError:
-            return JsonResponse({'status': 'error', 'mensaje': 'Formato de fecha inválido. Use YYYY-MM-DD.'}, status=400)
-            
-        if fecha_clase > datetime.now().date():
-            return JsonResponse({'status': 'error', 'mensaje': 'No se pueden registrar asistencias para fechas futuras.'}, status=400)
+    fecha_clase, error = _parsear_fecha(data.get('fecha'))
+    if error:
+        return error
 
-        periodo = periodo_desde_fecha(fecha_clase)
-        if not periodo:
-            return JsonResponse({'status': 'error', 'mensaje': 'No existe un periodo académico configurado para esta fecha.'}, status=400)
+    registros = data.get('registros')
+    if not registros or not isinstance(registros, list):
+        return JsonResponse({'status': 'error', 'mensaje': 'Debe proveer una lista de registros.'}, status=400)
 
-        if not registros or not isinstance(registros, list):
-            return JsonResponse({'status': 'error', 'mensaje': 'Debe proveer una lista de registros.'}, status=400)
+    matriculados = estudiantes_del_curso(curso, periodo)
+    errores = []
+    asistencias = []
+    procesados = set()
 
-        estudiantes_validos = estudiantes_del_curso(curso, periodo)
-        
-        errores = []
-        asistencias_objs = []
-        codigos_procesados = set()
+    for reg in registros:
+        if not isinstance(reg, dict):
+            errores.append({'codigo_estudiante': None, 'campo': 'registro', 'mensaje': 'Registro inválido.'})
+            continue
 
-        for idx, reg in enumerate(registros):
-            codigo = reg.get('codigo')
-            estado_raw = reg.get('estado')
-            
-            if not codigo:
-                errores.append(f'Registro {idx}: Código de estudiante faltante.')
-                continue
-                
-            if codigo in codigos_procesados:
-                errores.append(f'Registro {idx}: Código {codigo} duplicado en la petición.')
-                continue
-            
-            if codigo not in estudiantes_validos:
-                errores.append(f'Registro {idx}: Estudiante {codigo} no pertenece al curso en este periodo.')
-                continue
-                
-            estado_norm = normalizar_estado(estado_raw)
-            if not estado_norm:
-                errores.append(f'Registro {idx}: Estado {estado_raw} inválido para {codigo}.')
-                continue
-                
-            codigos_procesados.add(codigo)
-            asistencias_objs.append(
-                Asistencia(
-                    estudiante_id=codigo,
-                    curso=curso,
-                    periodo=periodo,
-                    fecha_clase=fecha_clase,
-                    estado=estado_norm,
-                    registrado_por=usuario
-                )
-            )
+        codigo = str(reg.get('codigo_estudiante') or '').strip()
+        estado_raw = reg.get('estado')
+        observacion = reg.get('observacion')
 
-        if errores:
-            return JsonResponse({'status': 'error', 'mensaje': 'Errores de validación', 'errores': errores}, status=400)
+        def _error(campo, mensaje):
+            errores.append({'codigo_estudiante': codigo or None, 'campo': campo, 'mensaje': mensaje})
 
-        if asistencias_objs:
-            with transaction.atomic():
-                Asistencia.objects.bulk_create(
-                    asistencias_objs,
-                    batch_size=500,
-                    update_conflicts=True,
-                    unique_fields=['estudiante_id', 'curso_id', 'fecha_clase'],
-                    update_fields=['estado', 'periodo', 'registrado_por']
-                )
-                registrar_auditoria(
-                    usuario,
-                    'REGISTRO_ASISTENCIA',
-                    f'Registro de asistencia para curso {curso.materia.nombre} grupo {curso.grupo} en {fecha_str}. Registros: {len(asistencias_objs)}'
-                )
+        if not codigo:
+            _error('codigo_estudiante', 'Código de estudiante faltante.')
+            continue
+        if codigo in procesados:
+            _error('codigo_estudiante', 'El estudiante está repetido en la petición.')
+            continue
+        procesados.add(codigo)
 
-        return JsonResponse({'status': 'success', 'mensaje': 'Asistencia registrada correctamente.', 'registrados': len(asistencias_objs)})
+        if codigo not in matriculados:
+            _error('codigo_estudiante', f'El estudiante no está matriculado en el curso en {periodo}.')
+            continue
 
-    return JsonResponse({'status': 'error', 'mensaje': 'Método no permitido.'}, status=405)
+        estado = normalizar_estado(estado_raw)
+        if not estado:
+            _error('estado', f"Estado inválido: '{estado_raw}'. Use ASISTIO, FALTA o FALTA_JUSTIFICADA.")
+            continue
+
+        if observacion is not None and not isinstance(observacion, str):
+            _error('observacion', 'La observación debe ser texto.')
+            continue
+        observacion = (observacion or '').strip() or None
+        if observacion and len(observacion) > MAX_OBSERVACION:
+            _error('observacion', f'La observación supera {MAX_OBSERVACION} caracteres.')
+            continue
+
+        asistencias.append(Asistencia(
+            estudiante_id=codigo,
+            curso=curso,
+            periodo=periodo,
+            fecha_clase=fecha_clase,
+            estado=estado,
+            observacion=observacion,
+            registrado_por=usuario,
+        ))
+
+    if errores:
+        return JsonResponse({'status': 'error', 'mensaje': 'Errores de validación. No se guardó ningún registro.', 'errores': errores}, status=400)
+
+    with transaction.atomic():
+        existentes = set(
+            Asistencia.objects.filter(curso=curso, fecha_clase=fecha_clase)
+            .values_list('estudiante_id', flat=True)
+        )
+        actualizados = sum(1 for a in asistencias if a.estudiante_id in existentes)
+        creados = len(asistencias) - actualizados
+
+        Asistencia.objects.bulk_create(
+            asistencias,
+            batch_size=500,
+            update_conflicts=True,
+            unique_fields=['estudiante', 'curso', 'fecha_clase'],
+            update_fields=['estado', 'observacion', 'periodo', 'registrado_por', 'fecha_registro'],
+        )
+        registrar_auditoria(
+            usuario,
+            'REGISTRO_ASISTENCIA',
+            f'Asistencia de {curso.materia.codigo}{curso.grupo} ({curso.materia.nombre}) del {fecha_clase.isoformat()}: '
+            f'{creados} creados, {actualizados} actualizados.'
+        )
+
+    return JsonResponse({
+        'status': 'success',
+        'mensaje': 'Asistencia registrada correctamente.',
+        'fecha': fecha_clase.isoformat(),
+        'creados': creados,
+        'actualizados': actualizados,
+    })
