@@ -26,6 +26,10 @@ def _recalcular_en_background(usuario, regla_id=None):
         except _Regla.DoesNotExist:
             pass
 
+    if regla_obj and regla_obj.tipo == 'INASISTENCIA':
+        # HU-35: el motor general no evalúa el umbral de inasistencia (lo hará la HU-36)
+        return
+
     if regla_obj and regla_obj.tipo == 'CORTE':
         from alertas.alertas_corte import evaluar_cortes_periodo_actual
         evaluar_cortes_periodo_actual(usuario=usuario)
@@ -93,6 +97,54 @@ def _validar_regla_corte(tipo, valor_umbral, parametros, regla_id=None):
                 raise ValueError("'umbral_previo' debe estar entre 0.0 y 5.0.")
 
 
+def _validar_regla_inasistencia(tipo, valor_umbral, parametros, activo, regla_id=None):
+    """
+    HU-35: la regla INASISTENCIA es el umbral general de inasistencia (porcentaje).
+    min_clases es el mínimo de clases registradas antes de evaluar a un estudiante.
+    """
+    if tipo != 'INASISTENCIA':
+        return
+
+    try:
+        vu = float(valor_umbral)
+    except (TypeError, ValueError):
+        raise ValueError("El umbral de inasistencia debe ser numérico.")
+    if isinstance(valor_umbral, bool) or vu < 0 or vu > 100:
+        raise ValueError("El umbral de inasistencia debe estar entre 0 y 100.")
+
+    if not isinstance(parametros, dict):
+        raise ValueError("Para reglas de tipo INASISTENCIA, 'parametros' debe ser un objeto JSON.")
+    min_clases = parametros.get('min_clases')
+    if isinstance(min_clases, bool) or not isinstance(min_clases, int) or not 1 <= min_clases <= 50:
+        raise ValueError("El mínimo de clases ('min_clases') debe ser un número entero entre 1 y 50.")
+
+    if activo:
+        otras_activas = Regla.objects.filter(tipo='INASISTENCIA', activo=True)
+        if regla_id:
+            otras_activas = otras_activas.exclude(pk=regla_id)
+        if otras_activas.exists():
+            raise ValueError(
+                "Ya existe una regla de inasistencia activa. Desactívela antes de activar otra: "
+                "solo puede haber un umbral general de inasistencia."
+            )
+
+
+def _parametros_a_guardar(tipo, parametros):
+    if tipo == 'CORTE':
+        return parametros
+    if tipo == 'INASISTENCIA':
+        return {'min_clases': parametros['min_clases']}
+    return {}
+
+
+def _detalle_auditoria(regla, mensaje):
+    if regla.tipo == 'INASISTENCIA':
+        return (f"{mensaje} Umbral general: {regla.valor_umbral}%, "
+                f"mínimo de clases: {regla.parametros.get('min_clases')}, "
+                f"activa: {'sí' if regla.activo else 'no'}.")
+    return mensaje
+
+
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 @requiere_rol(['ADMINISTRADOR', 'DIRECTOR', 'BIENESTAR'])
@@ -123,8 +175,10 @@ def listar_crear_reglas(request):
             tipo = body.get('tipo', 'PROMEDIO')
             valor_umbral = body.get('valor_umbral', 0.0)
             parametros = body.get('parametros', {})
+            activo = body.get('activo', True)
 
             _validar_regla_corte(tipo, valor_umbral, parametros)
+            _validar_regla_inasistencia(tipo, valor_umbral, parametros, activo)
 
             regla = Regla.objects.create(
                 nombre=body.get('nombre'),
@@ -132,11 +186,12 @@ def listar_crear_reglas(request):
                 valor_umbral=valor_umbral,
                 operador=body.get('operador', '<'),
                 nivel=body.get('nivel', 'medium'),
-                activo=body.get('activo', True),
+                activo=activo,
                 descripcion=body.get('descripcion', ''),
-                parametros=parametros if tipo == 'CORTE' else {}
+                parametros=_parametros_a_guardar(tipo, parametros)
             )
-            registrar_auditoria(request.usuario, 'CREAR_REGLA', f"Regla '{regla.nombre}' creada.")
+            registrar_auditoria(request.usuario, 'CREAR_REGLA',
+                                _detalle_auditoria(regla, f"Regla '{regla.nombre}' creada."))
 
             # Recalcular riesgo en background — Fix 3.3: solo para esta regla
             ejecutar_en_segundo_plano(_recalcular_en_background, request.usuario, regla.id)
@@ -180,8 +235,11 @@ def detalle_regla(request, pk):
             nuevo_tipo = body.get('tipo', regla.tipo)
             nuevo_umbral = body.get('valor_umbral', regla.valor_umbral)
             nuevos_parametros = body.get('parametros', regla.parametros or {})
+            nuevo_activo = body.get('activo', regla.activo)
 
             _validar_regla_corte(nuevo_tipo, nuevo_umbral, nuevos_parametros, regla_id=regla.id)
+            _validar_regla_inasistencia(nuevo_tipo, nuevo_umbral, nuevos_parametros, nuevo_activo,
+                                        regla_id=regla.id)
 
             estado_anterior = regla.activo
             regla.nombre = body.get('nombre', regla.nombre)
@@ -189,9 +247,9 @@ def detalle_regla(request, pk):
             regla.valor_umbral = nuevo_umbral
             regla.operador = body.get('operador', regla.operador)
             regla.nivel = body.get('nivel', regla.nivel)
-            regla.activo = body.get('activo', regla.activo)
+            regla.activo = nuevo_activo
             regla.descripcion = body.get('descripcion', regla.descripcion)
-            regla.parametros = nuevos_parametros if nuevo_tipo == 'CORTE' else {}
+            regla.parametros = _parametros_a_guardar(nuevo_tipo, nuevos_parametros)
             regla.save()
 
             if estado_anterior is True and regla.activo is False:
@@ -207,7 +265,7 @@ def detalle_regla(request, pk):
                 msg_audit = f"Regla '{regla.nombre}' modificada."
                 msg_resp  = 'Regla actualizada exitosamente. El riesgo de los estudiantes se está recalculando.'
 
-            registrar_auditoria(request.usuario, accion, msg_audit)
+            registrar_auditoria(request.usuario, accion, _detalle_auditoria(regla, msg_audit))
 
             # Recalcular riesgo en background — Fix 3.3: solo para esta regla
             ejecutar_en_segundo_plano(_recalcular_en_background, request.usuario, regla.id)

@@ -6,16 +6,19 @@ HU-34: Cálculo del porcentaje de inasistencia por estudiante, curso y periodo.
 Porcentaje = faltas sin justificar / clases registradas x 100 (Decimal, 2 decimales).
 Las faltas justificadas cuentan como clase registrada pero no como falta.
 Sin clases registradas el porcentaje es None, no 0.
+
+HU-35: el umbral es parametrizable. El general es el valor_umbral de la regla
+INASISTENCIA activa y cada curso puede tener el suyo (Curso.umbral_inasistencia).
 """
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db.models import Count, F, Q
 
 from academico.models import Asistencia, Nota
+from alertas.models import Regla
 
-
-# Temporal: la HU-35 la reemplaza por el umbral parametrizado.
-UMBRAL_INASISTENCIA_POR_DEFECTO = 20
+ORIGEN_UMBRAL_CURSO = 'curso'
+ORIGEN_UMBRAL_GENERAL = 'general'
 
 _ESTADOS = {
     'asistencias':         'ASISTIO',
@@ -35,8 +38,52 @@ def calcular_porcentaje(faltas, total_clases):
     return (Decimal(faltas) * 100 / Decimal(total_clases)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
-def supera_umbral(porcentaje, umbral=UMBRAL_INASISTENCIA_POR_DEFECTO):
+def obtener_umbral_general():
+    """valor_umbral de la regla INASISTENCIA activa, o None si no hay ninguna activa."""
+    return (
+        Regla.objects.filter(tipo='INASISTENCIA', activo=True)
+        .order_by('id').values_list('valor_umbral', flat=True).first()
+    )
+
+
+def umbral_efectivo(umbral_curso, umbral_general):
+    """(umbral, origen) a partir del umbral propio del curso y del general."""
+    if umbral_curso is not None:
+        return umbral_curso, ORIGEN_UMBRAL_CURSO
+    if umbral_general is not None:
+        return umbral_general, ORIGEN_UMBRAL_GENERAL
+    return None, None
+
+
+def obtener_umbral_inasistencia(curso):
+    """
+    Umbral de inasistencia que aplica al curso: (umbral, origen).
+    origen es "curso" si el curso tiene umbral propio y "general" si se usa el de
+    la regla INASISTENCIA activa. Sin ninguno de los dos devuelve (None, None).
+    """
+    if curso.umbral_inasistencia is not None:
+        return umbral_efectivo(curso.umbral_inasistencia, None)
+    return umbral_efectivo(None, obtener_umbral_general())
+
+
+def obtener_umbrales_inasistencia(cursos):
+    """
+    Umbral de varios cursos (instancias de Curso) consultando la regla una sola vez:
+    {curso_id: (umbral, origen)}.
+    """
+    general = obtener_umbral_general()
+    return {curso.pk: umbral_efectivo(curso.umbral_inasistencia, general) for curso in cursos}
+
+
+def supera_umbral(porcentaje, umbral):
+    """True/False si el porcentaje supera el umbral; None si no hay umbral configurado."""
+    if umbral is None:
+        return None
     return porcentaje is not None and porcentaje > umbral
+
+
+def numero_o_none(valor):
+    return float(valor) if valor is not None else None
 
 
 def _resultado(fila=None):

@@ -7,6 +7,7 @@ from django.db.models import Q, Count, Avg, Subquery, OuterRef
 from academico.models import Curso, Nota, Periodo, Estudiante
 from alertas.models import RiesgoEstudiante, RiesgoEstudiantePeriodo, Alerta, Regla
 from usuarios.decorators import requiere_rol
+from academico.asistencia import numero_o_none, obtener_umbral_general, umbral_efectivo
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +222,7 @@ def listar_indicadores_cursos(request):
 
     # ── Construir resultados ──────────────────────────────────────────────────
     results = []
+    umbral_general = obtener_umbral_general()  # HU-35
     for curso in cursos_qs:
         s = stats_map.get(curso.id)
 
@@ -288,6 +290,8 @@ def listar_indicadores_cursos(request):
         if estado_filter and indicadores['estado'] != estado_filter:
             continue
 
+        umbral, origen_umbral = umbral_efectivo(curso.umbral_inasistencia, umbral_general)
+
         results.append({
             'curso_id':              curso.id,
             'codigo_materia':        curso.materia.codigo,
@@ -295,6 +299,10 @@ def listar_indicadores_cursos(request):
             'grupo':                 curso.grupo,
             'docente':               curso.docente.nombre if curso.docente else 'Sin asignar',
             **indicadores,
+            # HU-35: umbral de inasistencia efectivo (propio del curso o el general)
+            'umbral_inasistencia_curso':  numero_o_none(curso.umbral_inasistencia),
+            'umbral_inasistencia':        numero_o_none(umbral),
+            'origen_umbral_inasistencia': origen_umbral,
         })
 
     # ── Paginación ────────────────────────────────────────────────────────────

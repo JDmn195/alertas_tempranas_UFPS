@@ -7,7 +7,7 @@ from decimal import Decimal
 from django.urls import reverse
 
 from academico.asistencia import (
-    UMBRAL_INASISTENCIA_POR_DEFECTO, calcular_inasistencia, calcular_inasistencia_curso,
+    calcular_inasistencia, calcular_inasistencia_curso,
 )
 from academico.models import Asistencia, Curso, Estudiante, Materia, Nota
 from academico.tests_asistencia import AsistenciaBaseTestCase
@@ -100,7 +100,7 @@ class InasistenciaEstudianteTests(InasistenciaBaseTestCase):
         data = res.json()
         self.assertEqual(data['periodo'], '2026-2')
         self.assertEqual(data['periodos_disponibles'], ['2026-2', '2026-1'])
-        self.assertEqual(data['umbral'], UMBRAL_INASISTENCIA_POR_DEFECTO)
+        self.assertEqual(data['umbral'], 20.0)  # regla INASISTENCIA creada por la migración 0018
         cursos = {c['curso_id']: c for c in data['cursos']}
         self.assertEqual(set(cursos), {self.curso.id, self.curso_otro.id})
         c = cursos[self.curso.id]
@@ -203,7 +203,7 @@ class PanelDocenteInasistenciaTests(InasistenciaBaseTestCase):
         res = self.get(reverse('teacher-dashboard'), self.user_docente)
         self.assertEqual(res.status_code, 200)
         data = res.json()
-        self.assertEqual(data['umbral_inasistencia'], UMBRAL_INASISTENCIA_POR_DEFECTO)
+        self.assertEqual(data['umbral_inasistencia'], 20.0)
         curso = next(c for c in data['cursos'] if c['curso_id'] == self.curso.id)
         self.assertEqual(curso['inasistencia_sobre_umbral'], 1)
 

@@ -1118,14 +1118,16 @@ interface AsistenciaCurso {
   faltas: number;
   faltas_justificadas: number;
   porcentaje: number | null;
-  supera_umbral: boolean;
+  umbral: number | null;                        // HU-35: umbral efectivo del curso
+  origen_umbral: 'curso' | 'general' | null;
+  supera_umbral: boolean | null;                // null sin umbral configurado
   detalle: AsistenciaDetalle[];
 }
 
 interface AsistenciaEstudianteData {
   periodo: string | null;
   periodos_disponibles: string[];
-  umbral: number;
+  umbral: number | null;                        // HU-35: umbral general
   cursos: AsistenciaCurso[];
 }
 
@@ -1175,7 +1177,8 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
         <div>
           <h2 className="text-base font-semibold text-white">Asistencia</h2>
           <p className="text-xs text-gray-400">
-            Porcentaje de inasistencia por curso. Umbral: {data?.umbral ?? 20}%
+            Porcentaje de inasistencia por curso.{' '}
+            {data?.umbral != null ? `Umbral general: ${data.umbral}%` : 'Sin umbral general activo'}
           </p>
         </div>
       </div>
@@ -1267,6 +1270,9 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
                           }`}>
                             {c.porcentaje.toFixed(2)}%
                           </span>
+                        )}
+                        {c.origen_umbral === 'curso' && c.umbral !== null && (
+                          <span className="block text-[11px] text-gray-500 mt-1">Umbral del curso: {c.umbral}%</span>
                         )}
                       </td>
                     </tr>,

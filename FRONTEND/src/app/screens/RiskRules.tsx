@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Settings, X, Trash2, AlertTriangle, Play, CheckCircle } from 'lucide-react';
+import { Plus, Settings, X, Trash2, AlertTriangle, Play, CheckCircle, CalendarX } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { ruleService, Rule } from '../../services/ruleService';
@@ -25,6 +25,7 @@ export default function RiskRules() {
   const [errorModal, setErrorModal] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
   const [evaluandoCortes, setEvaluandoCortes] = useState(false);
   const [evaluacionOk, setEvaluacionOk] = useState(false);
+  const [errorInasistencia, setErrorInasistencia] = useState<string | null>(null);
 
   // Obtener usuario de la sesión real (localStorage)
   const getSessionUser = () => {
@@ -109,6 +110,34 @@ export default function RiskRules() {
     }
   };
 
+  // HU-35: el backend valida el rango y que haya una sola regla INASISTENCIA activa
+  const handleToggleInasistencia = async (rule: Rule) => {
+    if (!rule.id) return;
+    setErrorInasistencia(null);
+    try {
+      await ruleService.updateRule(rule.id, { activo: !rule.activo });
+      loadRules();
+    } catch (error: any) {
+      setErrorInasistencia(error.message || 'Error al cambiar el estado de la regla');
+    }
+  };
+
+  const handleSaveInasistencia = async (rule: Rule, valorUmbral: number, minClases: number) => {
+    if (!rule.id) return false;
+    setErrorInasistencia(null);
+    try {
+      await ruleService.updateRule(rule.id, {
+        valor_umbral: valorUmbral,
+        parametros: { ...(rule.parametros || {}), min_clases: minClases },
+      });
+      loadRules();
+      return true;
+    } catch (error: any) {
+      setErrorInasistencia(error.message || 'Error al actualizar el umbral de inasistencia');
+      return false;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!usuarioId) {
@@ -171,8 +200,9 @@ export default function RiskRules() {
     setShowModal(true);
   };
 
-  const rulesGeneral = rules.filter(r => r.tipo !== 'CORTE');
+  const rulesGeneral = rules.filter(r => r.tipo !== 'CORTE' && r.tipo !== 'INASISTENCIA');
   const rulesCorte = rules.filter(r => r.tipo === 'CORTE');
+  const rulesInasistencia = rules.filter(r => r.tipo === 'INASISTENCIA');
 
   return (
     <div className="space-y-8">
@@ -291,6 +321,48 @@ export default function RiskRules() {
         )}
       </section>
 
+      {/* ── SECCIÓN HU-35: Umbral general de inasistencia ── */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-3">
+          <CalendarX className="w-5 h-5 text-[#C8102E]" />
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800">Umbral de Inasistencia</h2>
+            <p className="text-xs text-gray-500">
+              Porcentaje máximo de faltas sin justificar permitido en un curso. Cada curso puede tener su propio umbral desde la lista de cursos; si no lo tiene, se usa este valor general.
+            </p>
+          </div>
+        </div>
+
+        {errorInasistencia && (
+          <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3" role="alert">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span className="flex-1">{errorInasistencia}</span>
+            <button type="button" onClick={() => setErrorInasistencia(null)} className="text-red-500 hover:text-red-700">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="text-center py-8 text-gray-500">Cargando umbral de inasistencia…</div>
+        ) : rulesInasistencia.length === 0 ? (
+          <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-gray-600 text-sm">
+            No hay una regla de inasistencia configurada. Créala con "Añadir Regla" y la métrica "Porcentaje de Inasistencia".
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {rulesInasistencia.map((rule) => (
+              <InasistenciaRuleCard
+                key={`${rule.id}-${rule.valor_umbral}-${rule.parametros?.min_clases}`}
+                rule={rule}
+                onSave={handleSaveInasistencia}
+                onToggle={handleToggleInasistencia}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* ── Reglas Generales ── */}
       <section className="space-y-4">
         <div className="flex items-center gap-3">
@@ -403,12 +475,18 @@ export default function RiskRules() {
                     </label>
                     <select
                       value={formData.tipo}
-                      onChange={(e) => setFormData({ ...formData, tipo: e.target.value as any })}
+                      onChange={(e) => {
+                        const tipo = e.target.value as Rule['tipo'];
+                        setFormData(tipo === 'INASISTENCIA'
+                          ? { ...formData, tipo, operador: '>', valor_umbral: 20, parametros: { min_clases: 4 } }
+                          : { ...formData, tipo, parametros: undefined });
+                      }}
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
                     >
                       <option value="PROMEDIO">Promedio Acumulado</option>
                       <option value="REPROBACION">Materias Reprobadas</option>
                       <option value="ATRASO">Atraso Curricular</option>
+                      <option value="INASISTENCIA">Porcentaje de Inasistencia</option>
                     </select>
                   </div>
                   <div>
@@ -442,7 +520,34 @@ export default function RiskRules() {
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
                     placeholder="e.g., 3.0"
                   />
+                  {formData.tipo === 'INASISTENCIA' && (
+                    <p className="text-xs text-gray-500 mt-1">Porcentaje entre 0 y 100.</p>
+                  )}
                 </div>
+
+                {formData.tipo === 'INASISTENCIA' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Mínimo de clases registradas
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      max="50"
+                      required
+                      value={formData.parametros?.min_clases ?? ''}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        parametros: { ...(formData.parametros || {}), min_clases: parseInt(e.target.value, 10) },
+                      })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Clases que deben estar registradas antes de evaluar a un estudiante (entre 1 y 50).
+                    </p>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -571,5 +676,115 @@ function UmbralInline({ rule, onSave }: { rule: Rule; onSave: (r: Rule) => void 
         ✕
       </button>
     </span>
+  );
+}
+
+// ── HU-35: tarjeta de la regla INASISTENCIA (umbral general y mínimo de clases) ──
+function InasistenciaRuleCard({ rule, onSave, onToggle }: {
+  rule: Rule;
+  onSave: (r: Rule, valorUmbral: number, minClases: number) => Promise<boolean>;
+  onToggle: (r: Rule) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [umbral, setUmbral] = useState(String(rule.valor_umbral));
+  const [minClases, setMinClases] = useState(String(rule.parametros?.min_clases ?? ''));
+  const [saving, setSaving] = useState(false);
+
+  const cancelar = () => {
+    setUmbral(String(rule.valor_umbral));
+    setMinClases(String(rule.parametros?.min_clases ?? ''));
+    setEditing(false);
+  };
+
+  const guardar = async () => {
+    setSaving(true);
+    // Se envía tal cual: el backend responde 400 con el mensaje si el valor no es válido
+    const ok = await onSave(rule, Number(umbral), Number(minClases));
+    setSaving(false);
+    if (ok) setEditing(false);
+  };
+
+  return (
+    <div className={`bg-white rounded-lg border border-red-200 p-5 ${!rule.activo ? 'opacity-60' : ''}`}>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <h3 className="text-base font-semibold text-gray-900">{rule.nombre}</h3>
+            <Badge variant={rule.nivel}>
+              {rule.nivel === 'high' ? 'Alta' : rule.nivel === 'medium' ? 'Media' : 'Baja'}
+            </Badge>
+          </div>
+          {rule.descripcion && <p className="text-xs text-gray-500 italic">{rule.descripcion}</p>}
+        </div>
+
+        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+          <input
+            type="checkbox"
+            checked={rule.activo}
+            onChange={() => onToggle(rule)}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#C8102E]"></div>
+          <span className="ml-2 text-xs font-medium text-gray-600">
+            {rule.activo ? 'Activa' : 'Inactiva'}
+          </span>
+        </label>
+      </div>
+
+      <div className="mt-4 flex items-end gap-6 flex-wrap">
+        {editing ? (
+          <>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Umbral general (%)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={umbral}
+                autoFocus
+                onChange={(e) => setUmbral(e.target.value)}
+                className="w-28 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#C8102E]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Mínimo de clases</label>
+              <input
+                type="number"
+                step="1"
+                min="1"
+                max="50"
+                value={minClases}
+                onChange={(e) => setMinClases(e.target.value)}
+                className="w-24 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#C8102E]"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={guardar} disabled={saving}>
+                {saving ? 'Guardando…' : 'Guardar'}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={cancelar} disabled={saving}>
+                Cancelar
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <p className="text-xs text-gray-500">Umbral general</p>
+              <p className="text-lg font-semibold text-gray-900">{rule.operador} {rule.valor_umbral}%</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Mínimo de clases</p>
+              <p className="text-lg font-semibold text-gray-900">{rule.parametros?.min_clases ?? '—'}</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+              <Settings className="w-4 h-4 mr-2" />
+              Editar
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
   );
 }

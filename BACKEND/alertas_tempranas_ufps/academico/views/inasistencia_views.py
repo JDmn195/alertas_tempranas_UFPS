@@ -3,8 +3,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
 
 from academico.asistencia import (
-    UMBRAL_INASISTENCIA_POR_DEFECTO, calcular_inasistencia_curso,
-    calcular_inasistencia_por_curso, supera_umbral,
+    calcular_inasistencia_curso, calcular_inasistencia_por_curso, numero_o_none,
+    obtener_umbral_general, obtener_umbral_inasistencia, obtener_umbrales_inasistencia, supera_umbral,
 )
 from academico.models import Asistencia, Curso, Estudiante, Nota, Periodo
 from academico.services.asistencia import normalizar_estado, periodo_actual
@@ -73,7 +73,7 @@ def inasistencia_estudiante(request, codigo):
         'nombre':               estudiante.nombre,
         'periodo':              str(periodo) if periodo else None,
         'periodos_disponibles': [str(p) for p in periodos_disponibles],
-        'umbral':               UMBRAL_INASISTENCIA_POR_DEFECTO,
+        'umbral':               numero_o_none(obtener_umbral_general()),  # HU-35: general
         'cursos':               [],
     }
     if not periodo:
@@ -95,6 +95,7 @@ def inasistencia_estudiante(request, codigo):
     ids_cursos = [n.curso_id for n in notas]
 
     totales = calcular_inasistencia_por_curso(estudiante, periodo, ids_cursos)
+    umbrales = obtener_umbrales_inasistencia([n.curso for n in notas])
     detalle = {}
     registros = Asistencia.objects.filter(estudiante=estudiante, periodo=periodo, curso__in=ids_cursos)
     for a in registros.order_by('fecha_clase'):
@@ -107,6 +108,7 @@ def inasistencia_estudiante(request, codigo):
     for nota in notas:
         curso = nota.curso
         datos = totales[curso.id]
+        umbral, origen_umbral = umbrales[curso.id]
         respuesta['cursos'].append({
             'curso_id':     curso.id,
             'materia':      curso.materia.nombre,
@@ -114,7 +116,9 @@ def inasistencia_estudiante(request, codigo):
             'grupo':        curso.grupo,
             **datos,
             'porcentaje':   _porcentaje_json(datos['porcentaje']),
-            'supera_umbral': supera_umbral(datos['porcentaje']),
+            'umbral':        numero_o_none(umbral),
+            'origen_umbral': origen_umbral,
+            'supera_umbral': supera_umbral(datos['porcentaje'], umbral),
             'detalle':      detalle.get(curso.id, []),
         })
     return JsonResponse(respuesta)
@@ -163,6 +167,7 @@ def inasistencia_curso(request, curso_id):
         )
         inasistencia = {c: d for c, d in inasistencia.items() if c in con_estado}
 
+    umbral, origen_umbral = obtener_umbral_inasistencia(curso)
     nombres = dict(Estudiante.objects.filter(codigo__in=inasistencia).values_list('codigo', 'nombre'))
     estudiantes = []
     for codigo, datos in inasistencia.items():
@@ -171,7 +176,7 @@ def inasistencia_curso(request, curso_id):
             'nombre':        nombres.get(codigo, ''),
             **datos,
             'porcentaje':    _porcentaje_json(datos['porcentaje']),
-            'supera_umbral': supera_umbral(datos['porcentaje']),
+            'supera_umbral': supera_umbral(datos['porcentaje'], umbral),
         })
     estudiantes.sort(key=lambda e: e['nombre'])
 
@@ -184,6 +189,11 @@ def inasistencia_curso(request, curso_id):
         },
         'periodo':     str(periodo),
         'estado':      estado,
-        'umbral':      UMBRAL_INASISTENCIA_POR_DEFECTO,
+        'umbral':        numero_o_none(umbral),
+        'origen_umbral': origen_umbral,
+        # HU-35: null cuando no hay umbral configurado
+        'total_sobre_umbral': (
+            None if umbral is None else sum(1 for e in estudiantes if e['supera_umbral'])
+        ),
         'estudiantes': estudiantes,
     })

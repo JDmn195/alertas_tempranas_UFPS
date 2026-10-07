@@ -18,6 +18,7 @@ from .views import (
     asistencia_curso,
     inasistencia_estudiante,
     inasistencia_curso,
+    umbral_inasistencia_curso,
 )
 from .views.bitacora_views import listar_bitacoras, detalle_bitacora
 from .views.indicator_views import director_indicadores
@@ -41,6 +42,7 @@ urlpatterns = [
     path('teacher/course/<int:curso_id>/students/', teacher_course_students,     name='teacher-course-students'),
     path('cursos/<int:curso_id>/asistencia/',   asistencia_curso,               name='course-attendance'),
     path('cursos/<int:curso_id>/inasistencia/', inasistencia_curso,             name='course-absence'),
+    path('cursos/<int:curso_id>/umbral-inasistencia/', umbral_inasistencia_curso, name='course-absence-threshold'),
     path('bitacora/',                           listar_bitacoras,               name='list-bitacoras'),
     path('bitacora/<int:id>/',                  detalle_bitacora,               name='detail-bitacora'),
     path('indicadores/',                        director_indicadores,           name='director-indicadores'),
