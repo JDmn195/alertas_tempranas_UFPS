@@ -16,6 +16,8 @@ from .views import (
     teacher_dashboard,
     teacher_course_students,
     asistencia_curso,
+    inasistencia_estudiante,
+    inasistencia_curso,
 )
 from .views.bitacora_views import listar_bitacoras, detalle_bitacora
 from .views.indicator_views import director_indicadores
@@ -26,6 +28,7 @@ urlpatterns = [
     path('students/<str:codigo>/indicators/',   obtener_indicadores_estudiante, name='student-indicators'),
     path('students/<str:codigo>/history/',      obtener_historial_academico,    name='student-history'),
     path('students/<str:codigo>/intervenciones/', obtener_intervenciones_estudiante, name='student-interventions'),
+    path('students/<str:codigo>/asistencia/',   inasistencia_estudiante,        name='student-attendance'),
     path('import/pensum/',                      importar_pensum,                name='import-pensum'),
     path('import/students/',                    importar_estudiantes_dirplan,   name='import-students-dirplan'),
     path('import/history/',                     importar_historial_academico,   name='import-history-individual'),
@@ -37,6 +40,7 @@ urlpatterns = [
     path('teacher/dashboard/',                  teacher_dashboard,              name='teacher-dashboard'),
     path('teacher/course/<int:curso_id>/students/', teacher_course_students,     name='teacher-course-students'),
     path('cursos/<int:curso_id>/asistencia/',   asistencia_curso,               name='course-attendance'),
+    path('cursos/<int:curso_id>/inasistencia/', inasistencia_curso,             name='course-absence'),
     path('bitacora/',                           listar_bitacoras,               name='list-bitacoras'),
     path('bitacora/<int:id>/',                  detalle_bitacora,               name='detail-bitacora'),
     path('indicadores/',                        director_indicadores,           name='director-indicadores'),

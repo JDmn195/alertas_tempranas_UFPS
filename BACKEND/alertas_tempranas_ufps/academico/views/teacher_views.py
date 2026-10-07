@@ -6,6 +6,10 @@ from django.db.models import Count, Avg, Q
 from academico.models import Curso, Nota, Periodo, Estudiante, Materia
 from alertas.models import Alerta, RiesgoEstudiante, RiesgoEstudiantePeriodo
 from usuarios.decorators import requiere_rol
+from academico.asistencia import (
+    UMBRAL_INASISTENCIA_POR_DEFECTO, calcular_inasistencia_curso, calcular_inasistencia_cursos, supera_umbral,
+)
+from academico.services.asistencia import periodo_actual
 
 
 @csrf_exempt
@@ -65,6 +69,12 @@ def teacher_dashboard(request):
         .values_list('estudiante_id', flat=True)
     )
 
+    # ── HU-34: inasistencia del periodo más reciente, una consulta para todos los cursos ──
+    periodo_asistencia = periodo_actual()
+    inasistencia_cursos = (
+        calcular_inasistencia_cursos(ids_cursos, periodo_asistencia) if periodo_asistencia else {}
+    )
+
     # ── Construir lista de cursos ─────────────────────────────────────────────
     cursos_data = []
     for curso in cursos_qs:
@@ -100,6 +110,10 @@ def teacher_dashboard(request):
             'promedio_curso': promedio_c,
             'en_riesgo':    en_riesgo,
             'estado':       estado,
+            'inasistencia_sobre_umbral': sum(
+                1 for datos in inasistencia_cursos.get(curso.id, {}).values()
+                if supera_umbral(datos['porcentaje'])
+            ),
         })
 
     total_en_riesgo = len(
@@ -218,6 +232,7 @@ def teacher_dashboard(request):
         'materias_criticas':       materias_criticas,        # 6.4
         'distribucion_riesgo':     dist_riesgo,              # 6.4
         'cursos_criticos':         cursos_criticos,          # 6.4
+        'umbral_inasistencia':     UMBRAL_INASISTENCIA_POR_DEFECTO,  # HU-34
         'page':                    page,
         'pages':                   paginator.num_pages,
         'page_size':               page_size,
@@ -295,18 +310,25 @@ def teacher_course_students(request, curso_id):
         .values_list('estudiante_id', 'total')
     )
 
+    # HU-34: porcentaje de inasistencia en el periodo más reciente, una sola consulta
+    periodo_asistencia = periodo_actual()
+    inasistencia = calcular_inasistencia_curso(curso, periodo_asistencia) if periodo_asistencia else {}
+
     # Construir lista completa ordenada por riesgo (high > medium > low > unknown)
     ORDEN_RIESGO = {'high': 0, 'medium': 1, 'low': 2, 'unknown': 3}
     resultado = []
     for n in estudiantes_notas:
         est = n.estudiante
         nivel = riesgo_periodo_map.get(est.codigo) or riesgo_snapshot_map.get(est.codigo, 'unknown')
+        porcentaje = inasistencia.get(est.codigo, {}).get('porcentaje')
         resultado.append({
             'codigo':          est.codigo,
             'nombre':          est.nombre,
             'nivel_riesgo':    nivel,
             'alertas_activas': alertas_map.get(est.codigo, 0),
             'ultima_nota':     float(n.definitiva) if n.definitiva is not None else None,
+            'porcentaje_inasistencia': float(porcentaje) if porcentaje is not None else None,
+            'supera_umbral_inasistencia': supera_umbral(porcentaje),
             '_ord':            ORDEN_RIESGO.get(nivel, 3),
         })
 
@@ -331,5 +353,7 @@ def teacher_course_students(request, curso_id):
         'page':        page,
         'pages':       max(1, -(-total // page_size)),
         'page_size':   page_size,
+        'periodo_asistencia':  str(periodo_asistencia) if periodo_asistencia else None,
+        'umbral_inasistencia': UMBRAL_INASISTENCIA_POR_DEFECTO,
     })
 

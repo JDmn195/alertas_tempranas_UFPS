@@ -1101,6 +1101,220 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
   );
 }
 
+// ─── HU-34: Asistencia del estudiante ───────────────────────────────────────
+interface AsistenciaDetalle {
+  fecha: string;
+  estado: 'ASISTIO' | 'FALTA' | 'FALTA_JUSTIFICADA';
+  observacion: string | null;
+}
+
+interface AsistenciaCurso {
+  curso_id: number;
+  materia: string;
+  codigo: string;
+  grupo: string;
+  total_clases: number;
+  asistencias: number;
+  faltas: number;
+  faltas_justificadas: number;
+  porcentaje: number | null;
+  supera_umbral: boolean;
+  detalle: AsistenciaDetalle[];
+}
+
+interface AsistenciaEstudianteData {
+  periodo: string | null;
+  periodos_disponibles: string[];
+  umbral: number;
+  cursos: AsistenciaCurso[];
+}
+
+const ESTADO_ASISTENCIA: Record<AsistenciaDetalle['estado'], { label: string; className: string }> = {
+  ASISTIO:           { label: 'Asistió',           className: 'bg-green-100 text-green-700' },
+  FALTA:             { label: 'Falta',             className: 'bg-red-100 text-red-700' },
+  FALTA_JUSTIFICADA: { label: 'Falta justificada', className: 'bg-amber-100 text-amber-700' },
+};
+
+function AsistenciaEstudiante({ codigo }: { codigo: string }) {
+  const [data, setData] = useState<AsistenciaEstudianteData | null>(null);
+  const [periodo, setPeriodo] = useState('');
+  const [cursoFiltro, setCursoFiltro] = useState('');
+  const [expandido, setExpandido] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const cargar = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const query = periodo ? `?periodo=${encodeURIComponent(periodo)}` : '';
+        const res = await apiFetch(`${baseUrl}/api/academico/students/${codigo}/asistencia/${query}`);
+        if (!res.ok) throw new Error('No se pudo cargar la asistencia del estudiante.');
+        const json: AsistenciaEstudianteData = await res.json();
+        setData(json);
+        if (!periodo && json.periodo) setPeriodo(json.periodo);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    cargar();
+  }, [codigo, periodo]);
+
+  const cursos = (data?.cursos ?? []).filter(c => !cursoFiltro || String(c.curso_id) === cursoFiltro);
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+      <div className="bg-gray-700 px-6 py-4 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+          <Calendar className="w-4 h-4 text-white" />
+        </div>
+        <div>
+          <h2 className="text-base font-semibold text-white">Asistencia</h2>
+          <p className="text-xs text-gray-400">
+            Porcentaje de inasistencia por curso. Umbral: {data?.umbral ?? 20}%
+          </p>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap gap-4">
+        <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">
+          Periodo
+          <select
+            value={periodo}
+            onChange={e => { setPeriodo(e.target.value); setCursoFiltro(''); setExpandido(null); }}
+            className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-800"
+          >
+            {(data?.periodos_disponibles ?? []).map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">
+          Curso
+          <select
+            value={cursoFiltro}
+            onChange={e => { setCursoFiltro(e.target.value); setExpandido(null); }}
+            className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-800"
+          >
+            <option value="">Todos los cursos</option>
+            {(data?.cursos ?? []).map(c => (
+              <option key={c.curso_id} value={String(c.curso_id)}>
+                {c.materia} - Grupo {c.grupo}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {error ? (
+        <div className="px-6 py-8 text-center text-sm text-red-600">{error}</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                {['', 'Materia', 'Grupo', 'Clases', 'Faltas', 'Faltas justificadas', '% Inasistencia'].map(col => (
+                  <th key={col} className="px-5 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    {col}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-400 animate-pulse">
+                    Cargando asistencia...
+                  </td>
+                </tr>
+              ) : cursos.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-400">
+                    No hay cursos para mostrar en este periodo.
+                  </td>
+                </tr>
+              ) : (
+                cursos.map(c => {
+                  const abierto = expandido === c.curso_id;
+                  return [
+                    <tr
+                      key={c.curso_id}
+                      onClick={() => setExpandido(abierto ? null : c.curso_id)}
+                      className="cursor-pointer hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="px-5 py-3.5 text-gray-400">
+                        {abierto ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </td>
+                      <td className="px-5 py-3.5 text-sm font-medium text-gray-900">
+                        {c.materia}
+                        <span className="block text-xs font-mono text-gray-400">{c.codigo}</span>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-gray-500">{c.grupo}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-700">{c.total_clases}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-700">{c.faltas}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-700">{c.faltas_justificadas}</td>
+                      <td className="px-5 py-3.5">
+                        {c.porcentaje === null ? (
+                          <span className="text-xs text-gray-400">Sin registros</span>
+                        ) : (
+                          <span className={`font-mono text-sm font-bold px-2 py-1 rounded ${
+                            c.supera_umbral ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
+                          }`}>
+                            {c.porcentaje.toFixed(2)}%
+                          </span>
+                        )}
+                      </td>
+                    </tr>,
+                    abierto && (
+                      <tr key={`${c.curso_id}-detalle`} className="bg-gray-50/60">
+                        <td colSpan={7} className="px-10 py-4">
+                          {c.detalle.length === 0 ? (
+                            <p className="text-sm text-gray-400">Sin registros de asistencia en este curso.</p>
+                          ) : (
+                            <table className="w-full">
+                              <thead>
+                                <tr>
+                                  {['Fecha', 'Estado', 'Observación'].map(col => (
+                                    <th key={col} className="py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                      {col}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {c.detalle.map(d => (
+                                  <tr key={d.fecha}>
+                                    <td className="py-2 text-sm font-mono text-gray-600">{d.fecha}</td>
+                                    <td className="py-2">
+                                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${ESTADO_ASISTENCIA[d.estado].className}`}>
+                                        {ESTADO_ASISTENCIA[d.estado].label}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 text-sm text-gray-500">{d.observacion || '—'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </td>
+                      </tr>
+                    ),
+                  ];
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Página principal StudentProfile ─────────────────────────────────────────
 export default function StudentProfile() {
   const { id } = useParams();
@@ -1112,6 +1326,7 @@ export default function StudentProfile() {
   const [error, setError] = useState<string | null>(null);
   const [recalculating, setRecalculating] = useState(false);
   const [recalcMsg, setRecalcMsg] = useState<string | null>(null);
+  const [pestana, setPestana] = useState<'resumen' | 'asistencia'>('resumen');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -1297,17 +1512,40 @@ export default function StudentProfile() {
         </div>
       </div>
 
-      {/* ── Bloque 1: Ficha Académica ─────────────────────────────────────── */}
-      <FichaAcademica student={student} />
+      {/* Pestañas */}
+      <div className="flex gap-2 border-b border-gray-200">
+        {([['resumen', 'Resumen académico'], ['asistencia', 'Asistencia']] as const).map(([clave, label]) => (
+          <button
+            key={clave}
+            onClick={() => setPestana(clave)}
+            className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+              pestana === clave
+                ? 'border-[#C8102E] text-[#C8102E]'
+                : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-      {/* ── Bloque 2: Indicadores ────────────────────────────────────────── */}
-      <IndicadoresSection data={indicadores} loading={loading} studentName={student.nombre} historial={historial} />
+      {pestana === 'asistencia' ? (
+        <AsistenciaEstudiante codigo={student.codigo} />
+      ) : (
+        <>
+        {/* ── Bloque 1: Ficha Académica ─────────────────────────────────────── */}
+        <FichaAcademica student={student} />
 
-      {/* ── Bloque 3: Historial Académico ────────────────────────────────── */}
-      <HistorialAcademico data={historial} loading={loading} />
+        {/* ── Bloque 2: Indicadores ────────────────────────────────────────── */}
+        <IndicadoresSection data={indicadores} loading={loading} studentName={student.nombre} historial={historial} />
 
-      {/* ── Bloque 4: Historial de Intervenciones ────────────────────────── */}
-      <HistorialIntervenciones data={intervenciones} loading={loading} />
+        {/* ── Bloque 3: Historial Académico ────────────────────────────────── */}
+        <HistorialAcademico data={historial} loading={loading} />
+
+        {/* ── Bloque 4: Historial de Intervenciones ────────────────────────── */}
+        <HistorialIntervenciones data={intervenciones} loading={loading} />
+        </>
+      )}
     </div>
   );
 }
