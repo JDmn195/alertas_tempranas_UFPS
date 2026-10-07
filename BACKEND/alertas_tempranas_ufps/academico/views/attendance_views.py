@@ -14,6 +14,13 @@ from academico.services.asistencia import (
 MAX_OBSERVACION = Asistencia._meta.get_field('observacion').max_length
 
 
+def _evaluar_inasistencia_en_segundo_plano(curso, periodo, usuario):
+    from alertas.alertas_inasistencia import evaluar_inasistencia_curso
+    from alertas.tareas import ejecutar_en_segundo_plano
+
+    ejecutar_en_segundo_plano(evaluar_inasistencia_curso, curso, periodo, usuario)
+
+
 def _parsear_fecha(fecha_str):
     """Devuelve (fecha, None) o (None, JsonResponse) si la fecha falta, es inválida o es futura."""
     if not fecha_str:
@@ -194,6 +201,8 @@ def _registrar_asistencia(request, curso, periodo):
             f'Asistencia de {curso.materia.codigo}{curso.grupo} ({curso.materia.nombre}) del {fecha_clase.isoformat()}: '
             f'{creados} creados, {actualizados} actualizados.'
         )
+        # HU-36: alertas por inasistencia del curso, en segundo plano tras confirmar
+        transaction.on_commit(lambda: _evaluar_inasistencia_en_segundo_plano(curso, periodo, usuario))
 
     return JsonResponse({
         'status': 'success',

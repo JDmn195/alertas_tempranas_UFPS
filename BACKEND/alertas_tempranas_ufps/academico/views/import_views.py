@@ -1121,6 +1121,21 @@ def _leer_fecha_clase(valor):
         return None
 
 
+def _evaluar_inasistencia_cursos(cursos_afectados, usuario):
+    """HU-36: evalúa en segundo plano la inasistencia de los (curso_id, periodo_id) importados."""
+    from alertas.alertas_inasistencia import evaluar_inasistencia_curso
+    from alertas.tareas import ejecutar_en_segundo_plano
+
+    def _evaluar():
+        for curso_id, periodo_id in cursos_afectados:
+            try:
+                evaluar_inasistencia_curso(curso_id, periodo_id, usuario)
+            except Exception as e:
+                logger.error("Error al evaluar inasistencia del curso %s: %s", curso_id, e, exc_info=True)
+
+    ejecutar_en_segundo_plano(_evaluar)
+
+
 @csrf_exempt
 @requiere_rol(['ADMINISTRADOR', 'DOCENTE'])
 def importar_asistencia(request):
@@ -1268,6 +1283,9 @@ def importar_asistencia(request):
                 unique_fields=['estudiante', 'curso', 'fecha_clase'],
                 update_fields=['estado', 'periodo', 'registrado_por', 'fecha_registro'],
             )
+            # HU-36: alertas por inasistencia de cada curso afectado, en segundo plano tras confirmar
+            cursos_afectados = sorted({(a.curso_id, a.periodo_id) for a in filas_validas})
+            transaction.on_commit(lambda: _evaluar_inasistencia_cursos(cursos_afectados, usuario))
 
         _registrar_bitacora(request, nombre_archivo, 'ASISTENCIA', len(filas_validas), [], True)
         registrar_auditoria(
