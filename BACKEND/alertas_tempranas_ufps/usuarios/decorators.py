@@ -20,7 +20,13 @@ def obtener_usuario_de_request(request):
         user_id = payload.get('user_id')
         if not user_id:
             return None
-        return Usuario.objects.get(id=user_id, activo=True)
+        usuario = Usuario.objects.get(id=user_id, activo=True)
+        # Un token emitido antes del último cambio de contraseña ya no es válido
+        if usuario.contrasena_cambiada_en is not None:
+            emitido = payload.get('iat')
+            if not isinstance(emitido, (int, float)) or emitido < int(usuario.contrasena_cambiada_en.timestamp()):
+                return None
+        return usuario
     except jwt.ExpiredSignatureError:
         return None
     except (jwt.InvalidTokenError, Usuario.DoesNotExist):

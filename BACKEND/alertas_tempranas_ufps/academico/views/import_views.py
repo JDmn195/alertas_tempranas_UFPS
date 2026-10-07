@@ -10,6 +10,8 @@ import unicodedata
 import traceback
 import logging
 from datetime import date
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email
 from decimal import Decimal, ROUND_HALF_UP
 from django.conf import settings
 from academico.models import Curso, Docente, Estudiante, Nota, Periodo, Materia, BitacoraImportacion, EquivalenciaMateria, Asistencia
@@ -33,6 +35,9 @@ def calcular_definitiva(c1, c2, c3, examen):
 # Por defecto: 10 MB. Ajustar en settings.py con MAX_IMPORT_FILE_SIZE_MB.
 _MAX_MB = getattr(settings, 'MAX_IMPORT_FILE_SIZE_MB', 10)
 MAX_IMPORT_FILE_SIZE = _MAX_MB * 1024 * 1024  # bytes
+
+# Porcentaje máximo de registros inválidos antes de cancelar una importación (INC-01)
+MAX_PORCENTAJE_INVALIDOS = getattr(settings, 'IMPORT_MAX_PORCENTAJE_INVALIDOS', 10)
 
 
 def _validar_tamano_archivo(archivo):
@@ -267,9 +272,9 @@ def importar_estudiantes_dirplan(request):
             c_colegio = find_col(col_map['colegio'])
             c_municipio = find_col(col_map['municipio'])
 
-            if not c_codigo or not c_nombre:
+            if not c_codigo or not c_nombre or not c_doc:
                 detected_cols = list(df.columns)
-                err_msg = f"Columnas requeridas 'Codigo' y 'Nombre' no encontradas. Detectadas: {', '.join(detected_cols)}"
+                err_msg = f"Columnas requeridas 'Codigo', 'Nombre' y 'Documento' no encontradas. Detectadas: {', '.join(detected_cols)}"
                 _registrar_bitacora(request, file.name, 'ESTUDIANTES', 0, [{"mensaje": err_msg}], False)
                 return JsonResponse({
                     "status": "error",
@@ -287,50 +292,119 @@ def importar_estudiantes_dirplan(request):
                     return None
 
             estudiantes_objs = []
-            omitidos = 0
+            errores = []        # registros rechazados por formato o campos en blanco
+            duplicados = []     # códigos o documentos repetidos en el archivo (se conserva la primera fila)
+            codigos_vistos = {}
+            documentos_vistos = {}
+            omitidos = 0        # filas completamente vacías (no cuentan como registros)
 
             # Los campos que se actualizarán si ya existe el registro
             update_fields = [
-                'nombre', 'tipo_documento', 'numero_documento', 'pensum', 
+                'nombre', 'tipo_documento', 'numero_documento', 'pensum',
                 'estado_matricula', 'celular', 'email_personal', 'email_institucional',
                 'colegio_egresado', 'municipio_nacimiento', 'semestre', 'promedio', 'ingreso'
             ]
 
+            def texto(row, col):
+                if not col or pd.isna(row[col]):
+                    return ''
+                return str(row[col]).strip()
+
+            def error(fila, campo, valor, mensaje):
+                return {"fila": fila, "campo": campo, "valor": valor, "mensaje": mensaje}
+
             for i, row in df.iterrows():
-                codigo_val = str(row[c_codigo]).strip()
-                if not codigo_val or pd.isna(codigo_val) or codigo_val.lower() == 'nan':
+                fila = i + 2  # +1 por el encabezado, +1 porque Excel numera desde 1
+                if row.isna().all():
                     omitidos += 1
                     continue
 
+                errores_fila = []
+
+                codigo_val = texto(row, c_codigo)
+                if codigo_val.endswith('.0'):
+                    codigo_val = codigo_val[:-2]
+                if not codigo_val:
+                    errores_fila.append(error(fila, 'Código', '', 'El código del estudiante está en blanco.'))
+                elif not codigo_val.isdigit():
+                    errores_fila.append(error(fila, 'Código', codigo_val, 'El código debe contener solo números.'))
+
+                nombre_val = texto(row, c_nombre)
+                if not nombre_val:
+                    errores_fila.append(error(fila, 'Nombre', '', 'El nombre del estudiante está en blanco.'))
+
+                documento_val = texto(row, c_doc)
+                if documento_val.endswith('.0'):
+                    documento_val = documento_val[:-2]
+                if not documento_val:
+                    errores_fila.append(error(fila, 'Documento', '', 'El número de documento está en blanco.'))
+
+                semestre_val = 1
+                if c_sem and texto(row, c_sem):
+                    semestre_val = safe_int(row[c_sem])
+                    if semestre_val is None or not 1 <= semestre_val <= 12:
+                        errores_fila.append(error(fila, 'Semestre', texto(row, c_sem),
+                                                  'El semestre debe ser un número entre 1 y 12.'))
+
+                promedio_val = None
+                if c_prom and texto(row, c_prom):
+                    try:
+                        promedio_val = float(texto(row, c_prom).replace(',', '.'))
+                        if not 0 <= promedio_val <= 5:
+                            raise ValueError
+                    except ValueError:
+                        errores_fila.append(error(fila, 'Promedio', texto(row, c_prom),
+                                                  'El promedio debe ser un número entre 0 y 5.'))
+
+                for col, campo in ((c_email_p, 'Email personal'), (c_email_i, 'Email institucional')):
+                    correo = texto(row, col)
+                    if correo:
+                        try:
+                            validate_email(correo)
+                        except DjangoValidationError:
+                            errores_fila.append(error(fila, campo, correo, 'El correo no tiene un formato válido.'))
+
+                if errores_fila:
+                    errores.extend(errores_fila)
+                    continue
+
+                if codigo_val in codigos_vistos:
+                    duplicados.append(error(
+                        fila, 'Código', codigo_val,
+                        f'Código duplicado en el archivo (ya aparece en la fila {codigos_vistos[codigo_val]}); '
+                        f'se rechazó este registro.'
+                    ))
+                    continue
+                if documento_val in documentos_vistos:
+                    duplicados.append(error(
+                        fila, 'Documento', documento_val,
+                        f'Documento duplicado en el archivo (ya aparece en la fila {documentos_vistos[documento_val]}); '
+                        f'se rechazó este registro.'
+                    ))
+                    continue
+                codigos_vistos[codigo_val] = fila
+                documentos_vistos[documento_val] = fila
+
                 est_data = {
                     'codigo': codigo_val,
-                    'nombre': str(row[c_nombre]).strip() if c_nombre else '',
-                    'tipo_documento': str(row[c_tipo_doc]).strip() if c_tipo_doc else '',
-                    'numero_documento': str(row[c_doc]).strip() if c_doc else '',
-                    'pensum': str(row[c_pensum]).strip() if c_pensum else '',
-                    'estado_matricula': str(row[c_estado_mat]).strip() if c_estado_mat else '',
-                    'celular': str(row[c_cel]).strip() if c_cel else '',
-                    'email_personal': str(row[c_email_p]).strip() if c_email_p else '',
-                    'email_institucional': str(row[c_email_i]).strip() if c_email_i else '',
-                    'colegio_egresado': str(row[c_colegio]).strip() if c_colegio else '',
-                    'municipio_nacimiento': str(row[c_municipio]).strip() if c_municipio else '',
-                    'semestre': safe_int(row[c_sem]) or 1,
+                    'nombre': nombre_val,
+                    'tipo_documento': texto(row, c_tipo_doc),
+                    'numero_documento': documento_val,
+                    'pensum': texto(row, c_pensum),
+                    'estado_matricula': texto(row, c_estado_mat),
+                    'celular': texto(row, c_cel),
+                    'email_personal': texto(row, c_email_p),
+                    'email_institucional': texto(row, c_email_i),
+                    'colegio_egresado': texto(row, c_colegio),
+                    'municipio_nacimiento': texto(row, c_municipio),
+                    'semestre': semestre_val,
+                    'promedio': promedio_val,
                 }
-
-                # Lógica de Promedio
-                if c_prom:
-                    try:
-                        val_prom = str(row[c_prom]).replace(',', '.')
-                        est_data['promedio'] = float(val_prom) if not pd.isna(row[c_prom]) else None
-                    except (ValueError, TypeError):
-                        est_data['promedio'] = None
-                else:
-                    est_data['promedio'] = None
 
                 # Lógica de Ingreso
                 est_data['ingreso'] = None
                 if c_ingreso:
-                    ingreso_val = str(row[c_ingreso]).strip()
+                    ingreso_val = texto(row, c_ingreso)
                     if '-' in ingreso_val:
                         try:
                             partes = ingreso_val.split('-')
@@ -343,6 +417,54 @@ def importar_estudiantes_dirplan(request):
                             pass  # Formato de ingreso no reconocido, se deja como None
 
                 estudiantes_objs.append(Estudiante(**est_data))
+
+            # El documento es único: rechazar los que ya pertenecen a otro estudiante registrado
+            if estudiantes_objs:
+                dueno_documento = dict(
+                    Estudiante.objects
+                    .filter(numero_documento__in=[e.numero_documento for e in estudiantes_objs])
+                    .values_list('numero_documento', 'codigo')
+                )
+                validos = []
+                for est, fila in ((e, codigos_vistos[e.codigo]) for e in estudiantes_objs):
+                    dueno = dueno_documento.get(est.numero_documento)
+                    if dueno and dueno != est.codigo:
+                        errores.append(error(
+                            fila, 'Documento', est.numero_documento,
+                            f'El documento ya está registrado para el estudiante {dueno}.'
+                        ))
+                    else:
+                        validos.append(est)
+                estudiantes_objs = validos
+
+            # INC-01: si los registros rechazados superan el umbral, se cancela todo
+            # (no se guarda nada) para no dejar estudiantes con datos inconsistentes.
+            rechazados = errores + duplicados
+            total_registros = len(estudiantes_objs) + len(rechazados)
+            if total_registros == 0:
+                msg = "El archivo no contiene registros de estudiantes."
+                _registrar_bitacora(request, file.name, 'ESTUDIANTES', 0, [{"mensaje": msg}], False)
+                return JsonResponse({"status": "error", "mensaje": msg}, status=400)
+
+            porcentaje_invalidos = len(rechazados) * 100 / total_registros
+            if porcentaje_invalidos > MAX_PORCENTAJE_INVALIDOS:
+                msg = (f"Error: más del {MAX_PORCENTAJE_INVALIDOS:g} % de registros inválidos, importación cancelada "
+                       f"({len(rechazados)} de {total_registros}, {porcentaje_invalidos:.1f} %).")
+                _registrar_bitacora(request, file.name, 'ESTUDIANTES', 0, rechazados, False)
+                registrar_auditoria(
+                    request.usuario, 'IMPORTACION',
+                    f"Importación de ESTUDIANTES cancelada desde '{file.name}': {len(rechazados)} de "
+                    f"{total_registros} registros inválidos ({porcentaje_invalidos:.1f} %)"
+                    + (f", de ellos {len(duplicados)} con código duplicado." if duplicados else ".")
+                )
+                return JsonResponse({
+                    "status": "error",
+                    "mensaje": msg,
+                    "total_registros": total_registros,
+                    "total_errores": len(rechazados),
+                    "porcentaje_invalidos": round(porcentaje_invalidos, 1),
+                    "errores": rechazados,
+                }, status=400)
 
             # Ejecutar bulk_create con lógica de actualización en conflictos (ON CONFLICT DO UPDATE)
             # Esto realiza una única consulta masiva a a base de datos.
@@ -387,18 +509,30 @@ def importar_estudiantes_dirplan(request):
             except Exception as ae:
                 logger.warning("Error en generación automática de alertas tras importar estudiantes: %s", ae, exc_info=True)
 
-            _registrar_bitacora(request, file.name, 'ESTUDIANTES', processed_count, [], True)
-            registrar_auditoria(
-                request.usuario,
-                'IMPORTACION',
-                f"Importación de ESTUDIANTES exitosa: {processed_count} registros procesados desde '{file.name}'."
-            )
+            # Los rechazados (por debajo del umbral) quedan como errores en la bitácora.
+            # total_procesados = registros leídos, así "exitosos = procesados - errores" en el frontend.
+            _registrar_bitacora(request, file.name, 'ESTUDIANTES', total_registros, rechazados, True)
+            detalle = f"Importación de ESTUDIANTES exitosa: {processed_count} registros procesados desde '{file.name}'."
+            if errores:
+                detalle += f" {len(errores)} registros rechazados por errores de formato o campos en blanco."
+            if duplicados:
+                codigos_dup = ', '.join(sorted({d['valor'] for d in duplicados}))
+                detalle += (f" {len(duplicados)} registros rechazados por código duplicado en el archivo "
+                            f"(códigos: {codigos_dup}).")
+            registrar_auditoria(request.usuario, 'IMPORTACION', detalle)
 
+            mensaje = f"Importación finalizada: {processed_count} estudiantes guardados."
+            if rechazados:
+                mensaje += f" {len(rechazados)} registros rechazados (ver advertencias)."
             return JsonResponse({
                 "status": "success",
+                "mensaje": mensaje,
                 "message": "Importación masiva finalizada correctamente",
+                "advertencias": rechazados,
                 "detalles": {
                     "total_procesados": processed_count,
+                    "rechazados": len(errores),
+                    "duplicados": len(duplicados),
                     "omitidos": omitidos
                 }
             })

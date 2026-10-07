@@ -7,6 +7,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.password_validation import validate_password
 from django.core import signing
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.conf import settings
@@ -25,6 +26,40 @@ VIGENCIA_TOKEN_CAMBIO = 3600  # segundos
 def _huella_contrasena(usuario):
     """Cambia en cuanto cambia la contraseña, así un enlace ya usado deja de servir."""
     return salted_hmac('usuarios.huella-contrasena', usuario.contrasena).hexdigest()[:16]
+
+
+# Límite de intentos fallidos de inicio de sesión por correo (contra fuerza bruta)
+LOGIN_MAX_INTENTOS = getattr(settings, 'LOGIN_MAX_INTENTOS', 5)
+LOGIN_BLOQUEO_MINUTOS = getattr(settings, 'LOGIN_BLOQUEO_MINUTOS', 15)
+
+
+def _clave_intentos(correo):
+    return 'login-fallidos:' + salted_hmac('usuarios.login', str(correo).strip().lower()).hexdigest()
+
+
+def _login_bloqueado(correo):
+    return cache.get(_clave_intentos(correo), 0) >= LOGIN_MAX_INTENTOS
+
+
+def _registrar_intento_fallido(correo):
+    clave = _clave_intentos(correo)
+    cache.add(clave, 0, LOGIN_BLOQUEO_MINUTOS * 60)
+    try:
+        cache.incr(clave)
+    except ValueError:  # expiró entre add e incr
+        cache.set(clave, 1, LOGIN_BLOQUEO_MINUTOS * 60)
+
+
+def _limpiar_intentos_fallidos(correo):
+    cache.delete(_clave_intentos(correo))
+
+
+def _validar_rol(rol):
+    """Mensaje de error si el rol no es uno de los definidos, o None."""
+    roles = [r for r, _ in Usuario.ROL_CHOICES]
+    if rol not in roles:
+        return f"Rol inválido: '{rol}'. Valores permitidos: {', '.join(roles)}."
+    return None
 
 
 def _generar_token_cambio(usuario):
@@ -47,13 +82,22 @@ def login_view(request):
         if not correo or not contrasena:
             return JsonResponse({'error': 'Faltan credenciales.'}, status=400)
 
+        if _login_bloqueado(correo):
+            return JsonResponse({
+                'error': f'Demasiados intentos fallidos. Intente de nuevo en {LOGIN_BLOQUEO_MINUTOS} minutos '
+                         f'o recupere su contraseña.'
+            }, status=429)
+
         usuario = Usuario.objects.filter(correo=correo).first()
         if usuario is None:
             # Hashear igual para no revelar por el tiempo de respuesta si el correo existe
             Usuario().set_password(contrasena)
+            _registrar_intento_fallido(correo)
             return JsonResponse({'error': 'Credenciales incorrectas.'}, status=401)
         if not usuario.check_password(contrasena):
+            _registrar_intento_fallido(correo)
             return JsonResponse({'error': 'Credenciales incorrectas.'}, status=401)
+        _limpiar_intentos_fallidos(correo)
 
         if not usuario.activo:
             return JsonResponse({'error': 'La cuenta está desactivada.'}, status=403)
@@ -154,9 +198,8 @@ def cambiar_contrasena(request):
     except ValidationError as e:
         return JsonResponse({'error': ' '.join(e.messages)}, status=400)
 
-    usuario.set_password(nueva_contrasena)
-    usuario.debe_cambiar_contrasena = False
-    usuario.save(update_fields=['contrasena', 'debe_cambiar_contrasena'])
+    usuario.cambiar_contrasena(nueva_contrasena)
+    _limpiar_intentos_fallidos(usuario.correo)
 
     return JsonResponse({'mensaje': 'Contraseña actualizada correctamente.'}, status=200)
 
@@ -203,6 +246,11 @@ def crear_usuario(request):
         
         if not all([nombre, correo, rol]):
             return JsonResponse({'error': 'Faltan campos obligatorios'}, status=400)
+
+        rol = str(rol).strip().upper()
+        error_rol = _validar_rol(rol)
+        if error_rol:
+            return JsonResponse({'error': error_rol}, status=400)
             
         if Usuario.objects.filter(correo=correo).exists():
             return JsonResponse({'error': 'El correo electrónico ya está registrado.'}, status=400)
@@ -240,9 +288,20 @@ def actualizar_usuario(request, usuario_id):
         data = json.loads(request.body)
         
         old_rol = usuario_target.rol
-        if 'nombre' in data: usuario_target.nombre = data['nombre']
-        if 'rol' in data: usuario_target.rol = data['rol']
-        
+        if 'nombre' in data:
+            nombre = str(data['nombre'] or '').strip()
+            if not nombre:
+                return JsonResponse({'error': 'El nombre no puede quedar vacío.'}, status=400)
+            usuario_target.nombre = nombre
+        if 'rol' in data:
+            rol = str(data['rol'] or '').strip().upper()
+            error_rol = _validar_rol(rol)
+            if error_rol:
+                return JsonResponse({'error': error_rol}, status=400)
+            if usuario_target.id == request.usuario.id and rol != 'ADMINISTRADOR':
+                return JsonResponse({'error': 'No puedes quitarte a ti mismo el rol de administrador.'}, status=400)
+            usuario_target.rol = rol
+
         usuario_target.save()
         
         if old_rol != usuario_target.rol:

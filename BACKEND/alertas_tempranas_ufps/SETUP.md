@@ -187,6 +187,54 @@ python manage.py enviar_recordatorios
 
 ---
 
+## Despliegue: contraseñas y correo de recuperación
+
+Desde la migración `usuarios.0009_hashear_contrasenas` las contraseñas se guardan con hash.
+Al migrar una base existente:
+
+- Las contraseñas **predecibles** (igual al correo, al código del docente, `00000` o vacías)
+  quedan **inutilizables**. Eso incluye a los usuarios creados antes con la contraseña por
+  defecto, **administradores incluidos**.
+- Los docentes creados al importar el archivo de docentes no tienen contraseña: la definen
+  con el enlace de *¿Olvidaste tu contraseña?*.
+
+Por eso, **antes de migrar en producción**:
+
+1. Configura el envío de correo real en `.env` (`EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend`
+   y los `EMAIL_*`). Con el backend de consola por defecto, los enlaces de recuperación solo
+   se imprimen en el log del servidor y nadie los recibe.
+2. Ten a mano el comando para dar acceso al administrador sin correo:
+
+   ```bash
+   python manage.py establecer_contrasena admin@ufps.edu.co
+   ```
+
+3. Revisa que los docentes tengan un correo real: si el archivo no trae correo, se les asigna
+   `<codigo>@ufps.edu.co`, que puede no existir.
+
+Cambiar la contraseña cierra las sesiones abiertas (los JWT emitidos antes dejan de valer).
+Tras 5 intentos fallidos de inicio de sesión, la cuenta se bloquea 15 minutos
+(`LOGIN_MAX_INTENTOS`, `LOGIN_BLOQUEO_MINUTOS`).
+
+---
+
+## Almacenamiento de evidencias (Supabase)
+
+Las evidencias de las intervenciones se suben a Supabase Storage. Define en `.env`
+`SUPABASE_URL`, `SUPABASE_KEY` (service role key) y `SUPABASE_BUCKET_NAME` con los datos
+reales del proyecto y comprueba la conexión con:
+
+```bash
+python manage.py verificar_almacenamiento
+```
+
+El comando revisa la configuración, la resolución DNS del host y el acceso al bucket.
+El error `[Errno -2] Name or service not known` significa que el host de `SUPABASE_URL`
+no resuelve: normalmente quedó el valor de ejemplo `https://tu-proyecto.supabase.co` o la
+URL tiene un error.
+
+---
+
 ## ❗ Errores comunes
 
 | Error | Causa probable | Solución |
@@ -195,6 +243,8 @@ python manage.py enviar_recordatorios
 | `could not connect to server` | Credenciales incorrectas en `.env` | Revisa el `.env` con el connection string |
 | `ModuleNotFoundError: dotenv` | No instalaste dependencias | Ejecuta `pip install -r requirements.txt` |
 | `.env` no encontrado | No copiaste el archivo | Ejecuta `copy .env.example .env` |
+| `Name or service not known` al subir evidencias | `SUPABASE_URL` incorrecta o con el valor de ejemplo | Corrige `.env` y ejecuta `python manage.py verificar_almacenamiento` |
+| Nadie recibe el enlace de recuperación | `EMAIL_BACKEND` es el de consola | Configura SMTP en `.env` (ver *Despliegue*) |
 
 ---
 
