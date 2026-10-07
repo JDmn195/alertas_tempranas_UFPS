@@ -7,7 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from academico.models import Estudiante, Nota
 from alertas.evaluacion import calcular_indicadores, calcular_ppa, nivel_de_riesgo
-from alertas.models import Alerta, Regla
+from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, Alerta, Regla
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
 
@@ -38,7 +38,7 @@ def calcular_nivel_riesgo(estudiante, reglas=None):
     'unknown' si no tiene promedio ni notas registradas.
     """
     if reglas is None:
-        reglas = list(Regla.objects.filter(activo=True).exclude(tipo='CORTE'))
+        reglas = list(Regla.objects.filter(activo=True).exclude(tipo__in=TIPOS_FUERA_DEL_MOTOR_GENERAL))
     return nivel_de_riesgo(reglas, calcular_indicadores(estudiante))[0]
 
 

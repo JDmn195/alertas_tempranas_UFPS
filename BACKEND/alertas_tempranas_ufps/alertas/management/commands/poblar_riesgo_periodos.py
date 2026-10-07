@@ -29,7 +29,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from academico.models import Estudiante, Nota, Periodo
-from alertas.models import Regla, RiesgoEstudiante, RiesgoEstudiantePeriodo
+from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, Regla, RiesgoEstudiante, RiesgoEstudiantePeriodo
 
 
 class Command(BaseCommand):
@@ -67,7 +67,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('MODO SIMULACIÓN — no se escribirá nada en la BD.'))
 
         # ── 1. Cargar reglas activas una sola vez ─────────────────────────────
-        reglas = list(Regla.objects.filter(activo=True).exclude(tipo='CORTE').order_by('-prioridad'))
+        reglas = list(Regla.objects.filter(activo=True).exclude(tipo__in=TIPOS_FUERA_DEL_MOTOR_GENERAL).order_by('-prioridad'))
         if not reglas:
             self.stdout.write(self.style.ERROR(
                 'No hay reglas activas. Ejecuta "python manage.py reset_reglas" primero.'

@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404
 from academico.models import Estudiante, Nota, Curso, Periodo
 from alertas.evaluacion import actualizar_promedio, calcular_indicadores, evaluar_regla, nivel_de_riesgo
 from alertas.permisos import denegar_acceso_alerta, puede_acceder_alerta
-from alertas.models import Regla, Alerta, RiesgoEstudiante, RiesgoEstudiantePeriodo
+from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, Regla, Alerta, RiesgoEstudiante, RiesgoEstudiantePeriodo
 
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
@@ -41,7 +41,7 @@ def calcular_y_guardar_riesgo_por_periodos(estudiante, reglas=None):
     Retorna el nivel del periodo más reciente (o calculado desde promedio).
     """
     if reglas is None:
-        reglas = list(Regla.objects.filter(activo=True).exclude(tipo='CORTE').order_by('-prioridad'))
+        reglas = list(Regla.objects.filter(activo=True).exclude(tipo__in=TIPOS_FUERA_DEL_MOTOR_GENERAL).order_by('-prioridad'))
 
     # Periodos en los que el estudiante tiene notas, ordenados cronológicamente
     periodos = (
@@ -106,7 +106,7 @@ def reprocesar_alertas_completas(estudiantes_qs=None, usuario=None, regla_especi
     """
     from alertas.reevaluacion import estudiantes_evaluables, reevaluar_estudiante
 
-    reglas = list(Regla.objects.filter(activo=True).exclude(tipo='CORTE').order_by('-prioridad'))
+    reglas = list(Regla.objects.filter(activo=True).exclude(tipo__in=TIPOS_FUERA_DEL_MOTOR_GENERAL).order_by('-prioridad'))
     if estudiantes_qs is None:
         estudiantes_qs = estudiantes_evaluables()
 
@@ -156,14 +156,14 @@ def reevaluar_alertas_activas(usuario=None):
     Fix 3.5/3.7: Recorre todas las alertas activas/en_seguimiento/atendidas y
     verifica si el estudiante sigue cumpliendo la regla.
     Si ya no la cumple → cierra la alerta automáticamente.
-    Excluye alertas de reglas CORTE (tienen su propio ciclo de vida).
+    Excluye alertas de reglas CORTE e INASISTENCIA (tienen su propio ciclo de vida).
     Retorna un resumen del proceso.
     """
     estados_abiertos = ['activa', 'active', 'en_seguimiento', 'atendida']
     alertas = (
         Alerta.objects
         .filter(estado__in=estados_abiertos)
-        .exclude(regla__tipo='CORTE')
+        .exclude(regla__tipo__in=TIPOS_FUERA_DEL_MOTOR_GENERAL)
         .select_related('estudiante', 'regla', 'estudiante__riesgo')
     )
 
@@ -298,7 +298,7 @@ def migrar_riesgo_periodos(request):
     try:
         solo_vacios = request.GET.get('solo_vacios', 'true').lower() != 'false'
 
-        reglas = list(Regla.objects.filter(activo=True).exclude(tipo='CORTE').order_by('-prioridad'))
+        reglas = list(Regla.objects.filter(activo=True).exclude(tipo__in=TIPOS_FUERA_DEL_MOTOR_GENERAL).order_by('-prioridad'))
         if not reglas:
             return JsonResponse({'error': 'No hay reglas activas configuradas.'}, status=400)
 

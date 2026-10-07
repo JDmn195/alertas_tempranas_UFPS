@@ -27,7 +27,7 @@ interface EstudianteRiesgo {
   nivel_riesgo: 'high' | 'medium';
   alertas_activas: number;
   porcentaje_inasistencia?: number | null;    // HU-34, solo en la lista del curso
-  supera_umbral_inasistencia?: boolean;
+  supera_umbral_inasistencia?: boolean | null;  // HU-35: null sin umbral configurado
 }
 
 interface CursoDoc {
@@ -41,7 +41,9 @@ interface CursoDoc {
   promedio_curso: number | null;
   en_riesgo: number;
   estado: string;
-  inasistencia_sobre_umbral: number;          // HU-34
+  inasistencia_sobre_umbral: number | null;    // HU-34; HU-35: null sin umbral configurado
+  umbral_inasistencia: number | null;          // HU-35: umbral efectivo del curso
+  origen_umbral_inasistencia: 'curso' | 'general' | null;
 }
 
 interface MateriaCritica {
@@ -68,7 +70,7 @@ interface DashboardData {
   materias_criticas: MateriaCritica[];
   distribucion_riesgo: DistribucionRiesgo;
   cursos_criticos: number;
-  umbral_inasistencia: number;                 // HU-34
+  umbral_inasistencia: number | null;          // HU-35: umbral general
   page: number;
   pages: number;
   page_size: number;
@@ -412,11 +414,15 @@ export default function TeacherDashboard() {
                     <span>{curso.en_riesgo} en riesgo</span>
                   </div>
                   <div className={`flex items-center gap-1 col-span-2 ${
-                    curso.inasistencia_sobre_umbral > 0 ? 'text-red-600 font-semibold' : 'text-gray-500'
+                    (curso.inasistencia_sobre_umbral ?? 0) > 0 ? 'text-red-600 font-semibold' : 'text-gray-500'
                   }`}>
                     <CalendarX className="w-3.5 h-3.5" />
                     <span>
-                      {curso.inasistencia_sobre_umbral} sobre el umbral de inasistencia ({data.umbral_inasistencia}%)
+                      {curso.umbral_inasistencia === null || curso.inasistencia_sobre_umbral === null
+                        ? 'Sin umbral de inasistencia configurado'
+                        : `${curso.inasistencia_sobre_umbral} sobre el umbral de inasistencia (${curso.umbral_inasistencia}%${
+                            curso.origen_umbral_inasistencia === 'curso' ? ', propio del curso' : ''
+                          })`}
                     </span>
                   </div>
                   {curso.tasa_reprobacion > 0 && (
