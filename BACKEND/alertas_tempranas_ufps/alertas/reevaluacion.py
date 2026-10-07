@@ -101,7 +101,11 @@ def reevaluar_estudiante(estudiante, reglas, solo_regla=None):
 
         evaluacion = evaluar_reglas_estudiante(estudiante, reglas)
 
-        abiertas = Alerta.objects.filter(estudiante=estudiante, estado__in=ESTADOS_ALERTA_ABIERTOS)
+        # Las alertas por corte (HU-32) tienen su propio ciclo de vida (alertas_corte.py)
+        abiertas = (
+            Alerta.objects.filter(estudiante=estudiante, estado__in=ESTADOS_ALERTA_ABIERTOS)
+            .exclude(regla__tipo='CORTE')
+        )
         if solo_regla is not None:
             abiertas = abiertas.filter(regla_id=solo_regla.id)
         reglas_con_alerta_abierta = set()
