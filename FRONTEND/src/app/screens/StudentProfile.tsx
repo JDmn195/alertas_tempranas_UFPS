@@ -167,7 +167,7 @@ function FichaAcademica({ student }: { student: StudentDetail | null }) {
 
 interface Intento {
   periodo: string;
-  nota: number;
+  nota: number | null; // null: materia en curso, sin definitiva
   estado: string;
 }
 
@@ -668,7 +668,8 @@ function MateriaRepetidaCard({ materia }: { materia: MateriaRepetida }) {
               <div className="flex flex-col">
                 <span className="text-xs font-bold text-gray-600">{intento.periodo}</span>
                 <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                  intento.estado === 'Aprobado' ? 'text-green-500' : 'text-red-500'
+                  intento.estado === 'Aprobado' ? 'text-green-500'
+                    : intento.estado === 'En curso' ? 'text-blue-500' : 'text-red-500'
                 }`}>
                   {intento.estado}
                 </span>
@@ -676,13 +677,15 @@ function MateriaRepetidaCard({ materia }: { materia: MateriaRepetida }) {
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-gray-400 font-medium">Definitiva</span>
                 <div className={`px-3 py-1 rounded-lg font-mono text-sm font-bold ${
-                  intento.nota < 3.0 
+                  intento.nota === null
+                    ? 'bg-gray-50 text-gray-500 border border-gray-100'
+                    : intento.nota < 3.0
                     ? 'bg-red-50 text-red-700 border border-red-100'
                     : intento.nota < 4.0
                     ? 'bg-amber-50 text-amber-700 border border-amber-100'
                     : 'bg-green-50 text-green-700 border border-green-100'
                 }`}>
-                  {intento.nota.toFixed(1)}
+                  {intento.nota === null ? '--' : intento.nota.toFixed(1)}
                 </div>
               </div>
             </div>
