@@ -7,7 +7,7 @@ from academico.models import Curso, Nota, Periodo, Estudiante, Materia
 from alertas.models import Alerta, RiesgoEstudiante, RiesgoEstudiantePeriodo
 from usuarios.decorators import requiere_rol
 from academico.asistencia import (
-    calcular_inasistencia_curso, calcular_inasistencia_cursos, numero_o_none,
+    calcular_inasistencia_curso, calcular_inasistencia_cursos, cerca_umbral, numero_o_none,
     obtener_umbral_general, obtener_umbral_inasistencia, obtener_umbrales_inasistencia, supera_umbral,
 )
 from academico.services.asistencia import periodo_actual
@@ -16,13 +16,15 @@ from academico.services.asistencia import periodo_actual
 def _inasistencia_sobre_umbral(inasistencia_curso, umbral, origen):
     """HU-35: conteo de estudiantes sobre el umbral del curso; null si no hay umbral."""
     if umbral is None:
-        sobre_umbral = None
+        sobre_umbral = cerca = None
     else:
         sobre_umbral = sum(
             1 for datos in inasistencia_curso.values() if supera_umbral(datos['porcentaje'], umbral)
         )
+        cerca = sum(1 for datos in inasistencia_curso.values() if cerca_umbral(datos['porcentaje'], umbral))
     return {
         'inasistencia_sobre_umbral':  sobre_umbral,
+        'inasistencia_cerca_umbral':  cerca,
         'umbral_inasistencia':        numero_o_none(umbral),
         'origen_umbral_inasistencia': origen,
     }
@@ -345,6 +347,7 @@ def teacher_course_students(request, curso_id):
             'ultima_nota':     float(n.definitiva) if n.definitiva is not None else None,
             'porcentaje_inasistencia': float(porcentaje) if porcentaje is not None else None,
             'supera_umbral_inasistencia': supera_umbral(porcentaje, umbral),
+            'cerca_umbral_inasistencia':  cerca_umbral(porcentaje, umbral),
             '_ord':            ORDEN_RIESGO.get(nivel, 3),
         })
 

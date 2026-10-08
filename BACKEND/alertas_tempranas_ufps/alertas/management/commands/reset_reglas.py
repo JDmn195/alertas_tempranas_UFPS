@@ -1,20 +1,21 @@
 from django.core.management.base import BaseCommand
-from alertas.models import Regla, Alerta
+from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, Regla, Alerta
 from django.db import transaction
 
 class Command(BaseCommand):
-    help = 'Borra todas las alertas y reglas, y crea 9 reglas coherentes base.'
+    help = ('Borra las reglas generales (PROMEDIO, REPROBACION, ATRASO) y sus alertas, y crea 9 reglas '
+            'coherentes base. Las reglas CORTE e INASISTENCIA y sus alertas no se tocan.')
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.WARNING('Iniciando reset de reglas y alertas...'))
         
         with transaction.atomic():
             # 1. Borrar alertas (esto borra en cascada intervenciones, evidencias, anotaciones)
-            num_alertas, _ = Alerta.objects.all().delete()
+            num_alertas, _ = Alerta.objects.exclude(regla__tipo__in=TIPOS_FUERA_DEL_MOTOR_GENERAL).delete()
             self.stdout.write(f'Se eliminaron {num_alertas} alertas.')
 
             # 2. Borrar reglas
-            num_reglas, _ = Regla.objects.all().delete()
+            num_reglas, _ = Regla.objects.exclude(tipo__in=TIPOS_FUERA_DEL_MOTOR_GENERAL).delete()
             self.stdout.write(f'Se eliminaron {num_reglas} reglas.')
 
             # 3. Crear reglas coherentes

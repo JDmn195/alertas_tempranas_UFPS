@@ -8,20 +8,24 @@ una alerta abierta por estudiante + regla + curso + periodo, actualización mien
 aplicando y cierre automático cuando baja del umbral.
 
 La inasistencia también es un factor del nivel de riesgo por periodo (factor_inasistencia).
+
+Antes de superarlo, cuando el porcentaje se aproxima al umbral (cerca_umbral), se envía un
+aviso preventivo al estudiante, una sola vez por curso y periodo (AvisoPreventivoInasistencia).
 """
 import logging
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.utils.html import escape
 
 from academico.asistencia import (
     calcular_inasistencia, calcular_inasistencia_curso, calcular_inasistencia_cursos,
-    calcular_inasistencia_por_curso, numero_o_none, obtener_umbral_inasistencia,
+    calcular_inasistencia_por_curso, cerca_umbral, numero_o_none, obtener_umbral_inasistencia,
     obtener_umbrales_inasistencia, umbral_efectivo,
 )
 from academico.models import Asistencia, Curso, Estudiante, Periodo
 from academico.services.asistencia import periodo_actual
 from alertas.alertas_corte import ESTADOS_CERRADOS, _cumple_operador
-from alertas.models import Alerta, Regla
+from alertas.models import Alerta, AvisoPreventivoInasistencia, Regla
 from alertas.services import NotificationService
 from usuarios.utils import registrar_auditoria
 
@@ -88,6 +92,81 @@ def _notificar_al_confirmar(alerta_id):
     transaction.on_commit(_enviar)
 
 
+def _html_aviso_preventivo(estudiante, curso, periodo_str, resultado, umbral):
+    return f"""
+    <html>
+    <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; padding: 20px;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border-top: 5px solid #d97706;">
+            <div style="padding: 20px; text-align: center; background-color: #f8f9fa;">
+                <h2 style="color: #b45309; margin: 0;">Aviso de inasistencia</h2>
+            </div>
+            <div style="padding: 30px;">
+                <p>Hola, <strong>{escape(estudiante.nombre)}</strong>.</p>
+                <p>Tu inasistencia en esta materia se está acercando al máximo permitido:</p>
+                <div style="background-color: #fffbeb; padding: 15px; border-left: 4px solid #d97706; margin: 20px 0;">
+                    <p style="margin: 5px 0;"><strong>Materia:</strong> {escape(curso.materia.nombre)} ({escape(curso.materia.codigo)}) - Grupo {escape(curso.grupo)}</p>
+                    <p style="margin: 5px 0;"><strong>Periodo:</strong> {escape(periodo_str)}</p>
+                    <p style="margin: 5px 0;"><strong>Inasistencia actual:</strong> {escape(str(resultado['porcentaje']))} %</p>
+                    <p style="margin: 5px 0;"><strong>Máximo permitido:</strong> {escape(str(umbral))} %</p>
+                    <p style="margin: 5px 0;"><strong>Faltas:</strong> {resultado['faltas']} de {resultado['total_clases']} clases</p>
+                </div>
+                <p>Si superas el máximo se generará una alerta académica. Si tienes faltas justificadas, preséntalas a tu docente.</p>
+            </div>
+            <div style="padding: 20px; text-align: center; font-size: 12px; color: #6c757d; background-color: #f8f9fa;">
+                &copy; 2026 Universidad Francisco de Paula Santander - Alertas Tempranas
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+
+def _avisados(periodo, curso_ids):
+    """{(estudiante_id, curso_id)} con aviso preventivo ya registrado en el periodo (una consulta)."""
+    return set(
+        AvisoPreventivoInasistencia.objects
+        .filter(periodo_id=getattr(periodo, 'pk', periodo), curso_id__in=curso_ids)
+        .values_list('estudiante_id', 'curso_id')
+    )
+
+
+def _avisar_aproximacion(estudiante, curso, periodo, periodo_str, resultado, umbral, avisados):
+    """
+    Aviso preventivo al estudiante cuando se aproxima al umbral, una vez por curso y periodo.
+    El correo sale al confirmar la transacción. Retorna el aviso creado o None.
+    """
+    codigo = getattr(estudiante, 'pk', estudiante)
+    if not cerca_umbral(resultado['porcentaje'], umbral) or (codigo, curso.pk) in avisados:
+        return None
+    periodo_id = getattr(periodo, 'pk', periodo)
+
+    if not isinstance(estudiante, Estudiante):
+        estudiante = Estudiante.objects.get(pk=codigo)
+    correo = estudiante.email_institucional or estudiante.email_personal
+    try:
+        with transaction.atomic():
+            aviso = AvisoPreventivoInasistencia.objects.create(
+                estudiante_id=codigo, curso=curso, periodo_id=periodo_id,
+                porcentaje=resultado['porcentaje'], umbral=umbral,
+                destinatario=correo, resultado='pendiente' if correo else 'sin_correo',
+            )
+    except IntegrityError:
+        return None  # otra evaluación concurrente ya lo registró
+
+    if correo:
+        html = _html_aviso_preventivo(estudiante, curso, periodo_str, resultado, umbral)
+        asunto = f"Aviso de inasistencia - {curso.materia.nombre}"
+
+        def _enviar():
+            resultado_envio, error = NotificationService.enviar_brevo(correo, asunto, html)
+            AvisoPreventivoInasistencia.objects.filter(pk=aviso.pk).update(
+                resultado=resultado_envio, detalle_error=error,
+            )
+
+        transaction.on_commit(_enviar)
+    return aviso
+
+
 def _recalcular_riesgo(estudiante):
     from alertas.views.alert_generation_views import calcular_y_guardar_riesgo_por_periodos
 
@@ -96,7 +175,8 @@ def _recalcular_riesgo(estudiante):
     calcular_y_guardar_riesgo_por_periodos(estudiante)
 
 
-def _procesar(regla, estudiante, curso, periodo_str, resultado, umbral, origen, abierta, usuario):
+def _procesar(regla, estudiante, curso, periodo, periodo_str, resultado, umbral, origen, abierta, usuario,
+              avisados=frozenset()):
     """
     Crea, actualiza o cierra la alerta de un estudiante en un curso. Se llama dentro
     de la transacción del estudiante. Retorna la alerta afectada o None.
@@ -133,6 +213,8 @@ def _procesar(regla, estudiante, curso, periodo_str, resultado, umbral, origen, 
         _recalcular_riesgo(estudiante)
         _notificar_al_confirmar(nueva.id)
         return nueva
+
+    _avisar_aproximacion(estudiante, curso, periodo, periodo_str, resultado, umbral, avisados)
 
     if abierta:
         abierta.estado = 'cerrada'
@@ -176,14 +258,15 @@ def _evaluar_cursos(regla, periodo, cursos, resultados, umbrales, usuario):
     """
     periodo_str = _texto_periodo(periodo)
     abiertas = _alertas_abiertas(regla, periodo_str, {c.pk for c in cursos})
+    avisados = _avisados(periodo, [c.pk for c in cursos])
     afectadas = []
     for curso in cursos:
         umbral, origen = umbrales[curso.pk]
         for codigo, resultado in resultados.get(curso.pk, {}).items():
             try:
                 with transaction.atomic():
-                    alerta = _procesar(regla, codigo, curso, periodo_str, resultado, umbral, origen,
-                                       abiertas.get((codigo, curso.pk)), usuario)
+                    alerta = _procesar(regla, codigo, curso, periodo, periodo_str, resultado, umbral, origen,
+                                       abiertas.get((codigo, curso.pk)), usuario, avisados)
             except Exception as e:
                 # Un estudiante con datos problemáticos no detiene a los demás
                 logger.error("Error al evaluar inasistencia de %s en el curso %s: %s",
@@ -205,7 +288,8 @@ def evaluar_inasistencia(estudiante, curso, periodo, usuario=None):
     umbral, origen = obtener_umbral_inasistencia(curso)
     abierta = _alertas_abiertas(regla, periodo_str, {curso.pk}).get((estudiante.pk, curso.pk))
     with transaction.atomic():
-        alerta = _procesar(regla, estudiante, curso, periodo_str, resultado, umbral, origen, abierta, usuario)
+        alerta = _procesar(regla, estudiante, curso, periodo, periodo_str, resultado, umbral, origen, abierta, usuario,
+                           _avisados(periodo, [curso.pk]))
     return [alerta] if alerta else []
 
 

@@ -188,8 +188,9 @@ class EvaluacionCursoTests(AlertaInasistenciaBaseTestCase):
         )
 
     def test_consultas_no_crecen_con_los_estudiantes(self):
+        # 0 % de inasistencia: ni alerta ni aviso preventivo, el estado no cambia
         for est in self.estudiantes:
-            self.registrar(est, SEIS_UNA_FALTA)
+            self.registrar(est, ['ASISTIO'] * 6)
         with CaptureQueriesContext(connection) as antes:
             self.evaluar_curso()
 
@@ -197,7 +198,7 @@ class EvaluacionCursoTests(AlertaInasistenciaBaseTestCase):
             est = Estudiante.objects.create(codigo=f"11520{i}", nombre=f"Extra {i}", semestre=5,
                                             numero_documento=f"X{i}")
             Nota.objects.create(estudiante=est, curso=self.curso, periodo=self.periodo)
-            self.registrar(est, SEIS_UNA_FALTA)
+            self.registrar(est, ['ASISTIO'] * 6)
         with CaptureQueriesContext(connection) as despues:
             self.evaluar_curso()
         # Sin cambios de alertas, solo cambian los savepoints de la transacción por estudiante

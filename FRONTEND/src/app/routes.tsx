@@ -19,6 +19,7 @@ import EvidenceManagement from './screens/EvidenceManagement';
 import NotificationHistory from "./screens/NotificationHistory";
 import NotificationInbox from "./screens/NotificationInbox";
 import AuditLog from "./screens/AuditLog";
+import AutomaticProcesses from "./screens/AutomaticProcesses";
 
 export const router = createBrowserRouter([
   {
@@ -101,6 +102,10 @@ export const router = createBrowserRouter([
       {
         path: "notifications",
         element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DOCENTE', 'DIRECTOR']}><NotificationInbox /></ProtectedRoute>
+      },
+      {
+        path: "admin/automatic-processes",
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DIRECTOR']}><AutomaticProcesses /></ProtectedRoute>
       },
       {
         path: "admin/notifications-history",

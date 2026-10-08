@@ -12,6 +12,7 @@ import {
   LogOut,
   FileText,
   ClipboardList,
+  CalendarClock,
 } from 'lucide-react';
 import { cerrarSesionLocal } from '../../../services/session';
 
@@ -26,6 +27,7 @@ const navItems: NavItem[] = [
   { path: '/dashboard/admin/import', label: 'Importar Módulo', icon: Upload, roles: ['ADMINISTRADOR'] },
   { path: '/dashboard/admin/risk-rules', label: 'Reglas de Riesgo', icon: Settings, roles: ['ADMINISTRADOR'] },
   { path: '/dashboard/admin/users', label: 'Gestión de Usuarios', icon: Shield, roles: ['ADMINISTRADOR'] },
+  { path: '/dashboard/admin/automatic-processes', label: 'Procesos Automáticos', icon: CalendarClock, roles: ['ADMINISTRADOR', 'DIRECTOR'] },
   { path: '/dashboard/admin/notifications-history', label: 'Historial Notif.', icon: FileText, roles: ['ADMINISTRADOR'] },
   { path: '/dashboard/admin/audit-log', label: 'Bitácora de Auditoría', icon: ClipboardList, roles: ['ADMINISTRADOR'] },
   { path: '/dashboard/students', label: 'Estudiantes', icon: Users, roles: ['ADMINISTRADOR', 'DIRECTOR', 'DOCENTE', 'BIENESTAR'] },
