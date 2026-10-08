@@ -1187,6 +1187,8 @@ interface AsistenciaCurso {
   umbral: number | null;                        // HU-35: umbral efectivo del curso
   origen_umbral: 'curso' | 'general' | null;
   supera_umbral: boolean | null;                // null sin umbral configurado
+  cerca_umbral: boolean | null;                 // se aproxima al umbral sin superarlo
+  umbral_aviso: number | null;                  // porcentaje desde el que se advierte
   detalle: AsistenciaDetalle[];
 }
 
@@ -1233,6 +1235,8 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
   }, [codigo, periodo]);
 
   const cursos = (data?.cursos ?? []).filter(c => !cursoFiltro || String(c.curso_id) === cursoFiltro);
+  const cursosCerca = cursos.filter(c => c.cerca_umbral);
+  const cursosSobre = cursos.filter(c => c.supera_umbral);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
@@ -1279,6 +1283,31 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
           </select>
         </label>
       </div>
+
+      {/* Avisos: cursos que superan el umbral o se aproximan a él */}
+      {!loading && !error && (cursosSobre.length > 0 || cursosCerca.length > 0) && (
+        <div className="px-6 pt-4 space-y-2">
+          {cursosSobre.length > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <p>
+                <strong>Supera el umbral de inasistencia</strong> en{' '}
+                {cursosSobre.map(c => `${c.materia} (${c.porcentaje?.toFixed(2)}% de ${c.umbral}%)`).join(', ')}.
+              </p>
+            </div>
+          )}
+          {cursosCerca.length > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <p>
+                <strong>Se aproxima al umbral de inasistencia</strong> en{' '}
+                {cursosCerca.map(c => `${c.materia} (${c.porcentaje?.toFixed(2)}% de ${c.umbral}%)`).join(', ')}.
+                {' '}Al estudiante se le envía un aviso preventivo por correo.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {error ? (
         <div className="px-6 py-8 text-center text-sm text-red-600">{error}</div>
@@ -1332,9 +1361,18 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
                           <span className="text-xs text-gray-400">Sin registros</span>
                         ) : (
                           <span className={`font-mono text-sm font-bold px-2 py-1 rounded ${
-                            c.supera_umbral ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
+                            c.supera_umbral
+                              ? 'bg-red-50 text-red-700'
+                              : c.cerca_umbral
+                                ? 'bg-amber-50 text-amber-700'
+                                : 'bg-green-50 text-green-700'
                           }`}>
                             {c.porcentaje.toFixed(2)}%
+                          </span>
+                        )}
+                        {c.cerca_umbral && (
+                          <span className="block text-[11px] font-semibold text-amber-700 mt-1">
+                            Cerca del umbral (aviso desde {c.umbral_aviso}%)
                           </span>
                         )}
                         {c.origen_umbral === 'curso' && c.umbral !== null && (
