@@ -178,3 +178,6 @@ db_e2e.sqlite3*
 FRONTEND/test-results/
 FRONTEND/playwright-report/
 FRONTEND/e2e/.auth/
+
+# Resultados locales de las pruebas de rendimiento (se resumen en RESULTADOS.md)
+BACKEND/alertas_tempranas_ufps/pruebas_rendimiento/resultados/
