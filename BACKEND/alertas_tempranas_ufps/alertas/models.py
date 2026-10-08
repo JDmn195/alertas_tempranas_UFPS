@@ -393,3 +393,38 @@ class Recordatorio(models.Model):
 
     def __str__(self):
         return f"Recordatorio {self.tipo_caso} alerta {self.alerta_id} a {self.destinatario_id} - {self.estado}"
+
+
+class AvisoPreventivoInasistencia(models.Model):
+    """
+    Aviso al estudiante cuando su inasistencia en un curso se aproxima al umbral
+    (academico.asistencia.cerca_umbral). Uno por estudiante, curso y periodo para no repetirlo.
+    """
+    RESULTADO_CHOICES = [
+        ('pendiente', 'Pendiente'),
+        ('exitoso', 'Exitoso'),
+        ('fallido', 'Fallido'),
+        ('reintento', 'Pendiente de Reintento'),
+        ('sin_correo', 'Estudiante sin correo'),
+    ]
+
+    estudiante = models.ForeignKey('academico.Estudiante', on_delete=models.CASCADE, db_column='codigo_estudiante')
+    curso = models.ForeignKey('academico.Curso', on_delete=models.CASCADE)
+    periodo = models.ForeignKey('academico.Periodo', on_delete=models.CASCADE)
+    porcentaje = models.DecimalField(max_digits=5, decimal_places=2)
+    umbral = models.DecimalField(max_digits=5, decimal_places=2)
+    destinatario = models.CharField(max_length=255, null=True, blank=True)
+    resultado = models.CharField(max_length=20, choices=RESULTADO_CHOICES, default='pendiente')
+    detalle_error = models.TextField(null=True, blank=True)
+    fecha_envio = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'aviso_preventivo_inasistencia'
+        verbose_name = 'Aviso preventivo de inasistencia'
+        verbose_name_plural = 'Avisos preventivos de inasistencia'
+        constraints = [
+            models.UniqueConstraint(fields=['estudiante', 'curso', 'periodo'], name='aviso_inasistencia_unico'),
+        ]
+
+    def __str__(self):
+        return f"Aviso {self.estudiante_id} curso {self.curso_id} ({self.porcentaje}%) - {self.resultado}"

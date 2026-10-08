@@ -6,6 +6,7 @@ from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import csrf_exempt
 
 from academico.models import Estudiante, Nota
+from academico.services.notas_corte import ESTADO_EN_CURSO, alertas_corte_abiertas, desglose_cortes, estado_nota
 from alertas.evaluacion import calcular_indicadores, calcular_ppa, nivel_de_riesgo
 from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, Alerta, Regla
 from usuarios.decorators import requiere_rol
@@ -471,6 +472,7 @@ def obtener_historial_academico(request, codigo):
     ).order_by('periodo__anio', 'periodo__semestre')
 
     historial = {}
+    alertas_por_curso = alertas_corte_abiertas(estudiante)
 
     for n in notas:
         periodo_str = f"{n.periodo.anio}-{n.periodo.semestre}"
@@ -484,17 +486,17 @@ def obtener_historial_academico(request, codigo):
             }
 
         creditos = n.curso.materia.creditos or 0
-        definitiva = float(n.definitiva or 0)
-        estado = 'Aprobado' if n.definitiva and n.definitiva >= 3.0 else 'Reprobado'
-        
+
         materia_data = {
             'codigo': n.curso.materia.codigo,
             'materia': n.curso.materia.nombre,
             'creditos': creditos,
             'grupo': n.curso.grupo,
             'docente': n.curso.docente.nombre if n.curso.docente else 'Desconocido',
-            'nota_final': definitiva,
-            'estado': estado
+            # HU-31: sin definitiva (semestre en curso) la nota final es null y no cuenta en el promedio
+            'nota_final': float(n.definitiva) if n.definitiva is not None else None,
+            'estado': estado_nota(n),
+            **desglose_cortes(n, alertas_por_curso),
         }
         
         historial[periodo_str]['materias'].append(materia_data)
@@ -505,13 +507,14 @@ def obtener_historial_academico(request, codigo):
         total_puntos = 0
         total_creditos = 0
         
-        for m in datos['materias']:
+        cerradas = [m for m in datos['materias'] if m['estado'] != ESTADO_EN_CURSO]
+        for m in cerradas:
             total_puntos += m['nota_final'] * m['creditos']
             if m['estado'] == 'Aprobado':
                 total_creditos += m['creditos']
-                
-        # Para el promedio se toman en cuenta los créditos de todas las materias cursadas
-        creditos_cursados_semestre = sum(m['creditos'] for m in datos['materias'])
+
+        # Para el promedio se toman en cuenta los créditos de todas las materias con definitiva
+        creditos_cursados_semestre = sum(m['creditos'] for m in cerradas)
         promedio = round(total_puntos / creditos_cursados_semestre, 2) if creditos_cursados_semestre > 0 else 0
         
         datos['promedio_semestre'] = promedio

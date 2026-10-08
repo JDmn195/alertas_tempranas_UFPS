@@ -219,7 +219,7 @@ function ModalMateriasReprobadas({
   const reprobadas: { materia: string; codigo: string; nota: number; periodo: string }[] = [];
   (historial ?? []).forEach((p) => {
     p.materias.forEach((m) => {
-      if (m.nota_final < 3.0) {
+      if (m.estado === 'Reprobado' && m.nota_final !== null) {
         reprobadas.push({
           materia: m.materia,
           codigo: m.codigo,
@@ -701,8 +701,44 @@ export interface MateriaCursada {
   creditos: number;
   grupo: string;
   docente: string;
-  nota_final: number;
+  nota_final: number | null;
   estado: string;
+  // HU-31: desglose por corte y alertas por corte abiertas (HU-32)
+  corte1: number | null;
+  corte2: number | null;
+  corte3: number | null;
+  examen_final: number | null;
+  nota_necesaria_examen: number | null;
+  alertas_corte: AlertaCorteResumen[];
+}
+
+export interface AlertaCorteResumen {
+  id: number;
+  clave: string;
+  regla: string;
+  nivel: string;
+  corte: number | null;
+  valor_causa: number | null;
+  nota_necesaria: number | null;
+  estado: string;
+}
+
+const NOTA_APROBATORIA = 3.0;
+
+function NotaCelda({ valor, destacada = false }: { valor: number | null; destacada?: boolean }) {
+  if (valor === null || valor === undefined) {
+    return <span className="text-xs text-gray-300">--</span>;
+  }
+  const baja = valor < NOTA_APROBATORIA;
+  return (
+    <span
+      className={`font-mono text-sm px-2 py-1 rounded ${destacada ? 'font-bold' : 'font-medium'} ${
+        baja ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
+      }`}
+    >
+      {valor.toFixed(1)}
+    </span>
+  );
 }
 
 export interface HistorialPeriodo {
@@ -734,7 +770,7 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
         </div>
         <div>
           <h2 className="text-base font-semibold text-white">Historial Académico</h2>
-          <p className="text-xs text-gray-400">Notas y materias cursadas por semestre</p>
+          <p className="text-xs text-gray-400">Notas por corte y materias cursadas por semestre</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           {!loading && data && (
@@ -776,7 +812,7 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Código', 'Materia', 'Créditos', 'Grupo', 'Docente', 'Nota Final', 'Estado'].map(col => (
+              {['Código', 'Materia', 'Créditos', 'Grupo', 'Docente', 'Corte 1', 'Corte 2', 'Corte 3', 'Examen', 'Nota Final', 'Estado'].map(col => (
                 <th key={col} className="px-5 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   {col}
                 </th>
@@ -792,7 +828,9 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
                   <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-8 animate-pulse" /></td>
                   <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-8 animate-pulse" /></td>
                   <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-32 animate-pulse" /></td>
-                  <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-10 animate-pulse" /></td>
+                  {Array.from({ length: 5 }).map((__, j) => (
+                    <td key={j} className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-10 animate-pulse" /></td>
+                  ))}
                   <td className="px-5 py-3.5"><div className="h-5 bg-gray-100 rounded-full w-16 animate-pulse" /></td>
                 </tr>
               ))
@@ -800,20 +838,48 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
               activePeriodData.materias.map((mat, i) => (
                 <tr key={mat.codigo} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50 hover:bg-gray-50 transition-colors'}>
                   <td className="px-5 py-3.5 text-xs font-mono text-gray-500">{mat.codigo}</td>
-                  <td className="px-5 py-3.5 text-sm font-medium text-gray-900">{mat.materia}</td>
+                  <td className="px-5 py-3.5 text-sm font-medium text-gray-900">
+                    {mat.materia}
+                    {mat.alertas_corte && mat.alertas_corte.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {mat.alertas_corte.map(a => (
+                          <span
+                            key={a.id}
+                            title={a.regla}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200"
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            {a.corte ? `Alerta corte ${a.corte}` : 'Alerta examen'} ({a.clave})
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-5 py-3.5 text-sm text-gray-500 text-center">{mat.creditos}</td>
                   <td className="px-5 py-3.5 text-sm text-gray-500 text-center">{mat.grupo}</td>
                   <td className="px-5 py-3.5 text-sm text-gray-500 truncate max-w-[200px]" title={mat.docente}>{mat.docente}</td>
-                  <td className="px-5 py-3.5">
-                    <span className={`font-mono text-sm font-bold px-2 py-1 rounded ${
-                      mat.nota_final < 3.0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
-                    }`}>
-                      {mat.nota_final.toFixed(1)}
-                    </span>
+                  <td className="px-5 py-3.5 text-center"><NotaCelda valor={mat.corte1} /></td>
+                  <td className="px-5 py-3.5 text-center"><NotaCelda valor={mat.corte2} /></td>
+                  <td className="px-5 py-3.5 text-center"><NotaCelda valor={mat.corte3} /></td>
+                  <td className="px-5 py-3.5 text-center">
+                    <NotaCelda valor={mat.examen_final} />
+                    {mat.nota_necesaria_examen !== null && mat.nota_necesaria_examen !== undefined && (
+                      <p
+                        className={`mt-1 text-[10px] ${mat.nota_necesaria_examen > 5 ? 'text-red-600 font-semibold' : 'text-gray-400'}`}
+                        title="Nota necesaria en el examen final para aprobar con 3.0"
+                      >
+                        Necesita {mat.nota_necesaria_examen.toFixed(1)}
+                      </p>
+                    )}
                   </td>
+                  <td className="px-5 py-3.5"><NotaCelda valor={mat.nota_final} destacada /></td>
                   <td className="px-5 py-3.5">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      mat.estado === 'Aprobado' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      mat.estado === 'Aprobado'
+                        ? 'bg-green-100 text-green-700'
+                        : mat.estado === 'En curso'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-red-100 text-red-700'
                     }`}>
                       {mat.estado}
                     </span>
@@ -822,7 +888,7 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
               ))
             ) : (
               <tr>
-                <td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-400">
+                <td colSpan={11} className="px-5 py-8 text-center text-sm text-gray-400">
                   No hay materias para mostrar en este periodo.
                 </td>
               </tr>
@@ -1121,6 +1187,8 @@ interface AsistenciaCurso {
   umbral: number | null;                        // HU-35: umbral efectivo del curso
   origen_umbral: 'curso' | 'general' | null;
   supera_umbral: boolean | null;                // null sin umbral configurado
+  cerca_umbral: boolean | null;                 // se aproxima al umbral sin superarlo
+  umbral_aviso: number | null;                  // porcentaje desde el que se advierte
   detalle: AsistenciaDetalle[];
 }
 
@@ -1167,6 +1235,8 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
   }, [codigo, periodo]);
 
   const cursos = (data?.cursos ?? []).filter(c => !cursoFiltro || String(c.curso_id) === cursoFiltro);
+  const cursosCerca = cursos.filter(c => c.cerca_umbral);
+  const cursosSobre = cursos.filter(c => c.supera_umbral);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
@@ -1213,6 +1283,31 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
           </select>
         </label>
       </div>
+
+      {/* Avisos: cursos que superan el umbral o se aproximan a él */}
+      {!loading && !error && (cursosSobre.length > 0 || cursosCerca.length > 0) && (
+        <div className="px-6 pt-4 space-y-2">
+          {cursosSobre.length > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <p>
+                <strong>Supera el umbral de inasistencia</strong> en{' '}
+                {cursosSobre.map(c => `${c.materia} (${c.porcentaje?.toFixed(2)}% de ${c.umbral}%)`).join(', ')}.
+              </p>
+            </div>
+          )}
+          {cursosCerca.length > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <p>
+                <strong>Se aproxima al umbral de inasistencia</strong> en{' '}
+                {cursosCerca.map(c => `${c.materia} (${c.porcentaje?.toFixed(2)}% de ${c.umbral}%)`).join(', ')}.
+                {' '}Al estudiante se le envía un aviso preventivo por correo.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {error ? (
         <div className="px-6 py-8 text-center text-sm text-red-600">{error}</div>
@@ -1266,9 +1361,18 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
                           <span className="text-xs text-gray-400">Sin registros</span>
                         ) : (
                           <span className={`font-mono text-sm font-bold px-2 py-1 rounded ${
-                            c.supera_umbral ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
+                            c.supera_umbral
+                              ? 'bg-red-50 text-red-700'
+                              : c.cerca_umbral
+                                ? 'bg-amber-50 text-amber-700'
+                                : 'bg-green-50 text-green-700'
                           }`}>
                             {c.porcentaje.toFixed(2)}%
+                          </span>
+                        )}
+                        {c.cerca_umbral && (
+                          <span className="block text-[11px] font-semibold text-amber-700 mt-1">
+                            Cerca del umbral (aviso desde {c.umbral_aviso}%)
                           </span>
                         )}
                         {c.origen_umbral === 'curso' && c.umbral !== null && (

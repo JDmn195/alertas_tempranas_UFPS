@@ -9,6 +9,9 @@ Sin clases registradas el porcentaje es None, no 0.
 
 HU-35: el umbral es parametrizable. El general es el valor_umbral de la regla
 INASISTENCIA activa y cada curso puede tener el suyo (Curso.umbral_inasistencia).
+
+Criterio del Sprint 5: se advierte cuando el porcentaje se aproxima al umbral, es decir,
+cuando alcanza PORCENTAJE_AVISO_PREVENTIVO % del umbral sin superarlo.
 """
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -19,6 +22,9 @@ from alertas.models import Regla
 
 ORIGEN_UMBRAL_CURSO = 'curso'
 ORIGEN_UMBRAL_GENERAL = 'general'
+
+# Porción del umbral desde la que se considera que el estudiante se aproxima a él
+PORCENTAJE_AVISO_PREVENTIVO = Decimal('80')
 
 _ESTADOS = {
     'asistencias':         'ASISTIO',
@@ -80,6 +86,25 @@ def supera_umbral(porcentaje, umbral):
     if umbral is None:
         return None
     return porcentaje is not None and porcentaje > umbral
+
+
+def umbral_aviso(umbral):
+    """Porcentaje de inasistencia desde el que se advierte la aproximación al umbral."""
+    if umbral is None:
+        return None
+    return (Decimal(str(umbral)) * PORCENTAJE_AVISO_PREVENTIVO / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+
+def cerca_umbral(porcentaje, umbral):
+    """
+    True si el porcentaje alcanza el umbral de aviso sin superar el umbral; None sin umbral.
+    Un 0 % nunca está cerca (umbral 0 haría avisar a todos).
+    """
+    if umbral is None:
+        return None
+    if porcentaje is None or porcentaje <= 0 or supera_umbral(porcentaje, umbral):
+        return False
+    return porcentaje >= umbral_aviso(umbral)
 
 
 def numero_o_none(valor):
