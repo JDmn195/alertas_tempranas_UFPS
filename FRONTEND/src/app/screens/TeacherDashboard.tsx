@@ -28,6 +28,7 @@ interface EstudianteRiesgo {
   alertas_activas: number;
   porcentaje_inasistencia?: number | null;    // HU-34, solo en la lista del curso
   supera_umbral_inasistencia?: boolean | null;  // HU-35: null sin umbral configurado
+  cerca_umbral_inasistencia?: boolean | null;   // se aproxima al umbral sin superarlo
 }
 
 interface CursoDoc {
@@ -42,6 +43,7 @@ interface CursoDoc {
   en_riesgo: number;
   estado: string;
   inasistencia_sobre_umbral: number | null;    // HU-34; HU-35: null sin umbral configurado
+  inasistencia_cerca_umbral: number | null;    // estudiantes que se aproximan al umbral
   umbral_inasistencia: number | null;          // HU-35: umbral efectivo del curso
   origen_umbral_inasistencia: 'curso' | 'general' | null;
 }
@@ -425,6 +427,12 @@ export default function TeacherDashboard() {
                           })`}
                     </span>
                   </div>
+                  {(curso.inasistencia_cerca_umbral ?? 0) > 0 && (
+                    <div className="flex items-center gap-1 col-span-2 text-amber-600 font-semibold">
+                      <CalendarX className="w-3.5 h-3.5" />
+                      <span>{curso.inasistencia_cerca_umbral} cerca del umbral de inasistencia</span>
+                    </div>
+                  )}
                   {curso.tasa_reprobacion > 0 && (
                     <div className="flex items-center gap-1 text-orange-600 col-span-2">
                       <BookX className="w-3.5 h-3.5" />
@@ -516,9 +524,19 @@ export default function TeacherDashboard() {
                                 ) : (
                                   <span
                                     className={`font-mono text-xs font-bold px-2 py-1 rounded ${
-                                      est.supera_umbral_inasistencia ? 'bg-red-100 text-red-700' : 'bg-green-50 text-green-700'
+                                      est.supera_umbral_inasistencia
+                                        ? 'bg-red-100 text-red-700'
+                                        : est.cerca_umbral_inasistencia
+                                          ? 'bg-amber-100 text-amber-700'
+                                          : 'bg-green-50 text-green-700'
                                     }`}
-                                    title={est.supera_umbral_inasistencia ? 'Supera el umbral de inasistencia' : undefined}
+                                    title={
+                                      est.supera_umbral_inasistencia
+                                        ? 'Supera el umbral de inasistencia'
+                                        : est.cerca_umbral_inasistencia
+                                          ? 'Se aproxima al umbral de inasistencia'
+                                          : undefined
+                                    }
                                   >
                                     {est.porcentaje_inasistencia.toFixed(2)}%
                                   </span>

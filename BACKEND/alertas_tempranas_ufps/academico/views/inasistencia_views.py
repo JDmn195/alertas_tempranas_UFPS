@@ -3,7 +3,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
 
 from academico.asistencia import (
-    calcular_inasistencia_curso, calcular_inasistencia_por_curso, numero_o_none,
+    calcular_inasistencia_curso, calcular_inasistencia_por_curso, cerca_umbral, numero_o_none, umbral_aviso,
     obtener_umbral_general, obtener_umbral_inasistencia, obtener_umbrales_inasistencia, supera_umbral,
 )
 from academico.models import Asistencia, Curso, Estudiante, Nota, Periodo
@@ -119,6 +119,8 @@ def inasistencia_estudiante(request, codigo):
             'umbral':        numero_o_none(umbral),
             'origen_umbral': origen_umbral,
             'supera_umbral': supera_umbral(datos['porcentaje'], umbral),
+            'cerca_umbral':  cerca_umbral(datos['porcentaje'], umbral),
+            'umbral_aviso':  numero_o_none(umbral_aviso(umbral)),
             'detalle':      detalle.get(curso.id, []),
         })
     return JsonResponse(respuesta)
@@ -177,6 +179,7 @@ def inasistencia_curso(request, curso_id):
             **datos,
             'porcentaje':    _porcentaje_json(datos['porcentaje']),
             'supera_umbral': supera_umbral(datos['porcentaje'], umbral),
+            'cerca_umbral':  cerca_umbral(datos['porcentaje'], umbral),
         })
     estudiantes.sort(key=lambda e: e['nombre'])
 
@@ -194,6 +197,10 @@ def inasistencia_curso(request, curso_id):
         # HU-35: null cuando no hay umbral configurado
         'total_sobre_umbral': (
             None if umbral is None else sum(1 for e in estudiantes if e['supera_umbral'])
+        ),
+        'umbral_aviso':       numero_o_none(umbral_aviso(umbral)),
+        'total_cerca_umbral': (
+            None if umbral is None else sum(1 for e in estudiantes if e['cerca_umbral'])
         ),
         'estudiantes': estudiantes,
     })
