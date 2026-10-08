@@ -10,29 +10,16 @@ pruebas de FRONTEND/e2e.
 """
 from decimal import Decimal
 
-from django.conf import settings
-from django.core.management import call_command
-from django.core.management.base import BaseCommand, CommandError
-from django.db import connection
+from django.core.management.base import BaseCommand
 
-CONTRASENA = 'Clave-Segura-2026'
+from ._entorno_pruebas import crear_usuario as usuario, recrear_base
 
 
 class Command(BaseCommand):
     help = 'Recrea la base de las pruebas e2e y carga el escenario fijo (solo con E2E=True).'
 
     def handle(self, *args, **options):
-        if not getattr(settings, 'EJECUTANDO_E2E', False):
-            raise CommandError('Este comando borra la base: solo corre con la variable E2E=True.')
-
-        ruta = settings.DATABASES['default']['NAME']
-        connection.close()
-        for sufijo in ('', '-journal', '-wal', '-shm'):
-            archivo = type(ruta)(f'{ruta}{sufijo}')
-            if archivo.exists():
-                archivo.unlink()
-
-        call_command('migrate', interactive=False, verbosity=0)
+        recrear_base()
         self._cargar_escenario()
         self.stdout.write(self.style.SUCCESS('Base e2e lista.'))
 
@@ -44,14 +31,6 @@ class Command(BaseCommand):
         from alertas.views.alert_generation_views import (
             calcular_y_guardar_riesgo_por_periodos, reprocesar_alertas_completas,
         )
-        from usuarios.models import Usuario
-
-        def usuario(nombre, correo, rol):
-            u = Usuario(nombre=nombre, correo=correo, rol=rol)
-            u.set_password(CONTRASENA)
-            u.save()
-            return u
-
         usuario('Admin E2E', 'admin@ufps.edu.co', 'ADMINISTRADOR')
         usuario('Directora E2E', 'director@ufps.edu.co', 'DIRECTOR')
         usuario('Bienestar E2E', 'bienestar@ufps.edu.co', 'BIENESTAR')

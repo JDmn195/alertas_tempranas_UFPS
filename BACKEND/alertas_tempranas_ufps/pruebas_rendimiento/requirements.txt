@@ -1,0 +1,3 @@
+# Solo para las pruebas de rendimiento (no se instalan en producción)
+locust==2.37.10
+waitress==3.0.2

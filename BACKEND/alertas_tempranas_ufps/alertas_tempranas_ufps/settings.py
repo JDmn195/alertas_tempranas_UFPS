@@ -148,14 +148,22 @@ if EJECUTANDO_TESTS:
     }
 
 if EJECUTANDO_E2E:
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db_e2e.sqlite3',
-    }
+    # Por defecto SQLite; las pruebas de rendimiento pueden apuntar a un Postgres local
+    # desechable con E2E_DATABASE_URL (p. ej. postgres://postgres:postgres@localhost:5433/sat)
+    if os.environ.get('E2E_DATABASE_URL'):
+        DATABASES['default'] = dj_database_url.parse(os.environ['E2E_DATABASE_URL'], conn_max_age=600)
+    else:
+        DATABASES['default'] = {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db_e2e.sqlite3',
+        }
 
 # En los tests las tareas en segundo plano corren síncronas (ver alertas/tareas.py).
 # En e2e también: así la pantalla ya ve el riesgo y las alertas al responder la importación.
+# Las pruebas de rendimiento las vuelven a poner en segundo plano, como en producción.
 TAREAS_EN_SEGUNDO_PLANO = not (EJECUTANDO_TESTS or EJECUTANDO_E2E)
+if EJECUTANDO_E2E and os.environ.get('E2E_TAREAS_EN_SEGUNDO_PLANO') == 'True':
+    TAREAS_EN_SEGUNDO_PLANO = True
 
 
 # Password validation
