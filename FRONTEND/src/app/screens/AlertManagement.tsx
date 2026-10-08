@@ -49,6 +49,16 @@ const causaInasistencia = (alert: AlertItem) => {
   return `${meta.materia_nombre || 'Materia'} (${meta.grupo || '-'}): ${formatoPorcentaje(porcentaje)} % de inasistencia (umbral ${formatoPorcentaje(meta.umbral)} %)`;
 };
 
+// HU-32: causa de la alerta por corte (nota del corte o nota necesaria en el examen)
+const causaCorte = (alert: AlertItem) => {
+  const meta = alert.metadata || {};
+  const materia = `${meta.materia_nombre || 'Materia'} (${meta.grupo || '-'})`;
+  if (meta.corte) {
+    return `${materia}: corte ${meta.corte} = ${Number(alert.valor_causa ?? 0).toFixed(1)}`;
+  }
+  return `${materia}: necesita ${Number(meta.nota_necesaria ?? alert.valor_causa ?? 0).toFixed(2)} en el examen final`;
+};
+
 interface Intervencion {
   id: number;
   tipo: string;
@@ -449,6 +459,7 @@ export default function AlertManagement() {
                 <option value="PROMEDIO">PROMEDIO</option>
                 <option value="REPROBACION">REPROBACIÓN</option>
                 <option value="ATRASO">ATRASO</option>
+                <option value="CORTE">CORTE</option>
                 <option value="INASISTENCIA">INASISTENCIA</option>
               </select>
             </div>
@@ -581,6 +592,8 @@ export default function AlertManagement() {
                             <span className="text-[#C8102E] font-bold uppercase tracking-wider">
                               {alert.tipo_regla === 'INASISTENCIA'
                                 ? causaInasistencia(alert)
+                                : alert.tipo_regla === 'CORTE'
+                                ? causaCorte(alert)
                                 : alert.tipo_regla === 'PROMEDIO' ? `Promedio: ${alert.valor_causa?.toFixed(2)}` : `${Math.round(alert.valor_causa || 0)} ${alert.tipo_regla === 'REPROBACION' ? 'Materias Perdidas' : 'Materias Pendientes'}`}
                             </span>
                           </div>
@@ -597,6 +610,29 @@ export default function AlertManagement() {
                               <span className="px-2.5 py-1 rounded-lg border bg-gray-50 border-gray-100">
                                 Total de clases: {alert.metadata.total_clases ?? 0}
                               </span>
+                              {alert.metadata.cierre_automatico && alert.metadata.motivo_cierre && (
+                                <span className="px-2.5 py-1 rounded-lg border bg-green-50 text-green-700 border-green-100">
+                                  Cierre automático: {alert.metadata.motivo_cierre}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* HU-32: notas por corte de la alerta */}
+                          {alert.tipo_regla === 'CORTE' && alert.metadata?.notas && (
+                            <div className="flex flex-wrap gap-1.5 mt-3 text-[10px] font-bold text-gray-600">
+                              {(['corte1', 'corte2', 'corte3'] as const).map((k, i) => (
+                                <span
+                                  key={k}
+                                  className={`px-2.5 py-1 rounded-lg border ${
+                                    alert.metadata.notas[k] != null && Number(alert.metadata.notas[k]) < 3
+                                      ? 'bg-red-50 text-red-700 border-red-100'
+                                      : 'bg-gray-50 border-gray-100'
+                                  }`}
+                                >
+                                  Corte {i + 1}: {alert.metadata.notas[k] ?? '--'}
+                                </span>
+                              ))}
                               {alert.metadata.cierre_automatico && alert.metadata.motivo_cierre && (
                                 <span className="px-2.5 py-1 rounded-lg border bg-green-50 text-green-700 border-green-100">
                                   Cierre automático: {alert.metadata.motivo_cierre}
