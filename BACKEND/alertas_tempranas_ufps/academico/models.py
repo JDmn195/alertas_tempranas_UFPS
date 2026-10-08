@@ -63,6 +63,8 @@ class Curso(models.Model):
     docente = models.ForeignKey(Docente, on_delete=models.PROTECT, db_column='codigo_docente')
     horario = models.CharField(max_length=200, null=True, blank=True)
     cantidad_matriculados = models.IntegerField(default=0)
+    # HU-35: si tiene valor reemplaza al umbral general (regla INASISTENCIA activa)
+    umbral_inasistencia = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
 
     class Meta:
         db_table = 'curso'
