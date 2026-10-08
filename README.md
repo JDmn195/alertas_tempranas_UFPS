@@ -131,3 +131,18 @@ cd BACKEND/alertas_tempranas_ufps
 python manage.py test academico.tests_import_helpers
 python manage.py test usuarios
 ```
+
+### Pruebas funcionales (e2e)
+
+Recorren la aplicación completa desde el navegador con [Playwright](https://playwright.dev): login por rol, directorio y ficha del estudiante, importación de historial, gestión de alertas e intervenciones, reglas de riesgo, asistencia, procesos automáticos y usuarios.
+
+```bash
+cd FRONTEND
+npm install
+npx playwright install chromium   # solo la primera vez
+npm run test:e2e                  # o npm run test:e2e:ui para verlas paso a paso
+```
+
+Playwright levanta solo el backend (puerto 8001) y el frontend (puerto 5174). El backend corre con `E2E=True`: usa su propia base SQLite (`db_e2e.sqlite3`), **no carga el `.env`** (no toca la base real ni envía correos) y en cada corrida recrea la base con `manage.py preparar_e2e`, que carga un escenario fijo (un usuario por rol con la contraseña `Clave-Segura-2026`, dos cursos y tres estudiantes). Si el Python del backend no está en `BACKEND/alertas_tempranas_ufps/env`, indícalo con `E2E_PYTHON=/ruta/a/python`.
+
+Las pruebas están en `FRONTEND/e2e/` y corren en orden. El reporte HTML queda en `FRONTEND/playwright-report/` (`npx playwright show-report`).

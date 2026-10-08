@@ -172,3 +172,9 @@ FRONTEND/.env.local
 FRONTEND/.env.development.local
 FRONTEND/.env.test.local
 FRONTEND/.env.production.local
+
+# Pruebas e2e (Playwright)
+db_e2e.sqlite3*
+FRONTEND/test-results/
+FRONTEND/playwright-report/
+FRONTEND/e2e/.auth/
