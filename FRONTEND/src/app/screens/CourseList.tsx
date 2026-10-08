@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Search, RefreshCw, ChevronLeft, ChevronRight,
   AlertTriangle, TrendingUp, TrendingDown, Minus,
-  BookOpen, Users, BarChart2, X,
+  BookOpen, Users, BarChart2, X, Pencil,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -28,6 +28,10 @@ interface CourseIndicator {
   tendencia_descripcion: string;
   estado: string;
   es_critico: boolean;
+  // HU-35: umbral de inasistencia efectivo y su origen
+  umbral_inasistencia: number | null;
+  umbral_inasistencia_curso: number | null;
+  origen_umbral_inasistencia: 'curso' | 'general' | null;
 }
 
 interface ApiResponse {
@@ -47,6 +51,15 @@ function getRiskLevel(tasa: number): 'high' | 'medium' | 'low' {
   if (tasa >= UMBRAL_CRITICO) return 'high';
   if (tasa >= 15) return 'medium';
   return 'low';
+}
+
+function esAdministrador(): boolean {
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    return (user?.rol || '').split(',').includes('ADMINISTRADOR');
+  } catch {
+    return false;
+  }
 }
 
 function TendenciaIcon({ puntos }: { puntos: number | null }) {
@@ -88,6 +101,13 @@ export default function CourseList() {
   const [periodoAnio, setPeriodoAnio] = useState('todos');
   const [periodoSemestre, setPeriodoSemestre] = useState('1');
   const [advertencia, setAdvertencia] = useState<string | null>(null);
+
+  // HU-35: edición del umbral de inasistencia por curso (solo ADMINISTRADOR)
+  const puedeEditarUmbral = esAdministrador();
+  const [umbralEditando, setUmbralEditando] = useState<CourseIndicator | null>(null);
+  const [umbralValor, setUmbralValor] = useState('');
+  const [umbralGuardando, setUmbralGuardando] = useState(false);
+  const [umbralError, setUmbralError] = useState<string | null>(null);
 
   // Detalle de curso modal states
   const [selectedCourseDetail, setSelectedCourseDetail] = useState<number | null>(null);
@@ -204,6 +224,38 @@ export default function CourseList() {
       setAllCourses(data.results);
     } catch { /* silencioso */ }
   }, [periodoAnio, periodoSemestre]);
+
+  const abrirEdicionUmbral = (course: CourseIndicator) => {
+    setUmbralEditando(course);
+    setUmbralValor(course.umbral_inasistencia_curso !== null ? String(course.umbral_inasistencia_curso) : '');
+    setUmbralError(null);
+  };
+
+  const cerrarEdicionUmbral = () => {
+    setUmbralEditando(null);
+    setUmbralError(null);
+  };
+
+  // umbral null = volver al umbral general
+  const guardarUmbral = async (umbral: number | null) => {
+    if (!umbralEditando) return;
+    setUmbralGuardando(true);
+    setUmbralError(null);
+    try {
+      const res = await apiFetch(`${API_BASE}/cursos/${umbralEditando.curso_id}/umbral-inasistencia/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ umbral }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+      cerrarEdicionUmbral();
+      fetchCourses();
+    } catch (e: any) {
+      setUmbralError(e.message || 'No se pudo actualizar el umbral de inasistencia.');
+    } finally {
+      setUmbralGuardando(false);
+    }
+  };
 
   useEffect(() => { fetchCourses(); }, [fetchCourses]);
   useEffect(() => { fetchAllForCharts(); }, [fetchAllForCharts]);
@@ -387,6 +439,7 @@ export default function CourseList() {
                   <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">No Present.</th>
                   <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">Tendencia</th>
                   <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">Estado</th>
+                  <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">Umbral Inasist.</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -454,6 +507,30 @@ export default function CourseList() {
                           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200">OK</span>
                         )}
                       </td>
+                      <td className="px-5 py-3.5 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          {course.umbral_inasistencia === null ? (
+                            <span className="text-xs text-gray-400 italic">Sin umbral</span>
+                          ) : (
+                            <div className="flex flex-col items-center">
+                              <span className="text-sm font-semibold text-gray-900">{course.umbral_inasistencia}%</span>
+                              <span className={`text-[10px] font-semibold uppercase ${course.origen_umbral_inasistencia === 'curso' ? 'text-[#C8102E]' : 'text-gray-400'}`}>
+                                {course.origen_umbral_inasistencia === 'curso' ? 'Propio' : 'General'}
+                              </span>
+                            </div>
+                          )}
+                          {puedeEditarUmbral && (
+                            <button
+                              type="button"
+                              title="Editar umbral de inasistencia del curso"
+                              onClick={(e) => { e.stopPropagation(); abrirEdicionUmbral(course); }}
+                              className="p-1 rounded hover:bg-gray-200 text-gray-500 hover:text-gray-800 transition-colors"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -506,6 +583,78 @@ export default function CourseList() {
           </div>
         )}
       </div>
+
+      {/* ── HU-35: Modal de umbral de inasistencia del curso ─────────────── */}
+      {umbralEditando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md">
+            <div className="bg-[#C8102E] text-white px-6 py-4 flex items-center justify-between rounded-t-lg">
+              <div>
+                <h2 className="text-lg font-bold">Umbral de inasistencia</h2>
+                <p className="text-xs opacity-90">
+                  {umbralEditando.codigo_materia} G-{umbralEditando.grupo} · {umbralEditando.materia}
+                </p>
+              </div>
+              <button onClick={cerrarEdicionUmbral} className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-1.5">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form
+              className="p-6 space-y-4"
+              onSubmit={(e) => { e.preventDefault(); guardarUmbral(umbralValor.trim() === '' ? null : Number(umbralValor)); }}
+            >
+              <p className="text-sm text-gray-600">
+                {umbralEditando.origen_umbral_inasistencia === 'curso'
+                  ? 'Este curso tiene un umbral propio.'
+                  : umbralEditando.umbral_inasistencia !== null
+                    ? `Este curso usa el umbral general (${umbralEditando.umbral_inasistencia}%).`
+                    : 'No hay un umbral general activo.'}
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Umbral propio del curso (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={umbralValor}
+                  autoFocus
+                  onChange={(e) => setUmbralValor(e.target.value)}
+                  placeholder="Entre 0 y 100"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">Déjelo vacío o use "Volver al general" para usar el umbral general.</p>
+              </div>
+              {umbralError && (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2" role="alert">
+                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>{umbralError}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => guardarUmbral(null)}
+                  disabled={umbralGuardando || umbralEditando.origen_umbral_inasistencia !== 'curso'}
+                  className="text-sm text-gray-600 hover:text-gray-900 underline disabled:opacity-40 disabled:no-underline"
+                >
+                  Volver al general
+                </button>
+                <div className="flex gap-2">
+                  <button type="button" onClick={cerrarEdicionUmbral}
+                    className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50">
+                    Cancelar
+                  </button>
+                  <button type="submit" disabled={umbralGuardando}
+                    className="px-4 py-2 text-sm rounded-md bg-[#C8102E] text-white hover:bg-[#a00d25] disabled:opacity-50">
+                    {umbralGuardando ? 'Guardando…' : 'Guardar'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal de Detalle de Curso (Alumnos inscritos) ────────────────── */}
       {selectedCourseDetail !== null && (
