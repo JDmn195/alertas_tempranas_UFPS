@@ -10,12 +10,13 @@ export interface RuleParametros {
   corte_previo?: 1 | 2;
   operador_previo?: '<' | '>' | '<=' | '>=' | '==';
   umbral_previo?: number;
+  min_clases?: number;  // HU-35: reglas INASISTENCIA
 }
 
 export interface Rule {
   id?: number;
   nombre: string;
-  tipo: 'PROMEDIO' | 'REPROBACION' | 'ATRASO' | 'CORTE';
+  tipo: 'PROMEDIO' | 'REPROBACION' | 'ATRASO' | 'CORTE' | 'INASISTENCIA';
   tipo_display?: string;
   valor_umbral: number;
   operador: '<' | '>' | '<=' | '>=' | '==';

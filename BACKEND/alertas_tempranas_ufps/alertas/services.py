@@ -119,6 +119,16 @@ class NotificationService:
                 <p style="margin: 5px 0;"><strong>Cortes Registrados:</strong> {notas_str}</p>
                 {bloque_extra}
             """
+        elif regla.tipo == 'INASISTENCIA':
+            # HU-36: materia, grupo, periodo, porcentaje, umbral y faltas sobre clases
+            meta = alerta.metadata or {}
+            bloque_causa = f"""
+                <p style="margin: 5px 0;"><strong>Materia:</strong> {escape(str(meta.get('materia_nombre', '')))} ({escape(str(meta.get('materia_codigo', '')))}) - Grupo {escape(str(meta.get('grupo', '')))}</p>
+                <p style="margin: 5px 0;"><strong>Periodo:</strong> {escape(str(meta.get('periodo', '')))}</p>
+                <p style="margin: 5px 0;"><strong>Inasistencia:</strong> {escape(str(meta.get('porcentaje', '')))} %</p>
+                <p style="margin: 5px 0;"><strong>Umbral:</strong> {escape(str(meta.get('umbral', '')))} %</p>
+                <p style="margin: 5px 0;"><strong>Faltas:</strong> {escape(str(meta.get('faltas', '')))} de {escape(str(meta.get('total_clases', '')))} clases</p>
+            """
         else:
             bloque_causa = f'<p style="margin: 5px 0;"><strong>Causa:</strong> {escape(str(alerta.valor_causa))}</p>'
         
@@ -191,8 +201,8 @@ class NotificationService:
                 if getattr(nota.curso.docente, 'usuario', None):
                     docentes_involucrados.add(nota.curso.docente.usuario)
 
-        elif regla.tipo == 'CORTE':
-            # HU-32: Notificar al docente del curso de metadata["curso_id"] si tiene usuario asociado
+        elif regla.tipo in ('CORTE', 'INASISTENCIA'):
+            # HU-32 / HU-36: Notificar al docente del curso de metadata["curso_id"] si tiene usuario asociado
             meta = alerta.metadata or {}
             curso_id = meta.get('curso_id')
             if curso_id:
@@ -243,6 +253,14 @@ class NotificationService:
             mensaje_interna = (
                 f"Alerta de corte ({regla.get_nivel_display()}): {regla.nombre} para {estudiante.nombre} "
                 f"en {m_nom} (Grup. {m_grp}, Per. {m_per}){str_notas}{extra_nn}."
+            )
+        elif regla.tipo == 'INASISTENCIA':
+            meta = alerta.metadata or {}
+            mensaje_interna = (
+                f"Alerta de inasistencia ({regla.get_nivel_display()}): {estudiante.nombre} tiene "
+                f"{meta.get('porcentaje')} % de inasistencia en {meta.get('materia_nombre', '')} "
+                f"(Grup. {meta.get('grupo', '')}, Per. {meta.get('periodo', '')}), umbral {meta.get('umbral')} %: "
+                f"{meta.get('faltas')} faltas de {meta.get('total_clases')} clases."
             )
         else:
             mensaje_interna = (

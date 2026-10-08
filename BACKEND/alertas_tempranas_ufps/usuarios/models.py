@@ -73,6 +73,7 @@ class Auditoria(models.Model):
         ('RECALCULAR_RIESGO', 'Recalcular Riesgo de Estudiante'),
         ('REEVALUACION_RIESGO', 'Re-evaluación Periódica del Riesgo'),  # HU-29
         ('MIGRAR_RIESGO_PERIODOS', 'Migrar Riesgo por Periodos'),
+        ('MODIFICAR_UMBRAL_INASISTENCIA', 'Modificar Umbral de Inasistencia'),  # HU-35
     ]
 
     usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True)
