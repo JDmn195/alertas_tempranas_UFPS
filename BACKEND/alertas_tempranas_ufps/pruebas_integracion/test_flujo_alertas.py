@@ -237,3 +237,25 @@ class SeguimientoAlertaTests(IntegracionTestCase):
         self.alerta.refresh_from_db()
         self.assertEqual(self.alerta.estado, 'activa')
         self.assertFalse(Intervencion.objects.exists())
+
+
+class FichaEstudianteIntegracionTests(IntegracionTestCase):
+    """HU-07 + HU-31: los indicadores de la ficha con materias del periodo actual sin definitiva."""
+
+    def test_indicadores_con_materia_en_curso(self):
+        # Física I perdida en 2025-2 y repetida en 2026-1, todavía sin definitiva
+        resp = self.importar_historial([
+            self.fila('2025-2', '1150102', definitiva=2.0, nombre='Física I'),
+            self.fila('2026-1', '1150102', c1=3.5, nombre='Física I'),
+        ])
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+        resp = self.api('get', 'student-indicators', self.director, args=[self.estudiante.codigo])
+        self.assertEqual(resp.status_code, 200, resp.content)
+        datos = resp.json()['indicadores']
+        self.assertEqual(datos['reprobadas'], 1)
+        [repetida] = datos['materias_repetidas']
+        self.assertEqual(repetida['intentos'], [
+            {'periodo': '2025-2', 'nota': 2.0, 'estado': 'Reprobado'},
+            {'periodo': '2026-1', 'nota': None, 'estado': 'En curso'},
+        ])

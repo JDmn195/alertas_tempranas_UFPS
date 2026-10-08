@@ -403,10 +403,16 @@ def obtener_indicadores_estudiante(request, codigo):
         if nombre_mat not in materias_dict:
             materias_dict[nombre_mat] = []
         
+        # Sin definitiva la materia está en curso (periodo actual con notas de corte o solo matrícula)
+        if nota.definitiva is None:
+            nota_final, estado = None, 'En curso'
+        else:
+            nota_final = float(nota.definitiva)
+            estado = 'Aprobado' if nota.definitiva >= 3 else 'Reprobado'
         materias_dict[nombre_mat].append({
             'periodo': f"{nota.periodo.anio}-{nota.periodo.semestre}",
-            'nota': float(nota.definitiva) if nota.definitiva else 0,
-            'estado': 'Aprobado' if nota.definitiva >= 3.0 else 'Reprobado'
+            'nota': nota_final,
+            'estado': estado,
         })
     
     materias_repetidas = []

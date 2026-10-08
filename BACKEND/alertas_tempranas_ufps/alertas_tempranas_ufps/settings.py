@@ -18,8 +18,13 @@ import dj_database_url
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Pruebas e2e (Playwright): base SQLite propia y sin el .env, para no tocar la base
+# real ni enviar correos ni subir archivos a servicios externos
+EJECUTANDO_E2E = os.environ.get('E2E') == 'True'
+
 # Carga las variables del archivo .env
-load_dotenv(BASE_DIR / '.env')
+if not EJECUTANDO_E2E:
+    load_dotenv(BASE_DIR / '.env')
 
 
 # Quick-start development settings - unsuitable for production
@@ -142,8 +147,15 @@ if EJECUTANDO_TESTS:
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 
-# En los tests las tareas en segundo plano corren síncronas (ver alertas/tareas.py)
-TAREAS_EN_SEGUNDO_PLANO = not EJECUTANDO_TESTS
+if EJECUTANDO_E2E:
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db_e2e.sqlite3',
+    }
+
+# En los tests las tareas en segundo plano corren síncronas (ver alertas/tareas.py).
+# En e2e también: así la pantalla ya ve el riesgo y las alertas al responder la importación.
+TAREAS_EN_SEGUNDO_PLANO = not (EJECUTANDO_TESTS or EJECUTANDO_E2E)
 
 
 # Password validation
