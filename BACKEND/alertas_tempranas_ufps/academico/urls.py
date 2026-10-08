@@ -19,6 +19,7 @@ from .views import (
     inasistencia_estudiante,
     inasistencia_curso,
     umbral_inasistencia_curso,
+    notas_corte_estudiante,
 )
 from .views.bitacora_views import listar_bitacoras, detalle_bitacora
 from .views.indicator_views import director_indicadores
@@ -30,6 +31,7 @@ urlpatterns = [
     path('students/<str:codigo>/history/',      obtener_historial_academico,    name='student-history'),
     path('students/<str:codigo>/intervenciones/', obtener_intervenciones_estudiante, name='student-interventions'),
     path('students/<str:codigo>/asistencia/',   inasistencia_estudiante,        name='student-attendance'),
+    path('students/<str:codigo>/notas-corte/',  notas_corte_estudiante,         name='student-grades-by-cut'),
     path('import/pensum/',                      importar_pensum,                name='import-pensum'),
     path('import/students/',                    importar_estudiantes_dirplan,   name='import-students-dirplan'),
     path('import/history/',                     importar_historial_academico,   name='import-history-individual'),

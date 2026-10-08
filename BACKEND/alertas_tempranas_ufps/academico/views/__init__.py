@@ -12,3 +12,4 @@ from .teacher_views import teacher_dashboard, teacher_course_students  # Panel d
 from .attendance_views import asistencia_curso  # HU-33
 from .inasistencia_views import inasistencia_estudiante, inasistencia_curso  # HU-34
 from .umbral_views import umbral_inasistencia_curso  # HU-35
+from .notas_corte_views import notas_corte_estudiante  # HU-31
