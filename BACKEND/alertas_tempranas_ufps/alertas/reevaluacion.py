@@ -21,7 +21,7 @@ from django.utils import timezone
 
 from academico.models import Estudiante
 from alertas.evaluacion import actualizar_promedio
-from alertas.models import Alerta, EjecucionReevaluacion, Regla, RiesgoEstudiante
+from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, Alerta, EjecucionReevaluacion, Regla, RiesgoEstudiante
 from alertas.services import NotificationService
 from usuarios.utils import registrar_auditoria
 
@@ -101,10 +101,11 @@ def reevaluar_estudiante(estudiante, reglas, solo_regla=None):
 
         evaluacion = evaluar_reglas_estudiante(estudiante, reglas)
 
-        # Las alertas por corte (HU-32) tienen su propio ciclo de vida (alertas_corte.py)
+        # Las alertas por corte (HU-32) y por inasistencia (HU-36) tienen su propio
+        # ciclo de vida (alertas_corte.py / HU-36), no las cierra esta re-evaluación.
         abiertas = (
             Alerta.objects.filter(estudiante=estudiante, estado__in=ESTADOS_ALERTA_ABIERTOS)
-            .exclude(regla__tipo='CORTE')
+            .exclude(regla__tipo__in=('CORTE', 'INASISTENCIA'))
         )
         if solo_regla is not None:
             abiertas = abiertas.filter(regla_id=solo_regla.id)
@@ -159,7 +160,7 @@ def _ejecutar_intento(origen, usuario, intento, codigos, reintento_de):
 
     try:
         close_old_connections()
-        reglas = list(Regla.objects.filter(activo=True).exclude(tipo='CORTE').order_by('-prioridad'))
+        reglas = list(Regla.objects.filter(activo=True).exclude(tipo__in=TIPOS_FUERA_DEL_MOTOR_GENERAL).order_by('-prioridad'))
         if not reglas:
             raise ErrorNoReintentable('No hay reglas activas configuradas.')
 

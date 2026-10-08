@@ -39,6 +39,16 @@ interface AlertItem {
   metadata?: any;
 }
 
+// HU-36: "Materia (grupo): 33,33 % de inasistencia (umbral 20 %)"
+const formatoPorcentaje = (valor?: number | null) =>
+  valor === null || valor === undefined ? '-' : Number(valor).toLocaleString('es-CO', { maximumFractionDigits: 2 });
+
+const causaInasistencia = (alert: AlertItem) => {
+  const meta = alert.metadata || {};
+  const porcentaje = meta.porcentaje ?? alert.valor_causa;
+  return `${meta.materia_nombre || 'Materia'} (${meta.grupo || '-'}): ${formatoPorcentaje(porcentaje)} % de inasistencia (umbral ${formatoPorcentaje(meta.umbral)} %)`;
+};
+
 interface Intervencion {
   id: number;
   tipo: string;
@@ -439,6 +449,7 @@ export default function AlertManagement() {
                 <option value="PROMEDIO">PROMEDIO</option>
                 <option value="REPROBACION">REPROBACIÓN</option>
                 <option value="ATRASO">ATRASO</option>
+                <option value="INASISTENCIA">INASISTENCIA</option>
               </select>
             </div>
 
@@ -568,10 +579,32 @@ export default function AlertManagement() {
                             </div>
                             <span>•</span>
                             <span className="text-[#C8102E] font-bold uppercase tracking-wider">
-                              {alert.tipo_regla === 'PROMEDIO' ? `Promedio: ${alert.valor_causa?.toFixed(2)}` : `${Math.round(alert.valor_causa || 0)} ${alert.tipo_regla === 'REPROBACION' ? 'Materias Perdidas' : 'Materias Pendientes'}`}
+                              {alert.tipo_regla === 'INASISTENCIA'
+                                ? causaInasistencia(alert)
+                                : alert.tipo_regla === 'PROMEDIO' ? `Promedio: ${alert.valor_causa?.toFixed(2)}` : `${Math.round(alert.valor_causa || 0)} ${alert.tipo_regla === 'REPROBACION' ? 'Materias Perdidas' : 'Materias Pendientes'}`}
                             </span>
                           </div>
                           
+                          {/* HU-36: detalle de inasistencia */}
+                          {alert.tipo_regla === 'INASISTENCIA' && alert.metadata && (
+                            <div className="flex flex-wrap gap-1.5 mt-3 text-[10px] font-bold text-gray-600">
+                              <span className="px-2.5 py-1 rounded-lg border bg-red-50 text-red-700 border-red-100">
+                                Faltas: {alert.metadata.faltas ?? 0}
+                              </span>
+                              <span className="px-2.5 py-1 rounded-lg border bg-gray-50 border-gray-100">
+                                Faltas justificadas: {alert.metadata.faltas_justificadas ?? 0}
+                              </span>
+                              <span className="px-2.5 py-1 rounded-lg border bg-gray-50 border-gray-100">
+                                Total de clases: {alert.metadata.total_clases ?? 0}
+                              </span>
+                              {alert.metadata.cierre_automatico && alert.metadata.motivo_cierre && (
+                                <span className="px-2.5 py-1 rounded-lg border bg-green-50 text-green-700 border-green-100">
+                                  Cierre automático: {alert.metadata.motivo_cierre}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
                           {/* Metadata Badges */}
                           {(alert.metadata?.materias || alert.metadata?.materias_atrasadas) && (
                             <div className="flex flex-wrap gap-1.5 mt-3">

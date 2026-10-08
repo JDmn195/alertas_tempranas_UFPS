@@ -1,11 +1,17 @@
 from django.db import models
 
+# Tipos que el motor general (riesgo y alertas por PPA, reprobación y atraso) no evalúa:
+# CORTE tiene su propio ciclo (alertas_corte.py) e INASISTENCIA lo tendrá en la HU-36.
+TIPOS_FUERA_DEL_MOTOR_GENERAL = ('CORTE', 'INASISTENCIA')
+
+
 class Regla(models.Model):
     TIPO_CHOICES = [
         ('PROMEDIO', 'Promedio Acumulado'),
         ('REPROBACION', 'Número de Materias Reprobadas'),
         ('ATRASO', 'Atraso Curricular'),
         ('CORTE', 'Alerta por Corte'),
+        ('INASISTENCIA', 'Porcentaje de Inasistencia'),  # HU-35
     ]
 
     NIVEL_CHOICES = [

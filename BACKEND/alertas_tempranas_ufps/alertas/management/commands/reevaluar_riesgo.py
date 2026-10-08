@@ -63,6 +63,16 @@ class Command(BaseCommand):
         except Exception as e:
             self.stdout.write(self.style.WARNING(f'Error al evaluar alertas por corte: {e}'))
 
+        # HU-36: Evaluar alertas por inasistencia para el periodo actual
+        try:
+            from alertas.alertas_inasistencia import evaluar_inasistencia_periodo_actual
+            alertas_inasistencia = evaluar_inasistencia_periodo_actual()
+            self.stdout.write(self.style.SUCCESS(
+                f'Alertas por inasistencia procesadas en periodo actual: {len(alertas_inasistencia)}'
+            ))
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'Error al evaluar alertas por inasistencia: {e}'))
+
         if not ejecuciones or ejecuciones[-1].estado == 'FALLIDA':
             # Código de salida != 0 para que el programador marque la ejecución como fallida
             raise CommandError('La re-evaluación terminó en estado FALLIDA.')

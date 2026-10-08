@@ -6,6 +6,26 @@ from django.db.models import Count, Avg, Q
 from academico.models import Curso, Nota, Periodo, Estudiante, Materia
 from alertas.models import Alerta, RiesgoEstudiante, RiesgoEstudiantePeriodo
 from usuarios.decorators import requiere_rol
+from academico.asistencia import (
+    calcular_inasistencia_curso, calcular_inasistencia_cursos, numero_o_none,
+    obtener_umbral_general, obtener_umbral_inasistencia, obtener_umbrales_inasistencia, supera_umbral,
+)
+from academico.services.asistencia import periodo_actual
+
+
+def _inasistencia_sobre_umbral(inasistencia_curso, umbral, origen):
+    """HU-35: conteo de estudiantes sobre el umbral del curso; null si no hay umbral."""
+    if umbral is None:
+        sobre_umbral = None
+    else:
+        sobre_umbral = sum(
+            1 for datos in inasistencia_curso.values() if supera_umbral(datos['porcentaje'], umbral)
+        )
+    return {
+        'inasistencia_sobre_umbral':  sobre_umbral,
+        'umbral_inasistencia':        numero_o_none(umbral),
+        'origen_umbral_inasistencia': origen,
+    }
 
 
 @csrf_exempt
@@ -65,6 +85,14 @@ def teacher_dashboard(request):
         .values_list('estudiante_id', flat=True)
     )
 
+    # ── HU-34: inasistencia del periodo más reciente, una consulta para todos los cursos ──
+    periodo_asistencia = periodo_actual()
+    inasistencia_cursos = (
+        calcular_inasistencia_cursos(ids_cursos, periodo_asistencia) if periodo_asistencia else {}
+    )
+    # HU-35: umbral efectivo de cada curso (propio o general)
+    umbrales = obtener_umbrales_inasistencia(cursos_qs)
+
     # ── Construir lista de cursos ─────────────────────────────────────────────
     cursos_data = []
     for curso in cursos_qs:
@@ -100,6 +128,7 @@ def teacher_dashboard(request):
             'promedio_curso': promedio_c,
             'en_riesgo':    en_riesgo,
             'estado':       estado,
+            **_inasistencia_sobre_umbral(inasistencia_cursos.get(curso.id, {}), *umbrales[curso.id]),
         })
 
     total_en_riesgo = len(
@@ -218,6 +247,7 @@ def teacher_dashboard(request):
         'materias_criticas':       materias_criticas,        # 6.4
         'distribucion_riesgo':     dist_riesgo,              # 6.4
         'cursos_criticos':         cursos_criticos,          # 6.4
+        'umbral_inasistencia':     numero_o_none(obtener_umbral_general()),  # HU-35: umbral general
         'page':                    page,
         'pages':                   paginator.num_pages,
         'page_size':               page_size,
@@ -295,18 +325,26 @@ def teacher_course_students(request, curso_id):
         .values_list('estudiante_id', 'total')
     )
 
+    # HU-34: porcentaje de inasistencia en el periodo más reciente, una sola consulta
+    periodo_asistencia = periodo_actual()
+    inasistencia = calcular_inasistencia_curso(curso, periodo_asistencia) if periodo_asistencia else {}
+    umbral, origen_umbral = obtener_umbral_inasistencia(curso)
+
     # Construir lista completa ordenada por riesgo (high > medium > low > unknown)
     ORDEN_RIESGO = {'high': 0, 'medium': 1, 'low': 2, 'unknown': 3}
     resultado = []
     for n in estudiantes_notas:
         est = n.estudiante
         nivel = riesgo_periodo_map.get(est.codigo) or riesgo_snapshot_map.get(est.codigo, 'unknown')
+        porcentaje = inasistencia.get(est.codigo, {}).get('porcentaje')
         resultado.append({
             'codigo':          est.codigo,
             'nombre':          est.nombre,
             'nivel_riesgo':    nivel,
             'alertas_activas': alertas_map.get(est.codigo, 0),
             'ultima_nota':     float(n.definitiva) if n.definitiva is not None else None,
+            'porcentaje_inasistencia': float(porcentaje) if porcentaje is not None else None,
+            'supera_umbral_inasistencia': supera_umbral(porcentaje, umbral),
             '_ord':            ORDEN_RIESGO.get(nivel, 3),
         })
 
@@ -331,5 +369,8 @@ def teacher_course_students(request, curso_id):
         'page':        page,
         'pages':       max(1, -(-total // page_size)),
         'page_size':   page_size,
+        'periodo_asistencia':  str(periodo_asistencia) if periodo_asistencia else None,
+        'umbral_inasistencia': numero_o_none(umbral),
+        'origen_umbral_inasistencia': origen_umbral,
     })
 
