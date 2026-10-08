@@ -120,3 +120,21 @@ class AvisoPreventivoTests(AlertaInasistenciaBaseTestCase):
             [(cerca.codigo, Decimal('40.00'))],
         )
         self.assertFalse(self.alertas().exists())
+
+
+class ResetReglasTests(AlertaInasistenciaBaseTestCase):
+    def test_reset_reglas_conserva_reglas_corte_e_inasistencia(self):
+        from django.core.management import call_command
+        from io import StringIO
+        from alertas.models import Regla
+
+        self.registrar(self.est, SEIS_DOS_FALTAS)
+        self.evaluar()
+        antes = set(Regla.objects.filter(tipo__in=['CORTE', 'INASISTENCIA']).values_list('id', flat=True))
+        self.assertTrue(antes)
+
+        call_command('reset_reglas', stdout=StringIO())
+
+        self.assertEqual(set(Regla.objects.filter(tipo__in=['CORTE', 'INASISTENCIA']).values_list('id', flat=True)), antes)
+        self.assertEqual(Regla.objects.filter(tipo__in=['PROMEDIO', 'REPROBACION', 'ATRASO']).count(), 9)
+        self.assertEqual(self.alertas().count(), 1)
