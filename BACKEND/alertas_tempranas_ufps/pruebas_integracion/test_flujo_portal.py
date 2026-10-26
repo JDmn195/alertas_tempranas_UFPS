@@ -76,3 +76,38 @@ class FlujoPortalEstudianteTests(IntegracionTestCase):
         registro = Auditoria.objects.filter(usuario=cuenta, tipo_accion='ACCESO_DENEGADO').get()
         self.assertIn(self.otro.codigo, registro.detalle)
         self.assertTrue(Auditoria.objects.filter(tipo_accion='CREAR_CUENTA_ESTUDIANTE', usuario=self.admin).exists())
+
+
+class FlujoEvolucionPromedioTests(IntegracionTestCase):
+    """HU-38: el estudiante inicia sesión y consulta la evolución de su promedio."""
+
+    def test_estudiante_consulta_su_evolucion(self):
+        cuenta = self._usuario('Ana Pérez', 'ana@ufps.edu.co', 'ESTUDIANTE')
+        self.estudiante.usuario = cuenta
+        self.estudiante.save(update_fields=['usuario'])
+
+        # Sin notas: serie vacía
+        resp = self.api('get', 'portal-evolucion', cuenta)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()['serie'], [])
+
+        # 2025-2 cerrado (Física 2.0) y 2026-1 en curso: un solo periodo con definitivas
+        resp = self.importar_historial(self.historial_en_riesgo())
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = self.api('get', 'portal-evolucion', cuenta).json()
+        self.assertEqual(data['serie'], [
+            {'periodo': '2025-2', 'pps': 2.0, 'ppa': 2.0, 'creditos_cursados': 3, 'creditos_aprobados': 0},
+        ])
+        self.assertFalse(data['historia_suficiente'])
+
+        # Se agrega un periodo anterior aprobado: ya hay tendencia, y coincide con la ficha
+        filas = [self.fila('2025-1', '1150101', definitiva=4.0, nombre='Cálculo I')] + self.historial_en_riesgo()
+        resp = self.importar_historial(filas)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = self.api('get', 'portal-evolucion', cuenta).json()
+        self.assertEqual([p['periodo'] for p in data['serie']], ['2025-1', '2025-2'])
+        self.assertEqual(data['tendencia'], 'baja')
+        self.assertEqual(data['promedio_actual'], 3.0)
+
+        ficha = self.api('get', 'student-indicators', self.admin, args=[self.estudiante.codigo]).json()
+        self.assertEqual(ficha['indicadores']['promedio_acumulado'], data['promedio_actual'])
