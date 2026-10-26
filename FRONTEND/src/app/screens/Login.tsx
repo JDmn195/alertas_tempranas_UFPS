@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { Button } from '../components/ui/Button';
+import { rutaInicio } from '../../services/session';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -37,14 +38,8 @@ export default function Login() {
         // Guardar sesión en localStorage
         localStorage.setItem('user', JSON.stringify(data));
         
-        // Redirigir según el rol
-        if (data.rol === 'ADMINISTRADOR') {
-          navigate('/dashboard/admin/import');
-        } else if (data.rol === 'DOCENTE') {
-          navigate('/dashboard/teacher');
-        } else {
-          navigate('/dashboard/students');
-        }
+        // Redirigir según el rol (el estudiante entra directo a su portal)
+        navigate(rutaInicio(data.rol));
       } else {
         setError(data.error || 'Error al iniciar sesión.');
       }

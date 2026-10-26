@@ -100,6 +100,8 @@ export default function AuditLog() {
               <option value="CONCLUIR_INTERVENCION">Concluir Intervención</option>
               <option value="LOGIN">Inicio de Sesión</option>
               <option value="ACCESO_DENEGADO">Acceso Denegado (403)</option>
+              <option value="CREAR_CUENTA_ESTUDIANTE">Crear Cuenta de Estudiante</option>
+              <option value="ASOCIAR_CUENTA_ESTUDIANTE">Asociar Cuenta de Estudiante</option>
             </select>
           </div>
           

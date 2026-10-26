@@ -31,6 +31,20 @@ def obtener_usuario_de_request(request):
         return None
     except (jwt.InvalidTokenError, Usuario.DoesNotExist):
         return None
+
+
+def _detalle_acceso_denegado(request, usuario, kwargs):
+    detalle = f"Intento de acceso denegado a la ruta {request.path} con rol {usuario.rol}"
+    if usuario.rol != 'ESTUDIANTE':
+        return detalle
+    # HU-37: si un estudiante intenta consultar a otro, se deja su código en la auditoría
+    codigo = kwargs.get('codigo') or request.GET.get('codigo') or request.GET.get('estudiante')
+    propio = getattr(getattr(usuario, 'estudiante', None), 'codigo', None)
+    if codigo and codigo != propio:
+        detalle += f". Intentó consultar la información del estudiante {codigo}"
+    return detalle
+
+
 def requiere_rol(roles_permitidos):
     """
     Decorador para validar que el usuario que hace la petición tenga el rol adecuado.
@@ -46,8 +60,7 @@ def requiere_rol(roles_permitidos):
                 
             if usuario.rol not in roles_permitidos:
                 # Registrar el intento fallido
-                detalle = f"Intento de acceso denegado a la ruta {request.path} con rol {usuario.rol}"
-                registrar_auditoria(usuario, 'ACCESO_DENEGADO', detalle)
+                registrar_auditoria(usuario, 'ACCESO_DENEGADO', _detalle_acceso_denegado(request, usuario, kwargs))
                 return JsonResponse({'error': 'Prohibido. No tiene los permisos necesarios para realizar esta acción.'}, status=403)
                 
             # Si pasa la validación, inyectamos el usuario en el request
@@ -55,3 +68,32 @@ def requiere_rol(roles_permitidos):
             return view_func(request, *args, **kwargs)
         return _wrapped_view
     return decorator
+
+
+def obtener_estudiante_autenticado(request):
+    """
+    HU-37: Estudiante asociado al usuario del token, para los endpoints del portal.
+
+    Retorna (estudiante, None) o (None, respuesta de error). El código del estudiante
+    sale siempre del token, nunca de la URL ni de los parámetros. Usar después de
+    @requiere_rol(['ESTUDIANTE']): ese decorador ya rechaza y audita a los usuarios de
+    otro rol, así que sus denegaciones nunca llegan aquí y no se registran dos veces.
+    """
+    usuario = getattr(request, 'usuario', None) or obtener_usuario_de_request(request)
+    if not usuario:
+        return None, JsonResponse({'error': 'No autorizado. Se requiere inicio de sesión.'}, status=401)
+
+    if usuario.rol != 'ESTUDIANTE':
+        registrar_auditoria(usuario, 'ACCESO_DENEGADO',
+                            f"Intento de acceso denegado al portal ({request.path}) con rol {usuario.rol}")
+        return None, JsonResponse({'error': 'Prohibido. Esta sección es solo para estudiantes.'}, status=403)
+
+    estudiante = getattr(usuario, 'estudiante', None)  # RelatedObjectDoesNotExist es un AttributeError
+    if estudiante is None:
+        registrar_auditoria(usuario, 'ACCESO_DENEGADO',
+                            f"Cuenta de estudiante {usuario.correo} sin estudiante asociado intentó acceder a {request.path}")
+        return None, JsonResponse(
+            {'error': 'Prohibido. Su cuenta no está asociada a ningún estudiante. Comuníquese con la universidad.'},
+            status=403,
+        )
+    return estudiante, None
