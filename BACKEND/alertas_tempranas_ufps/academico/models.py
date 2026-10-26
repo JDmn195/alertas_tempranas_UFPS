@@ -91,6 +91,10 @@ class Estudiante(models.Model):
     email_institucional = models.CharField(max_length=150, null=True, blank=True)
     colegio_egresado = models.CharField(max_length=200, null=True, blank=True)
     municipio_nacimiento = models.CharField(max_length=100, null=True, blank=True)
+    # HU-37: cuenta con rol ESTUDIANTE para el portal de autoconsulta
+    usuario = models.OneToOneField(
+        'usuarios.Usuario', null=True, blank=True, on_delete=models.SET_NULL, related_name='estudiante',
+    )
 
     class Meta:
         db_table = 'estudiante'

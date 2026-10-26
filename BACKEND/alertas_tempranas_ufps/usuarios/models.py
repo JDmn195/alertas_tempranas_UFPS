@@ -8,7 +8,10 @@ class Usuario(models.Model):
         ('DIRECTOR', 'Director'),
         ('BIENESTAR', 'Bienestar'),
         ('ADMINISTRADOR', 'Administrador'),
+        ('ESTUDIANTE', 'Estudiante'),  # HU-37: portal de autoconsulta
     ]
+    # Roles del personal: los únicos que se gestionan con el CRUD general de usuarios
+    ROLES_PERSONAL = ('DOCENTE', 'DIRECTOR', 'BIENESTAR', 'ADMINISTRADOR')
 
     nombre = models.CharField(max_length=150)
     correo = models.EmailField(max_length=150, unique=True)
@@ -74,6 +77,8 @@ class Auditoria(models.Model):
         ('REEVALUACION_RIESGO', 'Re-evaluación Periódica del Riesgo'),  # HU-29
         ('MIGRAR_RIESGO_PERIODOS', 'Migrar Riesgo por Periodos'),
         ('MODIFICAR_UMBRAL_INASISTENCIA', 'Modificar Umbral de Inasistencia'),  # HU-35
+        ('CREAR_CUENTA_ESTUDIANTE', 'Crear Cuenta de Estudiante'),  # HU-37
+        ('ASOCIAR_CUENTA_ESTUDIANTE', 'Asociar Cuenta de Estudiante'),  # HU-37
     ]
 
     usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True)

@@ -342,6 +342,8 @@ export default function UserManagement() {
                 <select
                   required
                   value={formData.rol}
+                  // HU-37: las cuentas de estudiante no cambian de rol
+                  disabled={formData.rol === 'ESTUDIANTE'}
                   onChange={(e) => setFormData({ ...formData, rol: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent bg-white"
                 >
@@ -349,6 +351,7 @@ export default function UserManagement() {
                   <option value="DIRECTOR">Director Académico</option>
                   <option value="BIENESTAR">Personal de Bienestar</option>
                   <option value="ADMINISTRADOR">Administrador</option>
+                  {formData.rol === 'ESTUDIANTE' && <option value="ESTUDIANTE">Estudiante</option>}
                 </select>
               </div>
 

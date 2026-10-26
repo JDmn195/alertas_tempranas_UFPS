@@ -20,6 +20,20 @@ import NotificationHistory from "./screens/NotificationHistory";
 import NotificationInbox from "./screens/NotificationInbox";
 import AuditLog from "./screens/AuditLog";
 import AutomaticProcesses from "./screens/AutomaticProcesses";
+import StudentPortal from "./screens/StudentPortal";
+import { PortalLayout } from "./components/layouts/PortalLayout";
+import { rutaInicio } from "../services/session";
+
+// Pantalla inicial de /dashboard según el rol (el estudiante va a su portal)
+function InicioDashboard() {
+  let rol: string | undefined;
+  try {
+    rol = JSON.parse(localStorage.getItem('user') || 'null')?.rol;
+  } catch {
+    rol = undefined;
+  }
+  return <Navigate to={rutaInicio(rol)} replace />;
+}
 
 export const router = createBrowserRouter([
   {
@@ -46,7 +60,7 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
-      { index: true, element: <Navigate to="students" replace /> },
+      { index: true, element: <InicioDashboard /> },
       { 
         path: "admin/import", 
         element: <ProtectedRoute allowedRoles={['ADMINISTRADOR']}><AdminDashboard /></ProtectedRoute> 
@@ -110,6 +124,15 @@ export const router = createBrowserRouter([
       {
         path: "admin/notifications-history",
         element: <ProtectedRoute allowedRoles={['ADMINISTRADOR']}><NotificationHistory /></ProtectedRoute>
+      },
+      // Portal del estudiante (EP-09). Las HU-38 a HU-42 agregan aquí sus rutas hijas.
+      {
+        path: "portal",
+        element: <ProtectedRoute allowedRoles={['ESTUDIANTE']}><PortalLayout /></ProtectedRoute>,
+        children: [
+          { index: true, element: <StudentPortal /> },  // HU-37: riesgo actual
+          { path: "*", element: <Navigate to="/dashboard/portal" replace /> },
+        ],
       }
     ],
   },

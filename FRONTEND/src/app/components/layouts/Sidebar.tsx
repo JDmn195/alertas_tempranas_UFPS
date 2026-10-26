@@ -13,6 +13,7 @@ import {
   FileText,
   ClipboardList,
   CalendarClock,
+  Gauge,
 } from 'lucide-react';
 import { cerrarSesionLocal } from '../../../services/session';
 
@@ -21,6 +22,7 @@ type NavItem = {
   label: string;
   icon: React.ElementType;
   roles?: string[];
+  section?: string;
 };
 
 const navItems: NavItem[] = [
@@ -36,6 +38,8 @@ const navItems: NavItem[] = [
   { path: '/dashboard/teacher', label: 'Panel del Docente', icon: GraduationCap, roles: ['DOCENTE'] },
   { path: '/dashboard/director', label: 'Panel Estratégico', icon: BarChart3, roles: ['ADMINISTRADOR'] },
   { path: '/dashboard/reports', label: 'Exportar Reportes', icon: FileDown, roles: ['ADMINISTRADOR', 'BIENESTAR', 'DOCENTE'] },
+  // Portal del estudiante (EP-09): las HU-38 a HU-42 agregan sus entradas en esta sección
+  { path: '/dashboard/portal', label: 'Mi Riesgo Académico', icon: Gauge, roles: ['ESTUDIANTE'], section: 'Mi Portal' },
 ];
 
 export function Sidebar() {
@@ -73,13 +77,17 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1">
-        {filteredItems.map((item) => {
+        {filteredItems.map((item, index) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+          const nuevaSeccion = item.section && item.section !== filteredItems[index - 1]?.section;
 
           return (
+            <div key={item.path}>
+            {nuevaSeccion && (
+              <p className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">{item.section}</p>
+            )}
             <Link
-              key={item.path}
               to={item.path}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors relative ${
                 isActive
@@ -91,6 +99,7 @@ export function Sidebar() {
               <Icon className={`w-5 h-5 ${isActive ? 'text-[#C8102E]' : 'text-gray-400'}`} />
               <span className="text-sm font-medium">{item.label}</span>
             </Link>
+            </div>
           );
         })}
       </nav>

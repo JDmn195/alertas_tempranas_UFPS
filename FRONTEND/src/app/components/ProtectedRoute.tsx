@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router';
-import { type ResultadoSesion, sesionVerificada, verificarSesion } from '../../services/session';
+import { type ResultadoSesion, rutaInicio, sesionVerificada, verificarSesion } from '../../services/session';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -54,8 +54,18 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     const userRoles = sesion.usuario.rol ? sesion.usuario.rol.split(',') : [];
     const hasAccess = allowedRoles.some(role => userRoles.includes(role));
     if (!hasAccess) {
-      // Si ningún rol está permitido, redirigir al dashboard principal del usuario
       console.warn(`Acceso denegado para los roles: ${sesion.usuario.rol}`);
+      if (userRoles.includes('ESTUDIANTE')) {
+        // HU-37: el estudiante solo usa su portal; vuelve a él con un aviso
+        return (
+          <Navigate
+            to={rutaInicio('ESTUDIANTE')}
+            state={{ aviso: 'No tienes acceso a esa sección. Desde tu portal puedes consultar tu propia información.' }}
+            replace
+          />
+        );
+      }
+      // Si ningún rol está permitido, redirigir al dashboard principal del usuario
       return <Navigate to="/dashboard" replace />;
     }
   }

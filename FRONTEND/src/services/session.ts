@@ -30,6 +30,14 @@ function tokenGuardado(): string | null {
   }
 }
 
+/** Pantalla de inicio de cada rol (HU-37: el estudiante entra directo a su portal). */
+export function rutaInicio(rol?: string | null): string {
+  if (rol === 'ESTUDIANTE') return '/dashboard/portal';
+  if (rol === 'ADMINISTRADOR') return '/dashboard/admin/import';
+  if (rol === 'DOCENTE') return '/dashboard/teacher';
+  return '/dashboard/students';
+}
+
 export function cerrarSesionLocal() {
   localStorage.removeItem('user');
   cache = null;

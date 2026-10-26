@@ -55,8 +55,15 @@ def _limpiar_intentos_fallidos(correo):
 
 
 def _validar_rol(rol):
-    """Mensaje de error si el rol no es uno de los definidos, o None."""
-    roles = [r for r, _ in Usuario.ROL_CHOICES]
+    """
+    Mensaje de error si el rol no es uno del personal, o None.
+    HU-37: las cuentas ESTUDIANTE solo se crean asociadas a su estudiante
+    (comando crear_usuarios_estudiantes o /api/usuarios/estudiantes/<codigo>/cuenta/).
+    """
+    roles = list(Usuario.ROLES_PERSONAL)
+    if rol == 'ESTUDIANTE':
+        return ("Las cuentas de estudiante se crean asociadas a su estudiante desde "
+                "la gestión de cuentas de estudiantes, no desde este formulario.")
     if rol not in roles:
         return f"Rol inválido: '{rol}'. Valores permitidos: {', '.join(roles)}."
     return None
@@ -293,8 +300,11 @@ def actualizar_usuario(request, usuario_id):
             if not nombre:
                 return JsonResponse({'error': 'El nombre no puede quedar vacío.'}, status=400)
             usuario_target.nombre = nombre
-        if 'rol' in data:
-            rol = str(data['rol'] or '').strip().upper()
+        rol = str(data.get('rol') or '').strip().upper() if 'rol' in data else None
+        if rol is not None and rol != usuario_target.rol:
+            # HU-37: una cuenta de estudiante no pasa al personal ni al revés
+            if usuario_target.rol == 'ESTUDIANTE':
+                return JsonResponse({'error': 'El rol de una cuenta de estudiante no se puede cambiar.'}, status=400)
             error_rol = _validar_rol(rol)
             if error_rol:
                 return JsonResponse({'error': error_rol}, status=400)
@@ -376,3 +386,53 @@ def listar_auditoria(request):
         })
         
     return JsonResponse({'registros': data}, status=200)
+
+
+# --- Cuentas de estudiantes (HU-37) ---
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@requiere_rol(['ADMINISTRADOR'])
+def cuenta_estudiante(request, codigo):
+    """
+    POST /api/usuarios/estudiantes/<codigo>/cuenta/  {"correo": opcional}
+    Crea o reasocia la cuenta ESTUDIANTE de un estudiante. Sin correo se usa el
+    institucional del estudiante. La cuenta queda sin contraseña utilizable: el
+    estudiante la define con "¿Olvidaste tu contraseña?".
+    """
+    from academico.models import Estudiante
+    from portal.cuentas import ErrorCuentaEstudiante, asociar_cuenta_estudiante
+
+    try:
+        data = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido.'}, status=400)
+
+    estudiante = Estudiante.objects.select_related('usuario').filter(codigo=codigo).first()
+    if estudiante is None:
+        return JsonResponse({'error': f'Estudiante con código {codigo} no encontrado.'}, status=404)
+
+    try:
+        accion, usuario, anterior = asociar_cuenta_estudiante(estudiante, data.get('correo'))
+    except ErrorCuentaEstudiante as e:
+        return JsonResponse({'error': str(e)}, status=409)
+    except Exception:
+        logger.exception("Error al crear o asociar la cuenta del estudiante %s", codigo)
+        return JsonResponse({'error': 'Error al crear o asociar la cuenta del estudiante.'}, status=500)
+
+    if accion == 'creada':
+        registrar_auditoria(request.usuario, 'CREAR_CUENTA_ESTUDIANTE',
+                            f"Creada la cuenta {usuario.correo} y asociada al estudiante {estudiante.codigo}")
+    else:
+        detalle = f"Cuenta {usuario.correo} asociada al estudiante {estudiante.codigo}"
+        if anterior is not None:
+            detalle += f" (antes tenía la cuenta {anterior.correo})"
+        registrar_auditoria(request.usuario, 'ASOCIAR_CUENTA_ESTUDIANTE', detalle)
+
+    return JsonResponse({
+        'mensaje': ('Cuenta creada y asociada. El estudiante debe definir su contraseña con '
+                    '"¿Olvidaste tu contraseña?".') if accion == 'creada' else 'Cuenta asociada al estudiante.',
+        'accion': accion,
+        'usuario': {'id': usuario.id, 'correo': usuario.correo, 'activo': usuario.activo},
+        'estudiante': estudiante.codigo,
+    }, status=201 if accion == 'creada' else 200)
