@@ -6,6 +6,7 @@ from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import csrf_exempt
 
 from academico.models import Estudiante, Nota
+from academico.services.historial_promedios import serie_promedios_por_periodo, tendencia_promedio
 from academico.services.notas_corte import ESTADO_EN_CURSO, alertas_corte_abiertas, desglose_cortes, estado_nota
 from alertas.evaluacion import calcular_indicadores, calcular_ppa, nivel_de_riesgo
 from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, Alerta, Regla
@@ -46,67 +47,22 @@ def calcular_nivel_riesgo(estudiante, reglas=None):
 def _calcular_historial_promedios(estudiante):
     """
     Calcula el PPS (Semestral) y PPA (Acumulado) periodo a periodo.
+    La serie sale de serie_promedios_por_periodo (la misma del portal, HU-38);
+    aquí un periodo sin créditos con definitiva se muestra con 0.
     """
-    notas = Nota.objects.filter(estudiante=estudiante).select_related(
-        'periodo', 'curso__materia'
-    ).order_by('periodo__anio', 'periodo__semestre')
-    
-    # Agrupar por periodo preservando el orden cronológico
-    periodos_dict = {}
-    for n in notas:
-        key = f"{n.periodo.anio}-{n.periodo.semestre}"
-        if key not in periodos_dict:
-            periodos_dict[key] = []
-        periodos_dict[key].append(n)
-        
-    evolucion = []
-    puntos_acumulados = 0
-    creditos_acumulados = 0
-    
-    for periodo_key, notas_periodo in periodos_dict.items():
-        puntos_semestre = 0
-        creditos_semestre = 0
-        
-        for n in notas_periodo:
-            if n.definitiva is None:
-                continue  # sin nota definitiva no cuenta para el promedio (igual que el PPA guardado)
-            creditos = n.curso.materia.creditos or 0
-            definitiva = float(n.definitiva)
-            puntos_semestre += definitiva * creditos
-            creditos_semestre += creditos
-            
-        pps = round(puntos_semestre / creditos_semestre, 2) if creditos_semestre > 0 else 0
-        
-        puntos_acumulados += puntos_semestre
-        creditos_acumulados += creditos_semestre
-        
-        ppa = round(puntos_acumulados / creditos_acumulados, 2) if creditos_acumulados > 0 else 0
-        
-        evolucion.append({
-            'periodo': periodo_key,
-            'pps': pps,
-            'ppa': ppa
-        })
-        
+    evolucion = [
+        {
+            'periodo': p['periodo'],
+            'pps': p['pps'] if p['pps'] is not None else 0,
+            'ppa': p['ppa'] if p['ppa'] is not None else 0,
+        }
+        for p in serie_promedios_por_periodo(estudiante)
+    ]
+
     # Tendencia: comparativa del último PPA contra el anterior
     promedio_actual = evolucion[-1]['ppa'] if evolucion else 0
-    tendencia = { 'valor': 0, 'porcentaje': 0, 'direccion': 'stable' }
-    
-    if len(evolucion) >= 2:
-        prev_ppa = evolucion[-2]['ppa']
-        if prev_ppa > 0:
-            diff = promedio_actual - prev_ppa
-            porcentaje = (diff / prev_ppa) * 100
-            
-            tendencia['valor'] = round(diff, 2)
-            tendencia['porcentaje'] = round(abs(porcentaje), 1)
-            if diff > 0.01:
-                tendencia['direccion'] = 'up'
-            elif diff < -0.01:
-                tendencia['direccion'] = 'down'
-            else:
-                tendencia['direccion'] = 'stable'
-                
+    tendencia = tendencia_promedio(promedio_actual, evolucion[-2]['ppa'] if len(evolucion) >= 2 else None)
+
     return {
         'promedio_acumulado': promedio_actual,
         'tendencia': tendencia,

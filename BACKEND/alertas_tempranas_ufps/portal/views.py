@@ -13,6 +13,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 
 from academico.models import Materia, Nota
+from academico.services.historial_promedios import serie_promedios_por_periodo, tendencia_promedio
 from alertas.evaluacion import NOTA_APROBATORIA, calcular_indicadores, calcular_ppa
 from alertas.models import Regla, RiesgoEstudiante
 from usuarios.decorators import obtener_estudiante_autenticado, requiere_rol
@@ -20,6 +21,7 @@ from usuarios.decorators import obtener_estudiante_autenticado, requiere_rol
 logger = logging.getLogger(__name__)
 
 NIVELES_TEXTO = {'high': 'Alto', 'medium': 'Medio', 'low': 'Bajo'}
+TENDENCIA_TEXTO = {'up': 'sube', 'down': 'baja', 'stable': 'estable'}
 
 
 def _ultimo_riesgo(estudiante):
@@ -157,3 +159,51 @@ def riesgo_propio(request):
     except Exception:
         logger.exception("Error al consultar el riesgo propio del estudiante %s", estudiante.codigo)
         return JsonResponse({'error': 'No fue posible consultar tu nivel de riesgo.'}, status=500)
+
+
+@require_GET
+@requiere_rol(['ESTUDIANTE'])
+def evolucion_propia(request):
+    """
+    GET /api/portal/evolucion/  (HU-38)
+    Evolución del promedio por periodo del estudiante autenticado (PPS y PPA), con
+    la misma serie que la ficha académica. Solo entran los periodos con notas
+    definitivas: un periodo con todas sus materias en curso aún no tiene promedio.
+    """
+    estudiante, error = obtener_estudiante_autenticado(request)
+    if error:
+        return error
+
+    try:
+        serie = [
+            {campo: p[campo] for campo in ('periodo', 'pps', 'ppa', 'creditos_cursados', 'creditos_aprobados')}
+            for p in serie_promedios_por_periodo(estudiante)
+            if p['pps'] is not None
+        ]
+        respuesta = {
+            'serie': serie,
+            'promedio_actual': serie[-1]['ppa'] if serie else None,
+            'variacion': None,
+            'tendencia': None,
+            'historia_suficiente': len(serie) >= 2,
+            'mensaje': None,
+        }
+
+        if not serie:
+            respuesta['mensaje'] = (
+                'Aún no tienes periodos con notas definitivas. Tu evolución aparecerá '
+                'cuando termines tu primer semestre.'
+            )
+        elif len(serie) == 1:
+            respuesta['mensaje'] = (
+                'Tienes un solo periodo con notas definitivas. La tendencia aparecerá '
+                'cuando tengas más semestres registrados.'
+            )
+        else:
+            tendencia = tendencia_promedio(serie[-1]['ppa'], serie[-2]['ppa'])
+            respuesta['variacion'] = {'valor': tendencia['valor'], 'porcentaje': tendencia['porcentaje']}
+            respuesta['tendencia'] = TENDENCIA_TEXTO[tendencia['direccion']]
+        return JsonResponse(respuesta)
+    except Exception:
+        logger.exception("Error al consultar la evolución del estudiante %s", estudiante.codigo)
+        return JsonResponse({'error': 'No fue posible consultar tu evolución académica.'}, status=500)

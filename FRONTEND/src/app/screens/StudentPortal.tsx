@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, BookOpen, CheckCircle2, GraduationCap, Info, TrendingUp, XCircle } from 'lucide-react';
+import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
+import {
+  AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, BookOpen, CheckCircle2, GraduationCap, Info,
+  LineChart as IconoLinea, TrendingUp, XCircle,
+} from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
+import { type ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '../components/ui/chart';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
 const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -35,6 +41,25 @@ interface RiesgoPropio {
     creditos_aprobados: number;
   };
 }
+
+interface PuntoEvolucion {
+  periodo: string;
+  pps: number;
+  ppa: number;
+  creditos_cursados: number;
+  creditos_aprobados: number;
+}
+
+interface Evolucion {
+  serie: PuntoEvolucion[];
+  promedio_actual: number | null;
+  variacion: { valor: number; porcentaje: number } | null;
+  tendencia: 'sube' | 'baja' | 'estable' | null;
+  historia_suficiente: boolean;
+  mensaje: string | null;
+}
+
+const NOTA_APROBATORIA = 3.0;
 
 const ESTILO_NIVEL: Record<Nivel, { tarjeta: string; texto: string; icono: string; consejo: string }> = {
   high: {
@@ -198,9 +223,154 @@ function Indicadores({ indicadores }: { indicadores: RiesgoPropio['indicadores']
   );
 }
 
+const configGrafica = {
+  pps: { label: 'Promedio del semestre (PPS)', color: '#2563eb' },
+  ppa: { label: 'Promedio acumulado (PPA)', color: '#C8102E' },
+} satisfies ChartConfig;
+
+const TENDENCIA: Record<NonNullable<Evolucion['tendencia']>, { icono: React.ElementType; color: string; verbo: string }> = {
+  sube: { icono: ArrowUpRight, color: 'text-green-700 bg-green-50 border-green-200', verbo: 'subió' },
+  baja: { icono: ArrowDownRight, color: 'text-red-700 bg-red-50 border-red-200', verbo: 'bajó' },
+  estable: { icono: ArrowRight, color: 'text-gray-700 bg-gray-50 border-gray-200', verbo: 'se mantuvo estable' },
+};
+
+function FraseTendencia({ evolucion }: { evolucion: Evolucion }) {
+  if (!evolucion.tendencia || !evolucion.variacion) return null;
+  const { icono: Icono, color, verbo } = TENDENCIA[evolucion.tendencia];
+  const { valor, porcentaje } = evolucion.variacion;
+  const cambio = evolucion.tendencia === 'estable'
+    ? ''
+    : ` ${Math.abs(valor).toFixed(2)} puntos (${porcentaje.toFixed(1)} %)`;
+  return (
+    <p className={`flex items-center gap-2 text-sm border rounded-lg px-3 py-2 ${color}`}>
+      <Icono className="w-4 h-4 shrink-0" />
+      Tu promedio acumulado {verbo}{cambio} respecto al periodo anterior y hoy es {numero(evolucion.promedio_actual)}.
+    </p>
+  );
+}
+
+function TablaEvolucion({ serie }: { serie: PuntoEvolucion[] }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Periodo</TableHead>
+          <TableHead className="text-right">PPS</TableHead>
+          <TableHead className="text-right">PPA</TableHead>
+          <TableHead className="text-right">Créditos cursados</TableHead>
+          <TableHead className="text-right">Créditos aprobados</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {serie.map((p) => (
+          <TableRow key={p.periodo}>
+            <TableCell className="font-medium">{p.periodo}</TableCell>
+            <TableCell className={`text-right ${p.pps < NOTA_APROBATORIA ? 'text-red-600 font-semibold' : ''}`}>{numero(p.pps)}</TableCell>
+            <TableCell className={`text-right ${p.ppa < NOTA_APROBATORIA ? 'text-red-600 font-semibold' : ''}`}>{numero(p.ppa)}</TableCell>
+            <TableCell className="text-right">{p.creditos_cursados}</TableCell>
+            <TableCell className="text-right">{p.creditos_aprobados}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+/** HU-38: evolución del PPS y el PPA por periodo. */
+function EvolucionAcademica() {
+  const [evolucion, setEvolucion] = useState<Evolucion | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let activo = true;
+    apiFetch(`${baseUrl}/api/portal/evolucion/`)
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'No fue posible consultar tu evolución académica.');
+        if (activo) setEvolucion(json);
+      })
+      .catch((e: Error) => activo && setError(e.message));
+    return () => {
+      activo = false;
+    };
+  }, []);
+
+  let contenido: React.ReactNode;
+  if (error) {
+    contenido = <p role="alert" className="text-sm text-red-700">{error}</p>;
+  } else if (!evolucion) {
+    contenido = <p className="text-sm text-gray-500">Cargando tu evolución…</p>;
+  } else if (evolucion.serie.length === 0) {
+    contenido = (
+      <div className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-gray-100 rounded-xl text-gray-500">
+        <IconoLinea className="w-8 h-8 mb-2 opacity-40" />
+        <p className="text-sm">{evolucion.mensaje}</p>
+      </div>
+    );
+  } else if (!evolucion.historia_suficiente) {
+    const [unico] = evolucion.serie;
+    contenido = (
+      <div className="space-y-4">
+        <p className="flex items-start gap-2 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+          <Info className="w-4 h-4 mt-0.5 shrink-0 text-gray-400" />
+          {evolucion.mensaje}
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[
+            ['Periodo', unico.periodo],
+            ['PPS', numero(unico.pps)],
+            ['PPA', numero(unico.ppa)],
+            ['Créditos aprobados', `${unico.creditos_aprobados} de ${unico.creditos_cursados}`],
+          ].map(([titulo, valor]) => (
+            <div key={titulo} className="border border-gray-100 rounded-lg p-3">
+              <p className="text-xs text-gray-500">{titulo}</p>
+              <p className="text-lg font-bold text-gray-900">{valor}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  } else {
+    contenido = (
+      <div className="space-y-5">
+        <ChartContainer config={configGrafica} className="aspect-auto h-72 w-full">
+          <LineChart data={evolucion.serie} margin={{ top: 10, right: 16, left: -16, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="periodo" tickLine={false} axisLine={false} dy={8} />
+            <YAxis domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} tickLine={false} axisLine={false} />
+            <ChartTooltip content={<ChartTooltipContent />} />
+            <ChartLegend content={<ChartLegendContent />} />
+            <ReferenceLine
+              y={NOTA_APROBATORIA}
+              stroke="#9ca3af"
+              strokeDasharray="4 4"
+              label={{ value: 'Nota aprobatoria (3.0)', position: 'insideBottomRight', fontSize: 11, fill: '#6b7280' }}
+            />
+            <Line type="monotone" dataKey="pps" stroke="var(--color-pps)" strokeWidth={2} dot={{ r: 4 }} />
+            <Line type="monotone" dataKey="ppa" stroke="var(--color-ppa)" strokeWidth={3} dot={{ r: 4 }} />
+          </LineChart>
+        </ChartContainer>
+        <FraseTendencia evolucion={evolucion} />
+        <TablaEvolucion serie={evolucion.serie} />
+      </div>
+    );
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+      <h2 className="text-lg font-semibold text-gray-900">Mi evolución académica</h2>
+      <p className="text-sm text-gray-500 mb-4">
+        Tu promedio de cada semestre (PPS) y tu promedio acumulado (PPA). Los semestres con materias aún en curso
+        aparecen cuando tienen notas definitivas.
+      </p>
+      {contenido}
+    </section>
+  );
+}
+
 /**
- * Portal del estudiante: inicio con su nivel de riesgo actual (HU-37).
- * Las HU-38 a HU-42 (evolución del promedio, alertas, intervenciones,
+ * Portal del estudiante: inicio con su nivel de riesgo actual (HU-37) y la
+ * evolución de su promedio (HU-38). Las HU-39 a HU-42 (alertas, intervenciones,
  * solicitud de acompañamiento y asistencia) agregan aquí su sección o una
  * ruta hija de /dashboard/portal, siempre con datos de /api/portal/.
  */
@@ -243,6 +413,7 @@ export default function StudentPortal() {
 
       <TarjetaRiesgo datos={datos} />
       <Causas causas={datos.causas} nivel={datos.riesgo.nivel} />
+      <EvolucionAcademica />
       <Indicadores indicadores={datos.indicadores} />
     </div>
   );
