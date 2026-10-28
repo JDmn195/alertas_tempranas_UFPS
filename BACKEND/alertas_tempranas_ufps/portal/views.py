@@ -16,11 +16,12 @@ from django.views.decorators.http import require_GET
 from academico.models import Materia, Nota
 from academico.services.historial_promedios import serie_promedios_por_periodo, tendencia_promedio
 from alertas.evaluacion import NOTA_APROBATORIA, calcular_indicadores, calcular_ppa
-from alertas.models import Alerta, Regla, RiesgoEstudiante
+from alertas.models import Alerta, Intervencion, Regla, RiesgoEstudiante
 from usuarios.decorators import obtener_estudiante_autenticado, requiere_rol
 from usuarios.utils import registrar_auditoria
 
 from .alertas import ESTADOS, serializar_alerta
+from .intervenciones import ESTADOS as ESTADOS_INTERVENCION, serializar_intervencion
 
 logger = logging.getLogger(__name__)
 
@@ -325,7 +326,131 @@ def detalle_alerta_propia(request, alerta_id):
         return JsonResponse({'error': 'Alerta no encontrada.'}, status=404)
 
     try:
-        return JsonResponse(serializar_alerta(alerta, detalle=True))
+        data = serializar_alerta(alerta, detalle=True)
+        # HU-40: el acompañamiento de la alerta, con el mismo serializador del portal
+        data['intervenciones'] = [
+            serializar_intervencion(i)
+            for i in alerta.intervencion_set.select_related('usuario', 'alerta__regla').order_by('-fecha', '-id')
+        ]
+        return JsonResponse(data)
     except Exception:
         logger.exception("Error al consultar la alerta %s del estudiante %s", alerta_id, estudiante.codigo)
         return JsonResponse({'error': 'No fue posible consultar la alerta.'}, status=500)
+
+
+def _filtros_intervenciones(params, estudiante):
+    """Valida los filtros del acompañamiento. Retorna (filtros, errores)."""
+    filtros, errores = {}, {}
+    estado = (params.get('estado') or '').strip().lower()
+    periodo = (params.get('periodo') or '').strip()
+    alerta = (params.get('alerta') or '').strip()
+
+    if estado:
+        if estado in ESTADOS_INTERVENCION:
+            filtros['estado'] = estado
+        else:
+            errores['estado'] = f"Estado no válido. Use uno de: {', '.join(ESTADOS_INTERVENCION)}."
+    if periodo:
+        if PATRON_PERIODO.match(periodo):
+            filtros['periodo'] = periodo
+        else:
+            errores['periodo'] = 'Periodo no válido. Use el formato AAAA-S (por ejemplo, 2026-1).'
+    if alerta:
+        # Una alerta inexistente y una ajena reciben el mismo mensaje: no se revela si existe
+        if alerta.isdigit() and Alerta.objects.filter(id=int(alerta), estudiante=estudiante).exists():
+            filtros['alerta'] = int(alerta)
+        else:
+            errores['alerta'] = 'La alerta indicada no está entre tus alertas.'
+    return filtros, errores
+
+
+@require_GET
+@requiere_rol(['ESTUDIANTE'])
+def intervenciones_propias(request):
+    """
+    GET /api/portal/intervenciones/?estado=&periodo=&alerta=  (HU-40)
+    Intervenciones registradas sobre las alertas del estudiante autenticado, de la
+    más reciente a la más antigua. El periodo es el de la alerta (solo las alertas
+    por curso tienen periodo).
+    """
+    estudiante, error = obtener_estudiante_autenticado(request)
+    if error:
+        return error
+
+    filtros, errores = _filtros_intervenciones(request.GET, estudiante)
+    if errores:
+        return JsonResponse({'error': 'Filtros no válidos.', 'detalle': errores}, status=400)
+
+    try:
+        propias = Intervencion.objects.filter(alerta__estudiante=estudiante)
+        qs = propias
+        if 'estado' in filtros:
+            qs = qs.filter(concluida=ESTADOS_INTERVENCION[filtros['estado']])
+        if 'periodo' in filtros:
+            qs = qs.filter(alerta__metadata__periodo=filtros['periodo'],
+                           alerta__regla__tipo__in=('CORTE', 'INASISTENCIA'))
+        if 'alerta' in filtros:
+            qs = qs.filter(alerta_id=filtros['alerta'])
+
+        conteos = {clave: propias.filter(concluida=valor).count() for clave, valor in ESTADOS_INTERVENCION.items()}
+        conteos['total'] = propias.count()
+        periodos = sorted(
+            {
+                p for p in propias.filter(alerta__regla__tipo__in=('CORTE', 'INASISTENCIA'))
+                .values_list('alerta__metadata__periodo', flat=True) if p
+            },
+            reverse=True,
+        )
+
+        intervenciones = [
+            serializar_intervencion(i)
+            for i in qs.select_related('usuario', 'alerta__regla').order_by('-fecha', '-id')
+        ]
+        mensaje = None
+        if not conteos['total']:
+            mensaje = 'Aún no hay acompañamientos registrados sobre tu caso.'
+        elif not intervenciones:
+            mensaje = 'Ningún acompañamiento coincide con los filtros seleccionados.'
+
+        return JsonResponse({
+            'intervenciones': intervenciones,
+            'conteos': conteos,
+            'periodos': periodos,
+            'filtros': filtros,
+            'mensaje': mensaje,
+        })
+    except Exception:
+        logger.exception("Error al consultar el acompañamiento del estudiante %s", estudiante.codigo)
+        return JsonResponse({'error': 'No fue posible consultar tu acompañamiento.'}, status=500)
+
+
+@require_GET
+@requiere_rol(['ESTUDIANTE'])
+def detalle_intervencion_propia(request, intervencion_id):
+    """
+    GET /api/portal/intervenciones/<id>/  (HU-40)
+    Detalle de una intervención de una alerta del estudiante autenticado. Si no
+    existe o es de otro estudiante responde 404 y el intento queda en la auditoría.
+    """
+    estudiante, error = obtener_estudiante_autenticado(request)
+    if error:
+        return error
+
+    intervencion = (
+        Intervencion.objects.select_related('usuario', 'alerta__regla').filter(id=intervencion_id).first()
+    )
+    if intervencion is None or intervencion.alerta.estudiante_id != estudiante.codigo:
+        situacion = ('que no existe' if intervencion is None
+                     else f'de una alerta del estudiante {intervencion.alerta.estudiante_id}')
+        registrar_auditoria(
+            request.usuario, 'ACCESO_DENEGADO',
+            f"El estudiante {estudiante.codigo} intentó consultar en el portal la intervención ID "
+            f"{intervencion_id}, {situacion}",
+        )
+        return JsonResponse({'error': 'Intervención no encontrada.'}, status=404)
+
+    try:
+        return JsonResponse(serializar_intervencion(intervencion))
+    except Exception:
+        logger.exception("Error al consultar la intervención %s del estudiante %s", intervencion_id, estudiante.codigo)
+        return JsonResponse({'error': 'No fue posible consultar la intervención.'}, status=500)

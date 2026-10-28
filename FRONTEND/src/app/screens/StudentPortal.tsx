@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
 import {
-  AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, BookOpen, CheckCircle2, ChevronRight, GraduationCap,
-  Info, Lightbulb, LineChart as IconoLinea, SearchX, TrendingUp, XCircle,
+  AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, BookOpen, CheckCircle2, ChevronRight, Clock,
+  GraduationCap, HeartHandshake, Info, Lightbulb, LineChart as IconoLinea, SearchX, TrendingUp, XCircle,
 } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 import { type ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '../components/ui/chart';
@@ -86,6 +86,28 @@ interface DetalleAlerta extends AlertaPortal {
     datos: { etiqueta: string; valor: string }[];
   };
   cierre: { automatico: boolean; motivo: string | null; fecha: string | null; mensaje: string } | null;
+  intervenciones: IntervencionPortal[];
+}
+
+type EstadoIntervencion = 'en_curso' | 'concluida';
+
+interface IntervencionPortal {
+  id: number;
+  tipo: 'TUTORIA' | 'CITACION' | 'REMISION';
+  tipo_texto: string;
+  fecha: string;
+  estado: EstadoIntervencion;
+  estado_texto: string;
+  resultado: string | null;
+  responsable: string | null;
+  alerta: { id: number; tipo: string; materia: string | null; periodo: string | null };
+}
+
+interface ListadoIntervenciones {
+  intervenciones: IntervencionPortal[];
+  conteos: Record<EstadoIntervencion | 'total', number>;
+  periodos: string[];
+  mensaje: string | null;
 }
 
 interface ListadoAlertas {
@@ -521,6 +543,18 @@ function ModalAlerta({ alertaId, onCerrar }: { alertaId: number | null; onCerrar
           </dl>
         )}
 
+        {detalle.intervenciones.length > 0 && (
+          <p className="flex items-start gap-2 text-sm text-gray-700">
+            <HeartHandshake className="w-4 h-4 mt-0.5 shrink-0 text-[#C8102E]" />
+            <span>
+              {detalle.intervenciones.length === 1
+                ? 'Se ha registrado 1 acompañamiento sobre esta alerta.'
+                : `Se han registrado ${detalle.intervenciones.length} acompañamientos sobre esta alerta.`}{' '}
+              Puedes verlos en «Mi acompañamiento».
+            </span>
+          </p>
+        )}
+
         {detalle.cierre ? (
           <p className="flex items-start gap-2 text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
             <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
@@ -676,11 +710,257 @@ function MisAlertas() {
   );
 }
 
+const DESCRIPCION_TIPO: Record<IntervencionPortal['tipo'], string> = {
+  TUTORIA: 'Un espacio de apoyo académico para reforzar los temas en los que tienes dificultad.',
+  CITACION: 'Un encuentro para conversar sobre tu situación académica y acordar los siguientes pasos.',
+  REMISION: 'Tu caso se dirigió a un área de la universidad que puede apoyarte de forma especializada.',
+};
+
+const INSIGNIA_ESTADO_INTERVENCION: Record<EstadoIntervencion, string> = {
+  en_curso: 'bg-indigo-50 text-indigo-700',
+  concluida: 'bg-green-50 text-green-700',
+};
+
+const alertaTexto = (alerta: IntervencionPortal['alerta']) =>
+  alerta.materia ? `${alerta.tipo} · ${alerta.materia}` : alerta.tipo;
+
+function InsigniaEstadoIntervencion({ intervencion }: { intervencion: IntervencionPortal }) {
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${INSIGNIA_ESTADO_INTERVENCION[intervencion.estado]}`}>
+      {intervencion.estado_texto}
+    </span>
+  );
+}
+
+function ModalIntervencion({ intervencionId, onCerrar }: { intervencionId: number | null; onCerrar: () => void }) {
+  const [detalle, setDetalle] = useState<IntervencionPortal | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (intervencionId === null) return;
+    let activo = true;
+    setDetalle(null);
+    setError(null);
+    apiFetch(`${baseUrl}/api/portal/intervenciones/${intervencionId}/`)
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'No fue posible consultar el acompañamiento.');
+        if (activo) setDetalle(json);
+      })
+      .catch((e: Error) => activo && setError(e.message));
+    return () => {
+      activo = false;
+    };
+  }, [intervencionId]);
+
+  let contenido: React.ReactNode;
+  if (error) {
+    contenido = (
+      <>
+        <DialogHeader>
+          <DialogTitle>Acompañamiento</DialogTitle>
+        </DialogHeader>
+        <p role="alert" className="text-sm text-red-700">{error}</p>
+      </>
+    );
+  } else if (!detalle) {
+    contenido = (
+      <DialogHeader>
+        <DialogTitle>Acompañamiento</DialogTitle>
+        <DialogDescription>Cargando…</DialogDescription>
+      </DialogHeader>
+    );
+  } else {
+    contenido = (
+      <>
+        <DialogHeader>
+          <DialogTitle className="pr-6">{detalle.tipo_texto}</DialogTitle>
+          <DialogDescription>{DESCRIPCION_TIPO[detalle.tipo] ?? 'Acompañamiento registrado sobre tu caso.'}</DialogDescription>
+        </DialogHeader>
+        <div>
+          <InsigniaEstadoIntervencion intervencion={detalle} />
+        </div>
+        <dl className="border border-gray-100 rounded-lg divide-y divide-gray-100 text-sm">
+          {[
+            ['Fecha', fecha(detalle.fecha)],
+            ['Responsable', detalle.responsable ?? 'Equipo de acompañamiento'],
+            ['Alerta relacionada', alertaTexto(detalle.alerta)],
+            ...(detalle.alerta.periodo ? [['Periodo', detalle.alerta.periodo]] : []),
+          ].map(([etiqueta, valor]) => (
+            <div key={etiqueta} className="flex justify-between gap-4 px-3 py-2">
+              <dt className="text-gray-500">{etiqueta}</dt>
+              <dd className="text-gray-900 font-medium text-right">{valor}</dd>
+            </div>
+          ))}
+        </dl>
+        <section>
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">Resultado</h3>
+          {detalle.resultado ? (
+            <p className="text-sm text-gray-700">{detalle.resultado}</p>
+          ) : (
+            <p className="text-sm text-gray-500">
+              {detalle.estado === 'concluida'
+                ? 'Este acompañamiento concluyó sin un resultado registrado.'
+                : 'Este acompañamiento sigue en curso. El resultado aparecerá cuando se registre.'}
+            </p>
+          )}
+        </section>
+      </>
+    );
+  }
+
+  return (
+    <Dialog open={intervencionId !== null} onOpenChange={(abierto) => !abierto && onCerrar()}>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">{contenido}</DialogContent>
+    </Dialog>
+  );
+}
+
+/** HU-40: intervenciones (acompañamiento) registradas sobre las alertas del estudiante. */
+function MiAcompanamiento() {
+  const [listado, setListado] = useState<ListadoIntervenciones | null>(null);
+  const [estado, setEstado] = useState('');
+  const [periodo, setPeriodo] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [seleccionada, setSeleccionada] = useState<number | null>(null);
+
+  useEffect(() => {
+    let activo = true;
+    const params = new URLSearchParams();
+    if (estado) params.set('estado', estado);
+    if (periodo) params.set('periodo', periodo);
+    const query = params.toString();
+    setError(null);
+    apiFetch(`${baseUrl}/api/portal/intervenciones/${query ? `?${query}` : ''}`)
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'No fue posible consultar tu acompañamiento.');
+        if (activo) setListado(json);
+      })
+      .catch((e: Error) => activo && setError(e.message));
+    return () => {
+      activo = false;
+    };
+  }, [estado, periodo]);
+
+  const quitarFiltros = () => {
+    setEstado('');
+    setPeriodo('');
+  };
+  const claseSelect = 'px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm';
+
+  let contenido: React.ReactNode;
+  if (error) {
+    contenido = <p role="alert" className="text-sm text-red-700">{error}</p>;
+  } else if (!listado) {
+    contenido = <p className="text-sm text-gray-500">Cargando tu acompañamiento…</p>;
+  } else if (listado.conteos.total === 0) {
+    contenido = (
+      <div className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-gray-100 rounded-xl text-gray-500">
+        <HeartHandshake className="w-8 h-8 mb-2 opacity-40" />
+        <p className="text-sm">Aún no hay acompañamientos registrados sobre tu caso.</p>
+        <p className="text-xs mt-1">
+          Cuando un docente o Bienestar Universitario realice una tutoría, citación o remisión, la verás aquí.
+        </p>
+      </div>
+    );
+  } else if (listado.intervenciones.length === 0) {
+    contenido = (
+      <div className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-gray-100 rounded-xl text-gray-500">
+        <SearchX className="w-8 h-8 mb-2 opacity-40" />
+        <p className="text-sm">Ningún acompañamiento coincide con los filtros seleccionados.</p>
+        <button type="button" onClick={quitarFiltros} className="mt-3 text-sm font-medium text-[#C8102E] hover:underline">
+          Quitar filtros
+        </button>
+      </div>
+    );
+  } else {
+    contenido = (
+      <ol className="relative border-l-2 border-gray-100 ml-3 space-y-4">
+        {listado.intervenciones.map((intervencion) => (
+          <li key={intervencion.id} className="ml-5">
+            <span
+              className={`absolute -left-[9px] mt-4 w-4 h-4 rounded-full border-2 border-white ${
+                intervencion.estado === 'concluida' ? 'bg-green-500' : 'bg-indigo-500'
+              }`}
+            />
+            <button
+              type="button"
+              onClick={() => setSeleccionada(intervencion.id)}
+              className="w-full text-left border border-gray-100 rounded-lg px-4 py-3 flex items-center gap-3 hover:bg-gray-50 focus:outline-none focus:bg-gray-50"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-medium text-gray-900">{intervencion.tipo_texto}</p>
+                  <InsigniaEstadoIntervencion intervencion={intervencion} />
+                </div>
+                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {fecha(intervencion.fecha)}
+                  {intervencion.responsable && <> · {intervencion.responsable}</>}
+                </p>
+                <p className="text-xs text-gray-500 truncate mt-0.5">Alerta: {alertaTexto(intervencion.alerta)}</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+            </button>
+          </li>
+        ))}
+      </ol>
+    );
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+      <div className="flex items-center gap-2">
+        <HeartHandshake className="w-5 h-5 text-gray-500" />
+        <h2 className="text-lg font-semibold text-gray-900">Mi acompañamiento</h2>
+      </div>
+      <p className="text-sm text-gray-500 mb-4">
+        El seguimiento que la universidad ha dado a tu caso: tutorías, citaciones y remisiones registradas sobre tus
+        alertas, con su responsable y su resultado.
+      </p>
+
+      {listado && listado.conteos.total > 0 && (
+        <div className="flex flex-wrap items-end gap-3 mb-4">
+          <label className="text-xs text-gray-600">
+            <span className="block mb-1">Estado</span>
+            <select value={estado} onChange={(e) => setEstado(e.target.value)} className={claseSelect}>
+              <option value="">Todos ({listado.conteos.total})</option>
+              <option value="en_curso">En curso ({listado.conteos.en_curso})</option>
+              <option value="concluida">Concluidos ({listado.conteos.concluida})</option>
+            </select>
+          </label>
+          <label className="text-xs text-gray-600">
+            <span className="block mb-1">Periodo</span>
+            <select value={periodo} onChange={(e) => setPeriodo(e.target.value)} className={claseSelect}>
+              <option value="">Todos</option>
+              {listado.periodos.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </label>
+          {periodo && (
+            <p className="text-xs text-gray-500 pb-2">El periodo aplica a los acompañamientos de alertas de una materia.</p>
+          )}
+          {(estado || periodo) && listado.intervenciones.length > 0 && (
+            <button type="button" onClick={quitarFiltros} className="text-sm font-medium text-[#C8102E] hover:underline pb-2">
+              Quitar filtros
+            </button>
+          )}
+        </div>
+      )}
+
+      {contenido}
+      <ModalIntervencion intervencionId={seleccionada} onCerrar={() => setSeleccionada(null)} />
+    </section>
+  );
+}
+
 /**
  * Portal del estudiante: inicio con su nivel de riesgo actual (HU-37), la
- * evolución de su promedio (HU-38) y sus alertas (HU-39). Las HU-40 a HU-42
- * (intervenciones, solicitud de acompañamiento y asistencia) agregan aquí su
- * sección o una ruta hija de /dashboard/portal, siempre con datos de /api/portal/.
+ * evolución de su promedio (HU-38), sus alertas (HU-39) y su acompañamiento
+ * (HU-40). Las HU-41 y HU-42 (solicitud de acompañamiento y asistencia) agregan
+ * aquí su sección o una ruta hija de /dashboard/portal, siempre con datos de /api/portal/.
  */
 export default function StudentPortal() {
   const [datos, setDatos] = useState<RiesgoPropio | null>(null);
@@ -723,6 +1003,7 @@ export default function StudentPortal() {
       <Causas causas={datos.causas} nivel={datos.riesgo.nivel} />
       <EvolucionAcademica />
       <MisAlertas />
+      <MiAcompanamiento />
       <Indicadores indicadores={datos.indicadores} />
     </div>
   );
