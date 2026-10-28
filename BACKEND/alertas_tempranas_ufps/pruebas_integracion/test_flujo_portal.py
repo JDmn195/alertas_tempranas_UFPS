@@ -9,6 +9,7 @@ from django.core import mail
 from django.urls import reverse
 
 from academico.models import Estudiante
+from alertas.models import Alerta
 from usuarios.models import Auditoria, Usuario
 
 from .base import CONTRASENA, IntegracionTestCase
@@ -111,3 +112,59 @@ class FlujoEvolucionPromedioTests(IntegracionTestCase):
 
         ficha = self.api('get', 'student-indicators', self.admin, args=[self.estudiante.codigo]).json()
         self.assertEqual(ficha['indicadores']['promedio_acumulado'], data['promedio_actual'])
+
+
+class FlujoAlertasPortalTests(IntegracionTestCase):
+    """HU-39: el estudiante inicia sesión, lista sus alertas, abre una propia y no puede abrir una ajena."""
+
+    def test_estudiante_consulta_sus_alertas(self):
+        cuenta = self._usuario('Ana Pérez', 'ana@ufps.edu.co', 'ESTUDIANTE')
+        self.estudiante.usuario = cuenta
+        self.estudiante.save(update_fields=['usuario'])
+        otro = Estudiante.objects.create(
+            codigo='1152002', nombre='Luis Gómez', tipo_documento='CC', numero_documento='100200301',
+            semestre=2, estado_matricula='ACTIVO', email_institucional='luis@ufps.edu.co',
+        )
+
+        # 1. Inicia sesión; aún no tiene alertas
+        resp = self.login(cuenta)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()['rol'], 'ESTUDIANTE')
+        data = self.api('get', 'portal-alertas', cuenta).json()
+        self.assertEqual(data['alertas'], [])
+        self.assertIn('No tienes alertas', data['mensaje'])
+
+        # 2. Se importan los historiales de ambos: PPA 2.0 (PROMEDIO) y cortes de Cálculo I (C1, C2A, C4)
+        for codigo in (self.estudiante.codigo, otro.codigo):
+            resp = self.importar_historial(self.historial_en_riesgo(), codigo=codigo)
+            self.assertEqual(resp.status_code, 200, resp.content)
+
+        resp = self.api('get', 'portal-alertas', cuenta)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        propias = set(Alerta.objects.filter(estudiante=self.estudiante).values_list('id', flat=True))
+        ajenas = set(Alerta.objects.filter(estudiante=otro).values_list('id', flat=True))
+        self.assertTrue(ajenas)
+        self.assertEqual({a['id'] for a in data['alertas']}, propias)
+        self.assertEqual({a['categoria'] for a in data['alertas']}, {'PROMEDIO', 'CORTE'})
+        self.assertEqual(data['conteos']['activa'], len(propias))
+        self.assertEqual(data['periodos'], ['2026-1'])
+
+        # 3. Filtra por tipo y abre el detalle de la alerta C4
+        cortes = self.api('get', 'portal-alertas', cuenta, query={'tipo': 'CORTE', 'periodo': '2026-1'}).json()
+        self.assertEqual(len(cortes['alertas']), 3)
+        c4 = next(a for a in cortes['alertas'] if a['tipo'].startswith('Materia perdida'))
+        resp = self.api('get', 'portal-alerta-detalle', cuenta, args=[c4['id']])
+        self.assertEqual(resp.status_code, 200)
+        detalle = resp.json()
+        self.assertEqual(detalle['explicacion']['valores']['nota_necesaria'], 5.33)
+        self.assertEqual(detalle['materia'], 'Cálculo I')
+        self.assertIn('5.33', detalle['explicacion']['mensaje'])
+
+        # 4. Intenta abrir una alerta de Luis: 404 sin datos y queda en la auditoría
+        ajena = next(iter(ajenas))
+        resp = self.api('get', 'portal-alerta-detalle', cuenta, args=[ajena])
+        self.assertEqual(resp.status_code, 404)
+        self.assertNotIn('Luis', resp.content.decode())
+        registro = Auditoria.objects.get(usuario=cuenta, tipo_accion='ACCESO_DENEGADO')
+        self.assertIn(f'alerta ID {ajena}', registro.detalle)

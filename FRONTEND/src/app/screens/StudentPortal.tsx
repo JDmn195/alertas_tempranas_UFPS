@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
 import {
-  AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, BookOpen, CheckCircle2, GraduationCap, Info,
-  LineChart as IconoLinea, TrendingUp, XCircle,
+  AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, BookOpen, CheckCircle2, ChevronRight, GraduationCap,
+  Info, Lightbulb, LineChart as IconoLinea, SearchX, TrendingUp, XCircle,
 } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 import { type ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '../components/ui/chart';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
 const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -56,6 +57,41 @@ interface Evolucion {
   variacion: { valor: number; porcentaje: number } | null;
   tendencia: 'sube' | 'baja' | 'estable' | null;
   historia_suficiente: boolean;
+  mensaje: string | null;
+}
+
+type EstadoAlerta = 'activa' | 'en_seguimiento' | 'atendida' | 'cerrada';
+
+interface AlertaPortal {
+  id: number;
+  tipo: string;
+  categoria: 'PROMEDIO' | 'REPROBACION' | 'ATRASO' | 'CORTE' | 'INASISTENCIA';
+  origen: 'general' | 'corte' | 'inasistencia';
+  severidad: Nivel;
+  severidad_texto: string;
+  estado: EstadoAlerta;
+  estado_texto: string;
+  fecha_generacion: string;
+  fecha_cierre: string | null;
+  cierre_automatico: boolean;
+  periodo: string | null;
+  materia: string | null;
+  resumen: string;
+}
+
+interface DetalleAlerta extends AlertaPortal {
+  explicacion: {
+    mensaje: string;
+    recomendacion: string;
+    datos: { etiqueta: string; valor: string }[];
+  };
+  cierre: { automatico: boolean; motivo: string | null; fecha: string | null; mensaje: string } | null;
+}
+
+interface ListadoAlertas {
+  alertas: AlertaPortal[];
+  conteos: Record<EstadoAlerta | 'total', number>;
+  periodos: string[];
   mensaje: string | null;
 }
 
@@ -368,11 +404,283 @@ function EvolucionAcademica() {
   );
 }
 
+const INSIGNIA_SEVERIDAD: Record<Nivel, string> = {
+  high: 'bg-red-50 text-red-700 border-red-200',
+  medium: 'bg-amber-50 text-amber-700 border-amber-200',
+  low: 'bg-blue-50 text-blue-700 border-blue-200',
+};
+
+const INSIGNIA_ESTADO: Record<EstadoAlerta, string> = {
+  activa: 'bg-orange-50 text-orange-700',
+  en_seguimiento: 'bg-indigo-50 text-indigo-700',
+  atendida: 'bg-green-50 text-green-700',
+  cerrada: 'bg-gray-100 text-gray-600',
+};
+
+const OPCIONES_ESTADO: { valor: EstadoAlerta; texto: string }[] = [
+  { valor: 'activa', texto: 'Activas' },
+  { valor: 'en_seguimiento', texto: 'En seguimiento' },
+  { valor: 'atendida', texto: 'Atendidas' },
+  { valor: 'cerrada', texto: 'Cerradas' },
+];
+
+const fecha = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString('es-CO', { dateStyle: 'long' }) : '—';
+
+function InsigniaSeveridad({ alerta }: { alerta: AlertaPortal }) {
+  return (
+    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${INSIGNIA_SEVERIDAD[alerta.severidad] ?? ''}`}>
+      Severidad {alerta.severidad_texto.toLowerCase()}
+    </span>
+  );
+}
+
+function InsigniaEstado({ alerta }: { alerta: AlertaPortal }) {
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${INSIGNIA_ESTADO[alerta.estado] ?? 'bg-gray-100 text-gray-600'}`}>
+      {alerta.estado_texto}
+    </span>
+  );
+}
+
+function ModalAlerta({ alertaId, onCerrar }: { alertaId: number | null; onCerrar: () => void }) {
+  const [detalle, setDetalle] = useState<DetalleAlerta | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (alertaId === null) return;
+    let activo = true;
+    setDetalle(null);
+    setError(null);
+    apiFetch(`${baseUrl}/api/portal/alertas/${alertaId}/`)
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'No fue posible consultar la alerta.');
+        if (activo) setDetalle(json);
+      })
+      .catch((e: Error) => activo && setError(e.message));
+    return () => {
+      activo = false;
+    };
+  }, [alertaId]);
+
+  let contenido: React.ReactNode;
+  if (error) {
+    contenido = (
+      <>
+        <DialogHeader>
+          <DialogTitle>Detalle de la alerta</DialogTitle>
+        </DialogHeader>
+        <p role="alert" className="text-sm text-red-700">{error}</p>
+      </>
+    );
+  } else if (!detalle) {
+    contenido = (
+      <DialogHeader>
+        <DialogTitle>Detalle de la alerta</DialogTitle>
+        <DialogDescription>Cargando…</DialogDescription>
+      </DialogHeader>
+    );
+  } else {
+    contenido = (
+      <>
+        <DialogHeader>
+          <DialogTitle className="pr-6">{detalle.tipo}</DialogTitle>
+          <DialogDescription>{detalle.resumen}</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-wrap items-center gap-2">
+          <InsigniaSeveridad alerta={detalle} />
+          <InsigniaEstado alerta={detalle} />
+        </div>
+        <dl className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <dt className="text-xs text-gray-500">Registrada el</dt>
+            <dd className="text-gray-900">{fecha(detalle.fecha_generacion)}</dd>
+          </div>
+          {detalle.estado === 'cerrada' && (
+            <div>
+              <dt className="text-xs text-gray-500">Cerrada el</dt>
+              <dd className="text-gray-900">{detalle.fecha_cierre ? fecha(detalle.fecha_cierre) : 'Fecha no registrada'}</dd>
+            </div>
+          )}
+        </dl>
+
+        <section>
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">¿Qué significa?</h3>
+          <p className="text-sm text-gray-700">{detalle.explicacion.mensaje}</p>
+        </section>
+
+        {detalle.explicacion.datos.length > 0 && (
+          <dl className="border border-gray-100 rounded-lg divide-y divide-gray-100 text-sm">
+            {detalle.explicacion.datos.map((d) => (
+              <div key={d.etiqueta} className="flex justify-between gap-4 px-3 py-2">
+                <dt className="text-gray-500">{d.etiqueta}</dt>
+                <dd className="text-gray-900 font-medium text-right">{d.valor}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+
+        {detalle.cierre ? (
+          <p className="flex items-start gap-2 text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+            <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>{detalle.cierre.mensaje} Los datos corresponden al último registro de la alerta.</span>
+          </p>
+        ) : (
+          <p className="flex items-start gap-2 text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+            <Lightbulb className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>{detalle.explicacion.recomendacion}</span>
+          </p>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <Dialog open={alertaId !== null} onOpenChange={(abierto) => !abierto && onCerrar()}>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">{contenido}</DialogContent>
+    </Dialog>
+  );
+}
+
+/** HU-39: alertas registradas sobre la situación académica del estudiante. */
+function MisAlertas() {
+  const [listado, setListado] = useState<ListadoAlertas | null>(null);
+  const [estado, setEstado] = useState('');
+  const [periodo, setPeriodo] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [seleccionada, setSeleccionada] = useState<number | null>(null);
+
+  useEffect(() => {
+    let activo = true;
+    const params = new URLSearchParams();
+    if (estado) params.set('estado', estado);
+    if (periodo) params.set('periodo', periodo);
+    const query = params.toString();
+    setError(null);
+    apiFetch(`${baseUrl}/api/portal/alertas/${query ? `?${query}` : ''}`)
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'No fue posible consultar tus alertas.');
+        if (activo) setListado(json);
+      })
+      .catch((e: Error) => activo && setError(e.message));
+    return () => {
+      activo = false;
+    };
+  }, [estado, periodo]);
+
+  const quitarFiltros = () => {
+    setEstado('');
+    setPeriodo('');
+  };
+  const claseSelect = 'px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm';
+
+  let contenido: React.ReactNode;
+  if (error) {
+    contenido = <p role="alert" className="text-sm text-red-700">{error}</p>;
+  } else if (!listado) {
+    contenido = <p className="text-sm text-gray-500">Cargando tus alertas…</p>;
+  } else if (listado.conteos.total === 0) {
+    contenido = (
+      <div className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-gray-100 rounded-xl text-gray-500">
+        <CheckCircle2 className="w-8 h-8 mb-2 text-green-500 opacity-70" />
+        <p className="text-sm">No tienes alertas registradas sobre tu situación académica.</p>
+        <p className="text-xs mt-1">Si en algún momento se registra una, aquí verás qué la originó y cómo mejorar.</p>
+      </div>
+    );
+  } else if (listado.alertas.length === 0) {
+    contenido = (
+      <div className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-gray-100 rounded-xl text-gray-500">
+        <SearchX className="w-8 h-8 mb-2 opacity-40" />
+        <p className="text-sm">Ninguna alerta coincide con los filtros seleccionados.</p>
+        <button type="button" onClick={quitarFiltros} className="mt-3 text-sm font-medium text-[#C8102E] hover:underline">
+          Quitar filtros
+        </button>
+      </div>
+    );
+  } else {
+    contenido = (
+      <ul className="divide-y divide-gray-100 border border-gray-100 rounded-lg">
+        {listado.alertas.map((alerta) => (
+          <li key={alerta.id}>
+            <button
+              type="button"
+              onClick={() => setSeleccionada(alerta.id)}
+              className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 focus:outline-none focus:bg-gray-50"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-gray-900 truncate">{alerta.tipo}</p>
+                <p className="text-xs text-gray-500 truncate">
+                  {alerta.resumen} · {fecha(alerta.fecha_generacion)}
+                </p>
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <InsigniaSeveridad alerta={alerta} />
+                  <InsigniaEstado alerta={alerta} />
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+            </button>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+      <div className="flex items-center gap-2">
+        <Bell className="w-5 h-5 text-gray-500" />
+        <h2 className="text-lg font-semibold text-gray-900">Mis alertas</h2>
+      </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Avisos registrados sobre tu situación académica. Cada uno explica qué lo originó y qué puedes hacer para mejorar.
+      </p>
+
+      {listado && listado.conteos.total > 0 && (
+        <div className="flex flex-wrap items-end gap-3 mb-4">
+          <label className="text-xs text-gray-600">
+            <span className="block mb-1">Estado</span>
+            <select value={estado} onChange={(e) => setEstado(e.target.value)} className={claseSelect}>
+              <option value="">Todos ({listado.conteos.total})</option>
+              {OPCIONES_ESTADO.map((o) => (
+                <option key={o.valor} value={o.valor}>
+                  {o.texto} ({listado.conteos[o.valor]})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs text-gray-600">
+            <span className="block mb-1">Periodo</span>
+            <select value={periodo} onChange={(e) => setPeriodo(e.target.value)} className={claseSelect}>
+              <option value="">Todos</option>
+              {listado.periodos.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </label>
+          {periodo && (
+            <p className="text-xs text-gray-500 pb-2">El periodo aplica a las alertas de una materia (cortes e inasistencia).</p>
+          )}
+          {(estado || periodo) && listado.alertas.length > 0 && (
+            <button type="button" onClick={quitarFiltros} className="text-sm font-medium text-[#C8102E] hover:underline pb-2">
+              Quitar filtros
+            </button>
+          )}
+        </div>
+      )}
+
+      {contenido}
+      <ModalAlerta alertaId={seleccionada} onCerrar={() => setSeleccionada(null)} />
+    </section>
+  );
+}
+
 /**
- * Portal del estudiante: inicio con su nivel de riesgo actual (HU-37) y la
- * evolución de su promedio (HU-38). Las HU-39 a HU-42 (alertas, intervenciones,
- * solicitud de acompañamiento y asistencia) agregan aquí su sección o una
- * ruta hija de /dashboard/portal, siempre con datos de /api/portal/.
+ * Portal del estudiante: inicio con su nivel de riesgo actual (HU-37), la
+ * evolución de su promedio (HU-38) y sus alertas (HU-39). Las HU-40 a HU-42
+ * (intervenciones, solicitud de acompañamiento y asistencia) agregan aquí su
+ * sección o una ruta hija de /dashboard/portal, siempre con datos de /api/portal/.
  */
 export default function StudentPortal() {
   const [datos, setDatos] = useState<RiesgoPropio | null>(null);
@@ -414,6 +722,7 @@ export default function StudentPortal() {
       <TarjetaRiesgo datos={datos} />
       <Causas causas={datos.causas} nivel={datos.riesgo.nivel} />
       <EvolucionAcademica />
+      <MisAlertas />
       <Indicadores indicadores={datos.indicadores} />
     </div>
   );
