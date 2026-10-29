@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
 import {
-  AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, BookOpen, CheckCircle2, ChevronRight, Clock,
+  AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, BookOpen, CalendarCheck, CheckCircle2, ChevronRight,
+  Clock,
   GraduationCap, HeartHandshake, Info, Lightbulb, LineChart as IconoLinea, MessageSquarePlus, SearchX, Send,
   TrendingUp, XCircle,
 } from 'lucide-react';
@@ -143,6 +144,33 @@ interface ListadoSolicitudes {
   mensaje_bloqueo: string | null;
   motivos: { valor: string; texto: string }[];
   descripcion_minima: number;
+}
+
+type EstadoAsistencia = 'ASISTIO' | 'FALTA' | 'FALTA_JUSTIFICADA';
+
+interface CursoAsistencia {
+  curso_id: number;
+  materia: string;
+  codigo_materia: string;
+  grupo: string;
+  total_clases: number;
+  asistencias: number;
+  faltas: number;
+  faltas_justificadas: number;
+  porcentaje: number | null;
+  umbral: number | null;
+  umbral_aviso: number | null;
+  cerca_del_limite: boolean;
+  supera_umbral: boolean;
+  detalle: { fecha: string; estado: EstadoAsistencia; estado_texto: string }[];
+}
+
+interface AsistenciaPropia {
+  periodo: string | null;
+  periodos: string[];
+  cursos: CursoAsistencia[];
+  hay_registros: boolean;
+  mensaje: string | null;
 }
 
 const NOTA_APROBATORIA = 3.0;
@@ -1209,10 +1237,179 @@ function SolicitarAcompanamiento() {
 }
 
 
+const ESTILO_REGISTRO: Record<EstadoAsistencia, string> = {
+  ASISTIO: 'bg-green-50 text-green-700',
+  FALTA: 'bg-red-50 text-red-700',
+  FALTA_JUSTIFICADA: 'bg-amber-50 text-amber-700',
+};
+
+function TarjetaAsistencia({ curso }: { curso: CursoAsistencia }) {
+  const [abierta, setAbierta] = useState(false);
+  const sinClases = curso.porcentaje === null;
+  const tono = curso.supera_umbral ? 'red' : curso.cerca_del_limite ? 'amber' : 'green';
+  const colorBarra = { red: 'bg-red-500', amber: 'bg-amber-500', green: 'bg-green-500' }[tono];
+  const colorBorde = { red: 'border-red-200', amber: 'border-amber-200', green: 'border-gray-200' }[tono];
+  // La barra llega al 100 % en el umbral (o en el 100 % de inasistencia si no hay umbral)
+  const escala = curso.umbral && curso.umbral > 0 ? curso.umbral : 100;
+  const ancho = Math.min(100, ((curso.porcentaje ?? 0) / escala) * 100);
+
+  return (
+    <li className={`border rounded-lg p-4 ${colorBorde}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-medium text-gray-900 truncate">{curso.materia}</p>
+          <p className="text-xs text-gray-500">{curso.codigo_materia} · Grupo {curso.grupo}</p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className={`text-2xl font-bold ${curso.supera_umbral ? 'text-red-700' : curso.cerca_del_limite ? 'text-amber-700' : 'text-gray-900'}`}>
+            {sinClases ? '—' : `${numero(curso.porcentaje)} %`}
+          </p>
+          <p className="text-xs text-gray-500">de inasistencia</p>
+        </div>
+      </div>
+
+      {sinClases ? (
+        <p className="text-sm text-gray-500 mt-3">Aún no hay clases registradas en esta materia.</p>
+      ) : (
+        <>
+          <p className="text-sm text-gray-700 mt-3">
+            {curso.faltas} {curso.faltas === 1 ? 'falta' : 'faltas'} sin justificar de {curso.total_clases} clases registradas
+            {curso.faltas_justificadas > 0 && <> · {curso.faltas_justificadas} justificada{curso.faltas_justificadas === 1 ? '' : 's'}</>}
+          </p>
+          <div className="mt-2">
+            <div className="h-2.5 w-full bg-gray-100 rounded-full overflow-hidden" role="progressbar"
+              aria-valuemin={0} aria-valuemax={escala} aria-valuenow={curso.porcentaje ?? 0}
+              aria-label={`Inasistencia de ${curso.materia}`}>
+              <div className={`h-full rounded-full ${colorBarra}`} style={{ width: `${ancho}%` }} />
+            </div>
+            <p className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>0 %</span>
+              <span>{curso.umbral !== null ? `Límite permitido: ${numero(curso.umbral, 1)} %` : 'Sin límite configurado'}</span>
+            </p>
+          </div>
+        </>
+      )}
+
+      {curso.supera_umbral && (
+        <p role="alert" className="flex items-start gap-2 text-sm text-red-800 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-3">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          Superaste el límite de inasistencia permitido en esta materia. Habla con tu docente o con Bienestar Universitario.
+        </p>
+      )}
+      {curso.cerca_del_limite && (
+        <p className="flex items-start gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          Estás cerca del límite de inasistencia{curso.umbral !== null ? ` (${numero(curso.umbral, 1)} %)` : ''}. Procura no faltar a
+          las próximas clases.
+        </p>
+      )}
+
+      {curso.detalle.length > 0 && (
+        <div className="mt-3">
+          <button type="button" onClick={() => setAbierta((v) => !v)} aria-expanded={abierta}
+            className="text-sm font-medium text-[#C8102E] hover:underline flex items-center gap-1">
+            <ChevronRight className={`w-4 h-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
+            {abierta ? 'Ocultar detalle por fecha' : 'Ver detalle por fecha'}
+          </button>
+          {abierta && (
+            <ul className="mt-2 divide-y divide-gray-100 border border-gray-100 rounded-lg text-sm">
+              {curso.detalle.map((d) => (
+                <li key={d.fecha} className="flex items-center justify-between px-3 py-1.5">
+                  <span className="text-gray-700">
+                    {new Date(`${d.fecha}T00:00:00`).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'long' })}
+                  </span>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTILO_REGISTRO[d.estado] ?? 'bg-gray-100 text-gray-600'}`}>
+                    {d.estado_texto}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+/** HU-42: porcentaje de inasistencia por materia frente al límite permitido. */
+function MiAsistencia() {
+  const [datos, setDatos] = useState<AsistenciaPropia | null>(null);
+  const [periodo, setPeriodo] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let activo = true;
+    setError(null);
+    apiFetch(`${baseUrl}/api/portal/asistencia/${periodo ? `?periodo=${encodeURIComponent(periodo)}` : ''}`)
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'No fue posible consultar tu asistencia.');
+        if (activo) setDatos(json);
+      })
+      .catch((e: Error) => activo && setError(e.message));
+    return () => {
+      activo = false;
+    };
+  }, [periodo]);
+
+  let contenido: React.ReactNode;
+  if (error) {
+    contenido = <p role="alert" className="text-sm text-red-700">{error}</p>;
+  } else if (!datos) {
+    contenido = <p className="text-sm text-gray-500">Cargando tu asistencia…</p>;
+  } else if (!datos.hay_registros) {
+    contenido = (
+      <div className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-gray-100 rounded-xl text-gray-500">
+        <CalendarCheck className="w-8 h-8 mb-2 opacity-40" />
+        <p className="text-sm">{datos.mensaje ?? 'Aún no hay registros de asistencia.'}</p>
+        <p className="text-xs mt-1">Cuando tus docentes registren la asistencia, verás aquí tu porcentaje por materia.</p>
+      </div>
+    );
+  } else {
+    contenido = (
+      <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {datos.cursos.map((curso) => (
+          <TarjetaAsistencia key={curso.curso_id} curso={curso} />
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <CalendarCheck className="w-5 h-5 text-gray-500" />
+            <h2 className="text-lg font-semibold text-gray-900">Mi asistencia</h2>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">
+            Tu porcentaje de inasistencia en cada materia frente al límite permitido. Las faltas justificadas cuentan como
+            clase pero no como falta.
+          </p>
+        </div>
+        {datos && datos.periodos.length > 1 && (
+          <label className="text-xs text-gray-600">
+            <span className="block mb-1">Periodo</span>
+            <select value={periodo || datos.periodo || ''} onChange={(e) => setPeriodo(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm">
+              {datos.periodos.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+      {contenido}
+    </section>
+  );
+}
+
 /**
  * Portal del estudiante: inicio con su nivel de riesgo actual (HU-37), la
  * evolución de su promedio (HU-38), sus alertas (HU-39), su acompañamiento
- * (HU-40) y la solicitud de acompañamiento (HU-41), siempre con datos de /api/portal/.
+ * (HU-40), la solicitud de acompañamiento (HU-41) y su asistencia por materia
+ * (HU-42), siempre con datos de /api/portal/.
  */
 export default function StudentPortal() {
   const [datos, setDatos] = useState<RiesgoPropio | null>(null);
@@ -1255,6 +1452,7 @@ export default function StudentPortal() {
       <Causas causas={datos.causas} nivel={datos.riesgo.nivel} />
       <EvolucionAcademica />
       <MisAlertas />
+      <MiAsistencia />
       <MiAcompanamiento />
       <SolicitarAcompanamiento />
       <Indicadores indicadores={datos.indicadores} />

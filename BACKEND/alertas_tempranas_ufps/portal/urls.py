@@ -1,7 +1,7 @@
 from django.urls import path
 
 from .views import (
-    alertas_propias, cancelar_solicitud_propia, detalle_alerta_propia, detalle_intervencion_propia,
+    alertas_propias, asistencia_propia, cancelar_solicitud_propia, detalle_alerta_propia, detalle_intervencion_propia,
     evolucion_propia, intervenciones_propias, riesgo_propio, solicitudes_propias,
 )
 
@@ -18,4 +18,5 @@ urlpatterns = [
     path('solicitudes/', solicitudes_propias, name='portal-solicitudes'),  # HU-41
     path('solicitudes/<int:solicitud_id>/cancelar/', cancelar_solicitud_propia,
          name='portal-solicitud-cancelar'),  # HU-41
+    path('asistencia/', asistencia_propia, name='portal-asistencia'),  # HU-42
 ]

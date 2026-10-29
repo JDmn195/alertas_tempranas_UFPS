@@ -16,7 +16,11 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods
 
-from academico.models import Estudiante, Materia, Nota
+from academico.asistencia import (
+    PORCENTAJE_AVISO_PREVENTIVO, calcular_inasistencia_por_curso, cerca_umbral, numero_o_none,
+    obtener_umbrales_inasistencia, supera_umbral, umbral_aviso,
+)
+from academico.models import Asistencia, Estudiante, Materia, Nota, Periodo
 from academico.services.asistencia import periodo_actual
 from academico.services.historial_promedios import serie_promedios_por_periodo, tendencia_promedio
 from alertas.evaluacion import NOTA_APROBATORIA, calcular_indicadores, calcular_ppa
@@ -605,3 +609,100 @@ def cancelar_solicitud_propia(request, solicitud_id):
 
     solicitud = SolicitudAcompanamiento.objects.select_related('responsable', 'alerta__regla').get(pk=solicitud.pk)
     return JsonResponse(serializar_solicitud(solicitud))
+
+
+ESTADOS_ASISTENCIA_TEXTO = dict(Asistencia.ESTADO_CHOICES)
+
+
+@require_GET
+@requiere_rol(['ESTUDIANTE'])
+def asistencia_propia(request):
+    """
+    GET /api/portal/asistencia/?periodo=  (HU-42)
+    Inasistencia del estudiante autenticado en cada curso del periodo (por defecto el
+    más reciente en que está matriculado), frente al umbral efectivo del curso, con
+    el detalle por fecha. Usa el mismo cálculo que la consulta del personal
+    (academico.asistencia). Sin clases registradas el porcentaje es null y, sin
+    umbral configurado, el umbral es null; en ambos casos las banderas son false.
+    No incluye las observaciones del docente ni quién registró la asistencia.
+    """
+    estudiante, error = obtener_estudiante_autenticado(request)
+    if error:
+        return error
+
+    periodos = list(
+        Periodo.objects.filter(nota__estudiante=estudiante).distinct().order_by('-anio', '-semestre')
+    )
+    solicitado = (request.GET.get('periodo') or '').strip()
+    if solicitado:
+        if not PATRON_PERIODO.match(solicitado):
+            return JsonResponse({'error': 'Periodo no válido. Use el formato AAAA-S (por ejemplo, 2026-1).'},
+                                status=400)
+        periodo = next((p for p in periodos if str(p) == solicitado), None)
+        if periodo is None:
+            return JsonResponse({'error': f'No tienes materias matriculadas en el periodo {solicitado}.'}, status=400)
+    else:
+        periodo = periodos[0] if periodos else None
+
+    respuesta = {
+        'periodo': str(periodo) if periodo else None,
+        'periodos': [str(p) for p in periodos],
+        'porcentaje_aviso': float(PORCENTAJE_AVISO_PREVENTIVO),
+        'cursos': [],
+        'hay_registros': False,
+        'mensaje': None,
+    }
+    if periodo is None:
+        respuesta['mensaje'] = 'Aún no tienes materias matriculadas.'
+        return JsonResponse(respuesta)
+
+    try:
+        notas = list(
+            Nota.objects.filter(estudiante=estudiante, periodo=periodo)
+            .select_related('curso__materia')
+            .order_by('curso__materia__nombre', 'curso__grupo')
+        )
+        ids_cursos = [n.curso_id for n in notas]
+        totales = calcular_inasistencia_por_curso(estudiante, periodo, ids_cursos)
+        umbrales = obtener_umbrales_inasistencia([n.curso for n in notas])
+
+        # Solo fecha y estado: ni la observación del docente ni quién registró
+        detalle = {}
+        registros = (Asistencia.objects.filter(estudiante=estudiante, periodo=periodo, curso__in=ids_cursos)
+                     .order_by('fecha_clase').values_list('curso_id', 'fecha_clase', 'estado'))
+        for curso_id, fecha_clase, estado in registros:
+            detalle.setdefault(curso_id, []).append({
+                'fecha': fecha_clase.isoformat(),
+                'estado': estado,
+                'estado_texto': ESTADOS_ASISTENCIA_TEXTO.get(estado, estado),
+            })
+
+        for nota in notas:
+            curso = nota.curso
+            datos = totales[curso.id]
+            umbral, _ = umbrales[curso.id]
+            porcentaje = datos['porcentaje']
+            respuesta['cursos'].append({
+                'curso_id': curso.id,
+                'materia': curso.materia.nombre,
+                'codigo_materia': curso.materia.codigo,
+                'grupo': curso.grupo,
+                'total_clases': datos['total_clases'],
+                'asistencias': datos['asistencias'],
+                'faltas': datos['faltas'],
+                'faltas_justificadas': datos['faltas_justificadas'],
+                'porcentaje': numero_o_none(porcentaje),
+                'umbral': numero_o_none(umbral),
+                'umbral_aviso': numero_o_none(umbral_aviso(umbral)),
+                'cerca_del_limite': bool(cerca_umbral(porcentaje, umbral)),
+                'supera_umbral': bool(supera_umbral(porcentaje, umbral)),
+                'detalle': detalle.get(curso.id, []),
+            })
+
+        respuesta['hay_registros'] = bool(detalle)
+        if not detalle:
+            respuesta['mensaje'] = f'Aún no hay registros de asistencia en el periodo {periodo}.'
+        return JsonResponse(respuesta)
+    except Exception:
+        logger.exception("Error al consultar la asistencia del estudiante %s", estudiante.codigo)
+        return JsonResponse({'error': 'No fue posible consultar tu asistencia.'}, status=500)
