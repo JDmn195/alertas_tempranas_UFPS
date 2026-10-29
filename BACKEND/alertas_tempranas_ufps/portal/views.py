@@ -6,22 +6,31 @@ con obtener_estudiante_autenticado: el código sale del token, nunca de la URL n
 de los parámetros. Las respuestas no incluyen observaciones, anotaciones,
 evidencias, datos del personal ni campos de auditoría.
 """
+import json
 import logging
 import re
 
+from django.db import transaction
 from django.db.models import Sum
 from django.http import JsonResponse
-from django.views.decorators.http import require_GET
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET, require_http_methods
 
-from academico.models import Materia, Nota
+from academico.models import Estudiante, Materia, Nota
+from academico.services.asistencia import periodo_actual
 from academico.services.historial_promedios import serie_promedios_por_periodo, tendencia_promedio
 from alertas.evaluacion import NOTA_APROBATORIA, calcular_indicadores, calcular_ppa
-from alertas.models import Alerta, Intervencion, Regla, RiesgoEstudiante
+from alertas.models import Alerta, Intervencion, Regla, RiesgoEstudiante, SolicitudAcompanamiento
+from alertas.solicitudes import (
+    DESCRIPCION_MIN, MOTIVOS, notificar_nueva_solicitud, programar_notificacion, solicitud_en_curso,
+    validar_solicitud,
+)
 from usuarios.decorators import obtener_estudiante_autenticado, requiere_rol
 from usuarios.utils import registrar_auditoria
 
 from .alertas import ESTADOS, serializar_alerta
 from .intervenciones import ESTADOS as ESTADOS_INTERVENCION, serializar_intervencion
+from .solicitudes import serializar_solicitud
 
 logger = logging.getLogger(__name__)
 
@@ -454,3 +463,145 @@ def detalle_intervencion_propia(request, intervencion_id):
     except Exception:
         logger.exception("Error al consultar la intervención %s del estudiante %s", intervencion_id, estudiante.codigo)
         return JsonResponse({'error': 'No fue posible consultar la intervención.'}, status=500)
+
+
+MENSAJE_SOLICITUD_EN_CURSO = (
+    'Ya tienes una solicitud de acompañamiento en curso. Espera a que sea atendida '
+    'o cancélala, si aún está pendiente, antes de enviar una nueva.'
+)
+
+
+def _listar_solicitudes(estudiante):
+    solicitudes = [
+        serializar_solicitud(s)
+        for s in estudiante.solicitudes_acompanamiento.select_related('responsable', 'alerta__regla')
+        .order_by('-fecha_solicitud', '-id')
+    ]
+    en_curso = next((s for s in solicitudes if s['estado'] in SolicitudAcompanamiento.ESTADOS_EN_CURSO), None)
+    return JsonResponse({
+        'solicitudes': solicitudes,
+        'en_curso': en_curso['id'] if en_curso else None,
+        'puede_solicitar': en_curso is None,
+        'mensaje_bloqueo': MENSAJE_SOLICITUD_EN_CURSO if en_curso else None,
+        'motivos': [{'valor': valor, 'texto': texto} for valor, texto in MOTIVOS.items()],
+        'descripcion_minima': DESCRIPCION_MIN,
+        'mensaje': None if solicitudes else 'Aún no has enviado solicitudes de acompañamiento.',
+    })
+
+
+def _crear_solicitud(request, estudiante):
+    try:
+        datos = json.loads(request.body or b'{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Body JSON inválido.'}, status=400)
+    if not isinstance(datos, dict):
+        return JsonResponse({'error': 'Body JSON inválido.'}, status=400)
+
+    limpios, errores = validar_solicitud(datos)
+    alerta_id = datos.get('alerta')
+    if alerta_id in ('', None):
+        alerta_id = None
+    elif not str(alerta_id).isdigit():
+        errores['alerta'] = 'La alerta debe ser un identificador numérico.'
+    if errores:
+        return JsonResponse({'error': 'Datos no válidos.', 'detalle': errores}, status=400)
+
+    alerta = None
+    if alerta_id is not None:
+        alerta = Alerta.objects.filter(id=int(alerta_id)).first()
+        if alerta is None or alerta.estudiante_id != estudiante.codigo:
+            # Ajena o inexistente reciben la misma respuesta: no se revela si existe
+            situacion = 'que no existe' if alerta is None else f'del estudiante {alerta.estudiante_id}'
+            registrar_auditoria(
+                request.usuario, 'ACCESO_DENEGADO',
+                f"El estudiante {estudiante.codigo} intentó asociar a una solicitud de acompañamiento "
+                f"la alerta ID {alerta_id}, {situacion}",
+            )
+            return JsonResponse({'error': 'Alerta no encontrada.'}, status=404)
+
+    with transaction.atomic():
+        # Bloquea al estudiante para que dos envíos simultáneos no creen dos solicitudes en curso
+        Estudiante.objects.select_for_update().filter(pk=estudiante.pk).first()
+        if solicitud_en_curso(estudiante) is not None:
+            return JsonResponse({'error': MENSAJE_SOLICITUD_EN_CURSO}, status=409)
+        solicitud = SolicitudAcompanamiento.objects.create(
+            estudiante=estudiante, motivo=limpios['motivo'], descripcion=limpios['descripcion'],
+            alerta=alerta, periodo=periodo_actual(),
+        )
+        detalle_alerta = f', alerta ID {alerta.id}' if alerta else ''
+        registrar_auditoria(
+            request.usuario, 'SOLICITAR_ACOMPANAMIENTO',
+            f"El estudiante {estudiante.codigo} solicitó acompañamiento (solicitud ID {solicitud.id}, "
+            f"motivo {solicitud.motivo}{detalle_alerta})",
+        )
+        programar_notificacion(notificar_nueva_solicitud, solicitud.id)
+
+    solicitud = SolicitudAcompanamiento.objects.select_related('responsable', 'alerta__regla').get(pk=solicitud.pk)
+    return JsonResponse(serializar_solicitud(solicitud), status=201)
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+@requiere_rol(['ESTUDIANTE'])
+def solicitudes_propias(request):
+    """
+    GET  /api/portal/solicitudes/  (HU-41)
+    Solicitudes de acompañamiento del estudiante, de la más reciente a la más antigua.
+
+    POST /api/portal/solicitudes/  (HU-41)
+    Crea una solicitud: {"motivo", "descripcion", "alerta"?}. Responde 400 si faltan
+    campos o no son válidos, 404 si la alerta no es propia y 409 si ya tiene una
+    solicitud PENDIENTE o EN_ATENCION. Bienestar recibe la notificación al confirmar.
+    """
+    estudiante, error = obtener_estudiante_autenticado(request)
+    if error:
+        return error
+
+    try:
+        if request.method == 'POST':
+            return _crear_solicitud(request, estudiante)
+        return _listar_solicitudes(estudiante)
+    except Exception:
+        logger.exception("Error en las solicitudes de acompañamiento del estudiante %s", estudiante.codigo)
+        return JsonResponse({'error': 'No fue posible procesar tu solicitud de acompañamiento.'}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(['PATCH'])
+@requiere_rol(['ESTUDIANTE'])
+def cancelar_solicitud_propia(request, solicitud_id):
+    """
+    PATCH /api/portal/solicitudes/<id>/cancelar/  (HU-41)
+    El estudiante cancela su solicitud mientras esté PENDIENTE; en otro estado responde
+    409. Si no existe o es de otro estudiante responde 404 y queda en la auditoría.
+    """
+    estudiante, error = obtener_estudiante_autenticado(request)
+    if error:
+        return error
+
+    with transaction.atomic():
+        solicitud = SolicitudAcompanamiento.objects.select_for_update().filter(id=solicitud_id).first()
+        if solicitud is None or solicitud.estudiante_id != estudiante.codigo:
+            situacion = 'que no existe' if solicitud is None else f'del estudiante {solicitud.estudiante_id}'
+            registrar_auditoria(
+                request.usuario, 'ACCESO_DENEGADO',
+                f"El estudiante {estudiante.codigo} intentó cancelar la solicitud de acompañamiento ID "
+                f"{solicitud_id}, {situacion}",
+            )
+            return JsonResponse({'error': 'Solicitud no encontrada.'}, status=404)
+
+        if solicitud.estado != 'PENDIENTE':
+            return JsonResponse({
+                'error': 'Solo puedes cancelar una solicitud pendiente. Esta solicitud está '
+                         f'{solicitud.get_estado_display().lower()}.',
+            }, status=409)
+
+        solicitud.estado = 'CANCELADA'
+        solicitud.save(update_fields=['estado', 'fecha_actualizacion'])
+        registrar_auditoria(
+            request.usuario, 'CANCELAR_SOLICITUD',
+            f"El estudiante {estudiante.codigo} canceló la solicitud de acompañamiento ID {solicitud.id}",
+        )
+
+    solicitud = SolicitudAcompanamiento.objects.select_related('responsable', 'alerta__regla').get(pk=solicitud.pk)
+    return JsonResponse(serializar_solicitud(solicitud))

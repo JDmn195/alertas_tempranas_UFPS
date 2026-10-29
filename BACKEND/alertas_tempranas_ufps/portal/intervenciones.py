@@ -24,7 +24,7 @@ def _responsable(intervencion):
     return usuario.nombre if usuario is not None else None
 
 
-def _alerta(alerta):
+def resumen_alerta(alerta):
     meta = alerta.metadata or {}
     por_curso = origen(alerta.regla) != 'general'
     return {
@@ -46,5 +46,5 @@ def serializar_intervencion(intervencion):
         'estado_texto': ESTADOS_TEXTO[estado],
         'resultado': intervencion.resultado or None,
         'responsable': _responsable(intervencion),
-        'alerta': _alerta(intervencion.alerta),
+        'alerta': resumen_alerta(intervencion.alerta),
     }

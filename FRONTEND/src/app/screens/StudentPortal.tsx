@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
 import {
   AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, BookOpen, CheckCircle2, ChevronRight, Clock,
-  GraduationCap, HeartHandshake, Info, Lightbulb, LineChart as IconoLinea, SearchX, TrendingUp, XCircle,
+  GraduationCap, HeartHandshake, Info, Lightbulb, LineChart as IconoLinea, MessageSquarePlus, SearchX, Send,
+  TrendingUp, XCircle,
 } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 import { type ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '../components/ui/chart';
@@ -115,6 +116,33 @@ interface ListadoAlertas {
   conteos: Record<EstadoAlerta | 'total', number>;
   periodos: string[];
   mensaje: string | null;
+}
+
+type EstadoSolicitud = 'PENDIENTE' | 'EN_ATENCION' | 'ATENDIDA' | 'CANCELADA';
+
+interface SolicitudPortal {
+  id: number;
+  motivo: string;
+  motivo_texto: string;
+  descripcion: string;
+  alerta: IntervencionPortal['alerta'] | null;
+  estado: EstadoSolicitud;
+  estado_texto: string;
+  respuesta: string | null;
+  responsable: string | null;
+  fecha_solicitud: string;
+  fecha_atencion: string | null;
+  fecha_actualizacion: string;
+  puede_cancelar: boolean;
+}
+
+interface ListadoSolicitudes {
+  solicitudes: SolicitudPortal[];
+  en_curso: number | null;
+  puede_solicitar: boolean;
+  mensaje_bloqueo: string | null;
+  motivos: { valor: string; texto: string }[];
+  descripcion_minima: number;
 }
 
 const NOTA_APROBATORIA = 3.0;
@@ -956,11 +984,235 @@ function MiAcompanamiento() {
   );
 }
 
+const INSIGNIA_ESTADO_SOLICITUD: Record<EstadoSolicitud, string> = {
+  PENDIENTE: 'bg-orange-50 text-orange-700',
+  EN_ATENCION: 'bg-indigo-50 text-indigo-700',
+  ATENDIDA: 'bg-green-50 text-green-700',
+  CANCELADA: 'bg-gray-100 text-gray-600',
+};
+
+/** HU-41: formulario para pedir acompañamiento e historial de solicitudes. */
+function SolicitarAcompanamiento() {
+  const [listado, setListado] = useState<ListadoSolicitudes | null>(null);
+  const [alertas, setAlertas] = useState<AlertaPortal[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [motivo, setMotivo] = useState('');
+  const [descripcion, setDescripcion] = useState('');
+  const [alerta, setAlerta] = useState('');
+  const [errores, setErrores] = useState<Record<string, string>>({});
+  const [mensajeEnvio, setMensajeEnvio] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [recarga, setRecarga] = useState(0);
+
+  useEffect(() => {
+    let activo = true;
+    apiFetch(`${baseUrl}/api/portal/solicitudes/`)
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'No fue posible consultar tus solicitudes.');
+        if (activo) setListado(json);
+      })
+      .catch((e: Error) => activo && setError(e.message));
+    return () => {
+      activo = false;
+    };
+  }, [recarga]);
+
+  useEffect(() => {
+    // Alertas propias para relacionarlas con la solicitud (opcional); las cerradas no se ofrecen
+    apiFetch(`${baseUrl}/api/portal/alertas/`)
+      .then(async (res) => (res.ok ? res.json() : { alertas: [] }))
+      .then((json: { alertas: AlertaPortal[] }) => setAlertas(json.alertas.filter((a) => a.estado !== 'cerrada')))
+      .catch(() => setAlertas([]));
+  }, []);
+
+  const enviar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!listado) return;
+    const nuevos: Record<string, string> = {};
+    if (!motivo) nuevos.motivo = 'Selecciona el motivo de tu solicitud.';
+    if (descripcion.trim().length < listado.descripcion_minima) {
+      nuevos.descripcion = `Cuéntanos un poco más: escribe al menos ${listado.descripcion_minima} caracteres.`;
+    }
+    setErrores(nuevos);
+    setMensajeEnvio(null);
+    if (Object.keys(nuevos).length) return;
+
+    setEnviando(true);
+    try {
+      const res = await apiFetch(`${baseUrl}/api/portal/solicitudes/`, {
+        method: 'POST',
+        body: JSON.stringify({ motivo, descripcion: descripcion.trim(), alerta: alerta ? Number(alerta) : null }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setErrores(json.detalle || {});
+        setMensajeEnvio({ tipo: 'error', texto: json.error || 'No fue posible enviar tu solicitud.' });
+        return;
+      }
+      setMotivo('');
+      setDescripcion('');
+      setAlerta('');
+      setMensajeEnvio({ tipo: 'ok', texto: 'Tu solicitud fue enviada. Bienestar Universitario te responderá pronto.' });
+      setRecarga((n) => n + 1);
+    } catch {
+      setMensajeEnvio({ tipo: 'error', texto: 'No fue posible enviar tu solicitud.' });
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const cancelar = async (id: number) => {
+    if (!window.confirm('¿Quieres cancelar esta solicitud de acompañamiento?')) return;
+    try {
+      const res = await apiFetch(`${baseUrl}/api/portal/solicitudes/${id}/cancelar/`, { method: 'PATCH' });
+      const json = await res.json();
+      setMensajeEnvio(res.ok
+        ? { tipo: 'ok', texto: 'Cancelaste la solicitud. Puedes enviar una nueva cuando lo necesites.' }
+        : { tipo: 'error', texto: json.error || 'No fue posible cancelar la solicitud.' });
+    } catch {
+      setMensajeEnvio({ tipo: 'error', texto: 'No fue posible cancelar la solicitud.' });
+    }
+    setRecarga((n) => n + 1);
+  };
+
+  const claseCampo = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm disabled:bg-gray-50 disabled:text-gray-400';
+  const bloqueado = !listado?.puede_solicitar;
+
+  let historial: React.ReactNode;
+  if (error) {
+    historial = <p role="alert" className="text-sm text-red-700">{error}</p>;
+  } else if (!listado) {
+    historial = <p className="text-sm text-gray-500">Cargando tus solicitudes…</p>;
+  } else if (listado.solicitudes.length === 0) {
+    historial = <p className="text-sm text-gray-500">Aún no has enviado solicitudes de acompañamiento.</p>;
+  } else {
+    historial = (
+      <ul className="space-y-3">
+        {listado.solicitudes.map((s) => (
+          <li key={s.id} className="border border-gray-100 rounded-lg p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-medium text-gray-900">{s.motivo_texto}</p>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${INSIGNIA_ESTADO_SOLICITUD[s.estado]}`}>
+                  {s.estado_texto}
+                </span>
+              </div>
+              {s.puede_cancelar && (
+                <button type="button" onClick={() => cancelar(s.id)} className="text-sm font-medium text-[#C8102E] hover:underline">
+                  Cancelar solicitud
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              Enviada el {fecha(s.fecha_solicitud)}
+              {s.responsable && <> · Responsable: {s.responsable}</>}
+            </p>
+            {s.alerta && <p className="text-xs text-gray-500 mt-0.5">Alerta relacionada: {alertaTexto(s.alerta)}</p>}
+            <p className="text-sm text-gray-700 mt-2 whitespace-pre-line">{s.descripcion}</p>
+            {s.respuesta ? (
+              <div className="mt-3 text-sm bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-green-900">
+                <p className="text-xs font-semibold mb-0.5">
+                  Respuesta{s.fecha_atencion ? ` · ${fecha(s.fecha_atencion)}` : ''}
+                </p>
+                <p className="whitespace-pre-line">{s.respuesta}</p>
+              </div>
+            ) : (
+              s.estado !== 'CANCELADA' && (
+                <p className="text-xs text-gray-500 mt-2">
+                  {s.estado === 'PENDIENTE'
+                    ? 'Tu solicitud está a la espera de que Bienestar la tome.'
+                    : 'Tu solicitud está siendo atendida. La respuesta aparecerá aquí.'}
+                </p>
+              )
+            )}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+      <div className="flex items-center gap-2">
+        <MessageSquarePlus className="w-5 h-5 text-gray-500" />
+        <h2 className="text-lg font-semibold text-gray-900">Solicitar acompañamiento</h2>
+      </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Si necesitas apoyo, cuéntanos qué está pasando. Bienestar Universitario recibirá tu solicitud y te responderá por
+        este medio y por correo.
+      </p>
+
+      {listado && bloqueado && listado.mensaje_bloqueo && (
+        <p className="flex items-start gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+          <Info className="w-4 h-4 mt-0.5 shrink-0" />
+          {listado.mensaje_bloqueo}
+        </p>
+      )}
+
+      <form onSubmit={enviar} noValidate className="space-y-4">
+        <fieldset disabled={bloqueado || enviando} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="text-sm text-gray-700">
+              <span className="block mb-1 font-medium">Motivo *</span>
+              <select value={motivo} onChange={(e) => setMotivo(e.target.value)} className={claseCampo}
+                aria-invalid={!!errores.motivo}>
+                <option value="">Selecciona un motivo</option>
+                {listado?.motivos.map((m) => (
+                  <option key={m.valor} value={m.valor}>{m.texto}</option>
+                ))}
+              </select>
+              {errores.motivo && <span className="block text-xs text-red-600 mt-1">{errores.motivo}</span>}
+            </label>
+            <label className="text-sm text-gray-700">
+              <span className="block mb-1 font-medium">Alerta relacionada (opcional)</span>
+              <select value={alerta} onChange={(e) => setAlerta(e.target.value)} className={claseCampo}>
+                <option value="">Ninguna</option>
+                {alertas.map((a) => (
+                  <option key={a.id} value={a.id}>{a.materia ? `${a.tipo} · ${a.materia}` : a.tipo}</option>
+                ))}
+              </select>
+              {errores.alerta && <span className="block text-xs text-red-600 mt-1">{errores.alerta}</span>}
+            </label>
+          </div>
+          <label className="block text-sm text-gray-700">
+            <span className="block mb-1 font-medium">Descripción *</span>
+            <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} rows={4} maxLength={2000}
+              placeholder="Describe brevemente tu situación y el tipo de apoyo que necesitas."
+              className={claseCampo} aria-invalid={!!errores.descripcion} />
+            <span className="flex justify-between text-xs mt-1">
+              <span className="text-red-600">{errores.descripcion}</span>
+              <span className="text-gray-400">{descripcion.trim().length} / mínimo {listado?.descripcion_minima ?? 20}</span>
+            </span>
+          </label>
+          <button type="submit"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#C8102E] text-white text-sm font-medium hover:bg-[#a50d26] disabled:opacity-50">
+            <Send className="w-4 h-4" />
+            {enviando ? 'Enviando…' : 'Enviar solicitud'}
+          </button>
+        </fieldset>
+      </form>
+
+      {mensajeEnvio && (
+        <p role={mensajeEnvio.tipo === 'error' ? 'alert' : 'status'}
+          className={`mt-4 text-sm rounded-lg px-3 py-2 border ${mensajeEnvio.tipo === 'ok'
+            ? 'text-green-800 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>
+          {mensajeEnvio.texto}
+        </p>
+      )}
+
+      <h3 className="text-sm font-semibold text-gray-900 mt-6 mb-3">Mis solicitudes</h3>
+      {historial}
+    </section>
+  );
+}
+
+
 /**
  * Portal del estudiante: inicio con su nivel de riesgo actual (HU-37), la
- * evolución de su promedio (HU-38), sus alertas (HU-39) y su acompañamiento
- * (HU-40). Las HU-41 y HU-42 (solicitud de acompañamiento y asistencia) agregan
- * aquí su sección o una ruta hija de /dashboard/portal, siempre con datos de /api/portal/.
+ * evolución de su promedio (HU-38), sus alertas (HU-39), su acompañamiento
+ * (HU-40) y la solicitud de acompañamiento (HU-41), siempre con datos de /api/portal/.
  */
 export default function StudentPortal() {
   const [datos, setDatos] = useState<RiesgoPropio | null>(null);
@@ -1004,6 +1256,7 @@ export default function StudentPortal() {
       <EvolucionAcademica />
       <MisAlertas />
       <MiAcompanamiento />
+      <SolicitarAcompanamiento />
       <Indicadores indicadores={datos.indicadores} />
     </div>
   );

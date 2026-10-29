@@ -213,6 +213,7 @@ class NotificacionHistorial(models.Model):
     TIPO_CHOICES = [
         ('ALERTA', 'Alerta generada'),
         ('RECORDATORIO', 'Recordatorio de seguimiento'),  # HU-30
+        ('SOLICITUD', 'Solicitud de acompañamiento'),  # HU-41
     ]
 
     ESTADO_CHOICES = [
@@ -221,7 +222,11 @@ class NotificacionHistorial(models.Model):
         ('reintento', 'Pendiente de Reintento'),
     ]
 
-    alerta = models.ForeignKey(Alerta, on_delete=models.CASCADE, related_name='historial_notificaciones')
+    # HU-41: las notificaciones de una solicitud de acompañamiento pueden no tener alerta
+    alerta = models.ForeignKey(Alerta, on_delete=models.CASCADE, null=True, blank=True,
+                               related_name='historial_notificaciones')
+    solicitud = models.ForeignKey('SolicitudAcompanamiento', on_delete=models.CASCADE, null=True, blank=True,
+                                  related_name='historial_notificaciones')
     destinatario = models.CharField(max_length=255)  # Email o ID de usuario
     rol_destinatario = models.CharField(max_length=50)
     canal = models.CharField(max_length=20, choices=CANAL_CHOICES)
@@ -242,7 +247,9 @@ class NotificacionHistorial(models.Model):
 
 class NotificacionInterna(models.Model):
     usuario = models.ForeignKey('usuarios.Usuario', on_delete=models.CASCADE, related_name='notificaciones_internas')
-    alerta = models.ForeignKey(Alerta, on_delete=models.CASCADE)
+    alerta = models.ForeignKey(Alerta, on_delete=models.CASCADE, null=True, blank=True)
+    solicitud = models.ForeignKey('SolicitudAcompanamiento', on_delete=models.CASCADE, null=True, blank=True,
+                                  related_name='notificaciones_internas')  # HU-41
     mensaje = models.TextField()
     leida = models.BooleanField(default=False)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
@@ -446,3 +453,53 @@ class AvisoPreventivoInasistencia(models.Model):
 
     def __str__(self):
         return f"Aviso {self.estudiante_id} curso {self.curso_id} ({self.porcentaje}%) - {self.resultado}"
+
+
+class SolicitudAcompanamiento(models.Model):
+    """
+    HU-41: Solicitud de acompañamiento académico hecha por el estudiante desde el portal.
+    Un estudiante solo puede tener una solicitud en curso (PENDIENTE o EN_ATENCION).
+    El periodo es el más reciente al crearla y sirve para filtrar la bandeja del personal.
+    """
+    MOTIVO_CHOICES = [
+        ('ACADEMICO', 'Académico'),
+        ('PERSONAL', 'Personal'),
+        ('ECONOMICO', 'Económico'),
+        ('SALUD', 'Salud'),
+        ('OTRO', 'Otro'),
+    ]
+
+    ESTADO_CHOICES = [
+        ('PENDIENTE', 'Pendiente'),
+        ('EN_ATENCION', 'En atención'),
+        ('ATENDIDA', 'Atendida'),
+        ('CANCELADA', 'Cancelada'),
+    ]
+
+    # Estados con los que la solicitud sigue en curso (no se admite otra del mismo estudiante)
+    ESTADOS_EN_CURSO = ('PENDIENTE', 'EN_ATENCION')
+
+    estudiante = models.ForeignKey('academico.Estudiante', on_delete=models.CASCADE, db_column='codigo_estudiante',
+                                   related_name='solicitudes_acompanamiento')
+    motivo = models.CharField(max_length=20, choices=MOTIVO_CHOICES)
+    descripcion = models.TextField()
+    alerta = models.ForeignKey(Alerta, on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='solicitudes_acompanamiento')
+    periodo = models.ForeignKey('academico.Periodo', on_delete=models.SET_NULL, null=True, blank=True)
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='PENDIENTE')
+    responsable = models.ForeignKey('usuarios.Usuario', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='solicitudes_acompanamiento')
+    respuesta = models.TextField(null=True, blank=True)
+    fecha_solicitud = models.DateTimeField(auto_now_add=True)
+    fecha_atencion = models.DateTimeField(null=True, blank=True)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'solicitud_acompanamiento'
+        verbose_name = 'Solicitud de acompañamiento'
+        verbose_name_plural = 'Solicitudes de acompañamiento'
+        ordering = ['-fecha_solicitud', '-id']
+        indexes = [models.Index(fields=['estudiante', 'estado'], name='solicitud_est_estado_idx')]
+
+    def __str__(self):
+        return f"Solicitud {self.id} de {self.estudiante_id} ({self.motivo}) - {self.estado}"

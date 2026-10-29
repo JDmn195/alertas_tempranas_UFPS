@@ -79,6 +79,9 @@ class Auditoria(models.Model):
         ('MODIFICAR_UMBRAL_INASISTENCIA', 'Modificar Umbral de Inasistencia'),  # HU-35
         ('CREAR_CUENTA_ESTUDIANTE', 'Crear Cuenta de Estudiante'),  # HU-37
         ('ASOCIAR_CUENTA_ESTUDIANTE', 'Asociar Cuenta de Estudiante'),  # HU-37
+        ('SOLICITAR_ACOMPANAMIENTO', 'Solicitar Acompañamiento'),  # HU-41
+        ('CANCELAR_SOLICITUD', 'Cancelar Solicitud de Acompañamiento'),  # HU-41
+        ('GESTIONAR_SOLICITUD', 'Gestionar Solicitud de Acompañamiento'),  # HU-41
     ]
 
     usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True)

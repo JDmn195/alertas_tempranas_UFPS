@@ -1,8 +1,8 @@
 from django.urls import path
 
 from .views import (
-    alertas_propias, detalle_alerta_propia, detalle_intervencion_propia, evolucion_propia, intervenciones_propias,
-    riesgo_propio,
+    alertas_propias, cancelar_solicitud_propia, detalle_alerta_propia, detalle_intervencion_propia,
+    evolucion_propia, intervenciones_propias, riesgo_propio, solicitudes_propias,
 )
 
 # Portal del estudiante (EP-09). Ninguna ruta recibe el código del estudiante:
@@ -15,4 +15,7 @@ urlpatterns = [
     path('intervenciones/', intervenciones_propias, name='portal-intervenciones'),  # HU-40
     path('intervenciones/<int:intervencion_id>/', detalle_intervencion_propia,
          name='portal-intervencion-detalle'),  # HU-40
+    path('solicitudes/', solicitudes_propias, name='portal-solicitudes'),  # HU-41
+    path('solicitudes/<int:solicitud_id>/cancelar/', cancelar_solicitud_propia,
+         name='portal-solicitud-cancelar'),  # HU-41
 ]
