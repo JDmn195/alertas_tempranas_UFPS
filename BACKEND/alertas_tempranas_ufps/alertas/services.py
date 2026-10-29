@@ -18,9 +18,11 @@ class NotificationService:
         }
 
     @staticmethod
-    def registrar_historial(alerta, destinatario, rol_destinatario, canal, resultado, detalle_error=None, tipo='ALERTA'):
+    def registrar_historial(alerta, destinatario, rol_destinatario, canal, resultado, detalle_error=None, tipo='ALERTA',
+                            solicitud=None):
         return NotificacionHistorial.objects.create(
             alerta=alerta,
+            solicitud=solicitud,
             destinatario=destinatario,
             rol_destinatario=rol_destinatario,
             canal=canal,
@@ -58,27 +60,31 @@ class NotificationService:
             return 'reintento', str(e)
 
     @classmethod
-    def enviar_correo(cls, to_email, subject, html_content, alerta, rol_destinatario, tipo='ALERTA'):
+    def enviar_correo(cls, to_email, subject, html_content, alerta, rol_destinatario, tipo='ALERTA', solicitud=None):
         """Envía el correo por Brevo y retorna el NotificacionHistorial registrado."""
         resultado, detalle_error = cls.enviar_brevo(to_email, subject, html_content)
-        return cls.registrar_historial(alerta, to_email, rol_destinatario, 'EMAIL', resultado, detalle_error, tipo)
+        return cls.registrar_historial(alerta, to_email, rol_destinatario, 'EMAIL', resultado, detalle_error, tipo,
+                                       solicitud)
 
     @classmethod
     def enviar_correo_brevo(cls, to_email, subject, html_content, alerta, rol_destinatario, tipo='ALERTA'):
         return cls.enviar_correo(to_email, subject, html_content, alerta, rol_destinatario, tipo).resultado == 'exitoso'
 
     @classmethod
-    def enviar_interna(cls, usuario, alerta, mensaje, tipo='ALERTA'):
+    def enviar_interna(cls, usuario, alerta, mensaje, tipo='ALERTA', solicitud=None):
         """Crea la notificación interna y retorna el NotificacionHistorial registrado."""
         try:
             NotificacionInterna.objects.create(
                 usuario=usuario,
                 alerta=alerta,
+                solicitud=solicitud,
                 mensaje=mensaje
             )
-            return cls.registrar_historial(alerta, usuario.correo, usuario.rol, 'INTERNA', 'exitoso', tipo=tipo)
+            return cls.registrar_historial(alerta, usuario.correo, usuario.rol, 'INTERNA', 'exitoso', tipo=tipo,
+                                           solicitud=solicitud)
         except Exception as e:
-            return cls.registrar_historial(alerta, usuario.correo, usuario.rol, 'INTERNA', 'fallido', str(e), tipo)
+            return cls.registrar_historial(alerta, usuario.correo, usuario.rol, 'INTERNA', 'fallido', str(e), tipo,
+                                           solicitud)
 
     @classmethod
     def crear_notificacion_interna(cls, usuario, alerta, mensaje, tipo='ALERTA'):

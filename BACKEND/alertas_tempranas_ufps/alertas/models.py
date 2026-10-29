@@ -1,8 +1,12 @@
 from django.db import models
+from django.utils import timezone
 
 # Tipos que el motor general (riesgo y alertas por PPA, reprobación y atraso) no evalúa:
 # CORTE tiene su propio ciclo (alertas_corte.py) e INASISTENCIA lo tendrá en la HU-36.
 TIPOS_FUERA_DEL_MOTOR_GENERAL = ('CORTE', 'INASISTENCIA')
+
+# Estados con los que una alerta queda cerrada (todas las vías de cierre usan alguno)
+ESTADOS_ALERTA_CERRADA = ('cerrada', 'closed')
 
 
 class Regla(models.Model):
@@ -54,6 +58,8 @@ class Alerta(models.Model):
     estado = models.CharField(max_length=30)
     valor_causa = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     metadata = models.JSONField(default=dict, null=True, blank=True)
+    # HU-39: momento en que la alerta pasó a cerrada (lo asigna save, en cualquier vía de cierre)
+    fecha_cierre = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'alerta'
@@ -62,6 +68,18 @@ class Alerta(models.Model):
 
     def __str__(self):
         return f"{self.estudiante.codigo} - {self.estado}"
+
+    def save(self, *args, **kwargs):
+        # La fecha de cierre sigue al estado: se fija al cerrar y se limpia si la alerta se reabre.
+        # Varias vías guardan con update_fields=['estado'], así que se agrega el campo a la lista.
+        cerrada = self.estado in ESTADOS_ALERTA_CERRADA
+        if cerrada == (self.fecha_cierre is not None):
+            return super().save(*args, **kwargs)
+        self.fecha_cierre = timezone.now() if cerrada else None
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            kwargs['update_fields'] = set(update_fields) | {'fecha_cierre'}
+        return super().save(*args, **kwargs)
 
 
 class RiesgoEstudiante(models.Model):
@@ -195,6 +213,7 @@ class NotificacionHistorial(models.Model):
     TIPO_CHOICES = [
         ('ALERTA', 'Alerta generada'),
         ('RECORDATORIO', 'Recordatorio de seguimiento'),  # HU-30
+        ('SOLICITUD', 'Solicitud de acompañamiento'),  # HU-41
     ]
 
     ESTADO_CHOICES = [
@@ -203,7 +222,11 @@ class NotificacionHistorial(models.Model):
         ('reintento', 'Pendiente de Reintento'),
     ]
 
-    alerta = models.ForeignKey(Alerta, on_delete=models.CASCADE, related_name='historial_notificaciones')
+    # HU-41: las notificaciones de una solicitud de acompañamiento pueden no tener alerta
+    alerta = models.ForeignKey(Alerta, on_delete=models.CASCADE, null=True, blank=True,
+                               related_name='historial_notificaciones')
+    solicitud = models.ForeignKey('SolicitudAcompanamiento', on_delete=models.CASCADE, null=True, blank=True,
+                                  related_name='historial_notificaciones')
     destinatario = models.CharField(max_length=255)  # Email o ID de usuario
     rol_destinatario = models.CharField(max_length=50)
     canal = models.CharField(max_length=20, choices=CANAL_CHOICES)
@@ -224,7 +247,9 @@ class NotificacionHistorial(models.Model):
 
 class NotificacionInterna(models.Model):
     usuario = models.ForeignKey('usuarios.Usuario', on_delete=models.CASCADE, related_name='notificaciones_internas')
-    alerta = models.ForeignKey(Alerta, on_delete=models.CASCADE)
+    alerta = models.ForeignKey(Alerta, on_delete=models.CASCADE, null=True, blank=True)
+    solicitud = models.ForeignKey('SolicitudAcompanamiento', on_delete=models.CASCADE, null=True, blank=True,
+                                  related_name='notificaciones_internas')  # HU-41
     mensaje = models.TextField()
     leida = models.BooleanField(default=False)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
@@ -428,3 +453,53 @@ class AvisoPreventivoInasistencia(models.Model):
 
     def __str__(self):
         return f"Aviso {self.estudiante_id} curso {self.curso_id} ({self.porcentaje}%) - {self.resultado}"
+
+
+class SolicitudAcompanamiento(models.Model):
+    """
+    HU-41: Solicitud de acompañamiento académico hecha por el estudiante desde el portal.
+    Un estudiante solo puede tener una solicitud en curso (PENDIENTE o EN_ATENCION).
+    El periodo es el más reciente al crearla y sirve para filtrar la bandeja del personal.
+    """
+    MOTIVO_CHOICES = [
+        ('ACADEMICO', 'Académico'),
+        ('PERSONAL', 'Personal'),
+        ('ECONOMICO', 'Económico'),
+        ('SALUD', 'Salud'),
+        ('OTRO', 'Otro'),
+    ]
+
+    ESTADO_CHOICES = [
+        ('PENDIENTE', 'Pendiente'),
+        ('EN_ATENCION', 'En atención'),
+        ('ATENDIDA', 'Atendida'),
+        ('CANCELADA', 'Cancelada'),
+    ]
+
+    # Estados con los que la solicitud sigue en curso (no se admite otra del mismo estudiante)
+    ESTADOS_EN_CURSO = ('PENDIENTE', 'EN_ATENCION')
+
+    estudiante = models.ForeignKey('academico.Estudiante', on_delete=models.CASCADE, db_column='codigo_estudiante',
+                                   related_name='solicitudes_acompanamiento')
+    motivo = models.CharField(max_length=20, choices=MOTIVO_CHOICES)
+    descripcion = models.TextField()
+    alerta = models.ForeignKey(Alerta, on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='solicitudes_acompanamiento')
+    periodo = models.ForeignKey('academico.Periodo', on_delete=models.SET_NULL, null=True, blank=True)
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='PENDIENTE')
+    responsable = models.ForeignKey('usuarios.Usuario', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='solicitudes_acompanamiento')
+    respuesta = models.TextField(null=True, blank=True)
+    fecha_solicitud = models.DateTimeField(auto_now_add=True)
+    fecha_atencion = models.DateTimeField(null=True, blank=True)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'solicitud_acompanamiento'
+        verbose_name = 'Solicitud de acompañamiento'
+        verbose_name_plural = 'Solicitudes de acompañamiento'
+        ordering = ['-fecha_solicitud', '-id']
+        indexes = [models.Index(fields=['estudiante', 'estado'], name='solicitud_est_estado_idx')]
+
+    def __str__(self):
+        return f"Solicitud {self.id} de {self.estudiante_id} ({self.motivo}) - {self.estado}"

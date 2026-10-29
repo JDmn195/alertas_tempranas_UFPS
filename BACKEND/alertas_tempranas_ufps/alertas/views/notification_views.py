@@ -11,9 +11,9 @@ from usuarios.decorators import requiere_rol
 def listar_historial_notificaciones(request):
     """
     GET /api/alertas/notificaciones/historial/
-    Filtros: alerta_id, resultado, canal, tipo (ALERTA | RECORDATORIO), fecha_inicio, fecha_fin
+    Filtros: alerta_id, resultado, canal, tipo (ALERTA | RECORDATORIO | SOLICITUD), fecha_inicio, fecha_fin
     """
-    qs = NotificacionHistorial.objects.select_related('alerta__estudiante').all()
+    qs = NotificacionHistorial.objects.select_related('alerta__estudiante', 'solicitud__estudiante').all()
     
     alerta_id = request.GET.get('alerta_id')
     resultado = request.GET.get('resultado')
@@ -44,10 +44,13 @@ def listar_historial_notificaciones(request):
 
     data = []
     for n in qs:
+        # HU-41: las notificaciones de una solicitud de acompañamiento pueden no tener alerta
+        origen = n.alerta or n.solicitud
         data.append({
             'id': n.id,
             'alerta_id': n.alerta_id,
-            'estudiante': n.alerta.estudiante.nombre,
+            'solicitud_id': n.solicitud_id,
+            'estudiante': origen.estudiante.nombre if origen else None,
             'destinatario': n.destinatario,
             'rol_destinatario': n.rol_destinatario,
             'canal': n.canal,
@@ -75,11 +78,13 @@ def listar_notificaciones_internas(request):
             'mensaje': n.mensaje,
             'leida': n.leida,
             'fecha': n.fecha_creacion.isoformat(),
+            # HU-41: las de una solicitud de acompañamiento pueden no tener alerta
             'alerta': {
                 'id': n.alerta.id,
                 'nivel': n.alerta.regla.nivel,
                 'tipo': n.alerta.regla.nombre
-            }
+            } if n.alerta_id else None,
+            'solicitud_id': n.solicitud_id,
         })
         
     return JsonResponse({'notificaciones': data})

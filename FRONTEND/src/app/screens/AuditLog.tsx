@@ -102,6 +102,9 @@ export default function AuditLog() {
               <option value="ACCESO_DENEGADO">Acceso Denegado (403)</option>
               <option value="CREAR_CUENTA_ESTUDIANTE">Crear Cuenta de Estudiante</option>
               <option value="ASOCIAR_CUENTA_ESTUDIANTE">Asociar Cuenta de Estudiante</option>
+              <option value="SOLICITAR_ACOMPANAMIENTO">Solicitar Acompañamiento</option>
+              <option value="CANCELAR_SOLICITUD">Cancelar Solicitud de Acompañamiento</option>
+              <option value="GESTIONAR_SOLICITUD">Gestionar Solicitud de Acompañamiento</option>
             </select>
           </div>
           

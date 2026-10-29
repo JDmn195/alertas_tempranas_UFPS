@@ -14,6 +14,7 @@ import {
   ClipboardList,
   CalendarClock,
   Gauge,
+  HandHelping,
 } from 'lucide-react';
 import { cerrarSesionLocal } from '../../../services/session';
 
@@ -35,6 +36,7 @@ const navItems: NavItem[] = [
   { path: '/dashboard/students', label: 'Estudiantes', icon: Users, roles: ['ADMINISTRADOR', 'DIRECTOR', 'DOCENTE', 'BIENESTAR'] },
   { path: '/dashboard/courses', label: 'Cursos', icon: BookOpen, roles: ['ADMINISTRADOR', 'DIRECTOR', 'DOCENTE'] },
   { path: '/dashboard/alerts', label: 'Gestión de Alertas', icon: AlertTriangle, roles: ['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR'] },
+  { path: '/dashboard/solicitudes', label: 'Solicitudes de Acompañamiento', icon: HandHelping, roles: ['ADMINISTRADOR', 'DIRECTOR', 'BIENESTAR'] },
   { path: '/dashboard/teacher', label: 'Panel del Docente', icon: GraduationCap, roles: ['DOCENTE'] },
   { path: '/dashboard/director', label: 'Panel Estratégico', icon: BarChart3, roles: ['ADMINISTRADOR'] },
   { path: '/dashboard/reports', label: 'Exportar Reportes', icon: FileDown, roles: ['ADMINISTRADOR', 'BIENESTAR', 'DOCENTE'] },
