@@ -298,3 +298,81 @@ class SeguridadSesionTestCase(TestCase):
         self.assertEqual(me(token_viejo).status_code, 401)
         token_nuevo = self._login('Otra-clave-segura-2026').json()['token']
         self.assertEqual(me(token_nuevo).status_code, 200)
+
+
+class RecuperacionContrasenaCorreoTestCase(TestCase):
+    """
+    El correo de recuperación sale por la API HTTP de Brevo cuando hay BREVO_API_KEY
+    (Render bloquea el SMTP saliente); sin la clave se usa send_mail.
+    """
+
+    def setUp(self):
+        self.usuario = Usuario(nombre='Ana <b>Pérez</b>', correo='ana@ufps.edu.co', rol='ESTUDIANTE')
+        self.usuario.set_unusable_password()
+        self.usuario.save()
+
+    def _solicitar(self, correo):
+        return self.client.post(reverse('solicitar_recuperacion'), data=json.dumps({'email': correo}),
+                                content_type='application/json')
+
+    def _respuesta_brevo(self, status):
+        from unittest.mock import MagicMock
+        resp = MagicMock()
+        resp.status_code = status
+        resp.text = 'detalle'
+        return resp
+
+    def test_con_clave_brevo_envia_por_la_api_y_no_por_smtp(self):
+        from unittest.mock import patch
+        from django.core import mail
+        with patch.dict('os.environ', {'BREVO_API_KEY': 'clave-prueba'}), \
+                patch('alertas.services.requests.post', return_value=self._respuesta_brevo(201)) as post:
+            resp = self._solicitar('ana@ufps.edu.co')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(mail.outbox), 0)
+        post.assert_called_once()
+        payload = post.call_args.kwargs['json']
+        self.assertEqual(payload['to'], [{'email': 'ana@ufps.edu.co'}])
+        self.assertIn('/reset-password/', payload['htmlContent'])
+        # El nombre viene de datos importados: se escapa en el HTML
+        self.assertIn('Ana &lt;b&gt;Pérez&lt;/b&gt;', payload['htmlContent'])
+
+    def test_el_enlace_enviado_por_brevo_permite_definir_la_contrasena(self):
+        import re
+        from unittest.mock import patch
+        with patch.dict('os.environ', {'BREVO_API_KEY': 'clave-prueba'}), \
+                patch('alertas.services.requests.post', return_value=self._respuesta_brevo(201)) as post:
+            self._solicitar('ana@ufps.edu.co')
+        token = re.search(r'/reset-password/([^"<\s]+)', post.call_args.kwargs['json']['htmlContent']).group(1)
+        resp = self.client.post(reverse('cambiar_contrasena'),
+                                data=json.dumps({'token': token, 'password': 'Clave-nueva-2026'}),
+                                content_type='application/json')
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+    def test_si_brevo_falla_responde_igual_y_lo_registra(self):
+        from unittest.mock import patch
+        with patch.dict('os.environ', {'BREVO_API_KEY': 'clave-prueba'}), \
+                patch('alertas.services.requests.post', return_value=self._respuesta_brevo(500)), \
+                self.assertLogs('usuarios.views', level='ERROR'):
+            resp = self._solicitar('ana@ufps.edu.co')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_correo_inexistente_no_envia_nada(self):
+        from unittest.mock import patch
+        with patch.dict('os.environ', {'BREVO_API_KEY': 'clave-prueba'}), \
+                patch('alertas.services.requests.post') as post:
+            resp = self._solicitar('nadie@ufps.edu.co')
+        self.assertEqual(resp.status_code, 200)
+        post.assert_not_called()
+
+    def test_sin_clave_brevo_usa_send_mail(self):
+        import os
+        from unittest.mock import patch
+        from django.core import mail
+        entorno = {k: v for k, v in os.environ.items() if k != 'BREVO_API_KEY'}
+        with patch.dict('os.environ', entorno, clear=True), patch('alertas.services.requests.post') as post:
+            resp = self._solicitar('ana@ufps.edu.co')
+        self.assertEqual(resp.status_code, 200)
+        post.assert_not_called()
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('/reset-password/', mail.outbox[0].body)

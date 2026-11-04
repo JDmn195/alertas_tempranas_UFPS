@@ -143,6 +143,35 @@ def login_view(request):
         logger.exception("Error inesperado en el inicio de sesión")
         return JsonResponse({'error': 'Error inesperado al iniciar sesión.'}, status=500)
 
+def _enviar_correo_recuperacion(usuario, link):
+    """
+    Envía el enlace de recuperación. Con BREVO_API_KEY (producción) usa la API HTTP de
+    Brevo, igual que las notificaciones de alertas: Render bloquea el SMTP saliente y
+    send_mail dejaba la petición colgada hasta que el servidor la cortaba (500 sin CORS).
+    Sin la clave (desarrollo y pruebas) usa send_mail, que en local imprime el enlace en consola.
+    Si Brevo falla solo se registra en el log: la respuesta al cliente no cambia.
+    """
+    from django.utils.html import escape
+    from alertas.services import NotificationService
+
+    asunto = 'Recuperación de contraseña - SAT UFPS'
+    if NotificationService.get_brevo_config()['api_key']:
+        html = (
+            f'<p>Hola {escape(usuario.nombre)},</p>'
+            f'<p>Haz clic en el siguiente enlace para restablecer tu contraseña:</p>'
+            f'<p><a href="{escape(link)}">{escape(link)}</a></p>'
+            f'<p>Este enlace es válido por 1 hora y solo puede usarse una vez.</p>'
+        )
+        resultado, detalle = NotificationService.enviar_brevo(usuario.correo, asunto, html)
+        if resultado != 'exitoso':
+            logger.error("No se pudo enviar el correo de recuperación a %s: %s", usuario.correo, detalle)
+        return
+
+    mensaje = (f'Hola {usuario.nombre},\n\nHaz clic en el siguiente enlace para restablecer tu contraseña:\n\n'
+               f'{link}\n\nEste enlace es válido por 1 hora y solo puede usarse una vez.')
+    send_mail(asunto, mensaje, settings.DEFAULT_FROM_EMAIL, [usuario.correo])
+
+
 @csrf_exempt
 def solicitar_recuperacion(request):
     if request.method != 'POST':
@@ -155,11 +184,7 @@ def solicitar_recuperacion(request):
         usuario = Usuario.objects.filter(correo=correo, activo=True).first() if correo else None
         if usuario:
             link = f"{settings.FRONTEND_URL}/reset-password/{_generar_token_cambio(usuario)}"
-
-            asunto = 'Recuperación de contraseña - SAT UFPS'
-            mensaje = f'Hola {usuario.nombre},\n\nHaz clic en el siguiente enlace para restablecer tu contraseña:\n\n{link}\n\nEste enlace es válido por 1 hora y solo puede usarse una vez.'
-
-            send_mail(asunto, mensaje, settings.DEFAULT_FROM_EMAIL, [usuario.correo])
+            _enviar_correo_recuperacion(usuario, link)
 
         # Misma respuesta exista o no el correo, para no revelar qué cuentas existen
         return JsonResponse({'mensaje': 'Si el correo existe, se enviarán instrucciones.'}, status=200)
