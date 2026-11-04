@@ -92,19 +92,24 @@ export default function NotificationInbox() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-4">
                     <div className={`mt-1 w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      notif.alerta.nivel === 'high' ? 'bg-red-100' : 
-                      notif.alerta.nivel === 'medium' ? 'bg-yellow-100' : 'bg-gray-100'
+                      notif.alerta?.nivel === 'high' ? 'bg-red-100' : 
+                      notif.alerta?.nivel === 'medium' ? 'bg-yellow-100' : 'bg-gray-100'
                     }`}>
                       <Bell className={`w-5 h-5 ${
-                        notif.alerta.nivel === 'high' ? 'text-red-600' : 
-                        notif.alerta.nivel === 'medium' ? 'text-yellow-600' : 'text-gray-600'
+                        notif.alerta?.nivel === 'high' ? 'text-red-600' : 
+                        notif.alerta?.nivel === 'medium' ? 'text-yellow-600' : 'text-gray-600'
                       }`} />
                     </div>
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <Badge variant={notif.alerta.nivel as any} size="sm">
-                          Prioridad {notif.alerta.nivel === 'high' ? 'Alta' : notif.alerta.nivel === 'medium' ? 'Media' : 'Baja'}
-                        </Badge>
+                        {/* HU-41: las de una solicitud de acompañamiento no tienen alerta */}
+                        {notif.alerta ? (
+                          <Badge variant={notif.alerta.nivel as any} size="sm">
+                            Prioridad {notif.alerta.nivel === 'high' ? 'Alta' : notif.alerta.nivel === 'medium' ? 'Media' : 'Baja'}
+                          </Badge>
+                        ) : (
+                          <Badge variant="gray" size="sm">Solicitud de acompañamiento</Badge>
+                        )}
                         <span className="text-xs text-gray-400 flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
                           {new Date(notif.fecha).toLocaleString()}

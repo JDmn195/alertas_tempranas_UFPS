@@ -21,6 +21,7 @@ import NotificationInbox from "./screens/NotificationInbox";
 import AuditLog from "./screens/AuditLog";
 import AutomaticProcesses from "./screens/AutomaticProcesses";
 import StudentPortal from "./screens/StudentPortal";
+import SolicitudesAcompanamiento from "./screens/SolicitudesAcompanamiento";
 import { PortalLayout } from "./components/layouts/PortalLayout";
 import { rutaInicio } from "../services/session";
 
@@ -115,7 +116,12 @@ export const router = createBrowserRouter([
       },
       {
         path: "notifications",
-        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DOCENTE', 'DIRECTOR']}><NotificationInbox /></ProtectedRoute>
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DOCENTE', 'DIRECTOR', 'BIENESTAR']}><NotificationInbox /></ProtectedRoute>
+      },
+      {
+        // HU-41: bandeja de solicitudes de acompañamiento de los estudiantes
+        path: "solicitudes",
+        element: <ProtectedRoute allowedRoles={['BIENESTAR', 'DIRECTOR', 'ADMINISTRADOR']}><SolicitudesAcompanamiento /></ProtectedRoute>
       },
       {
         path: "admin/automatic-processes",

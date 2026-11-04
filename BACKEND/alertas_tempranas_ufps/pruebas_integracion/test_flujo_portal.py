@@ -232,3 +232,70 @@ class FlujoAcompanamientoPortalTests(IntegracionTestCase):
         self.assertNotIn('Luis', resp.content.decode())
         registro = Auditoria.objects.get(usuario=cuenta, tipo_accion='ACCESO_DENEGADO')
         self.assertIn(f'intervención ID {ajena.id}', registro.detalle)
+
+
+class FlujoAsistenciaPortalTests(IntegracionTestCase):
+    """HU-42: el docente registra la asistencia y el estudiante consulta la suya en el portal."""
+
+    def test_estudiante_consulta_su_asistencia(self):
+        cuenta = self._usuario('Ana Pérez', 'ana@ufps.edu.co', 'ESTUDIANTE')
+        self.estudiante.usuario = cuenta
+        self.estudiante.save(update_fields=['usuario'])
+        otro = Estudiante.objects.create(
+            codigo='1152002', nombre='Luis Gómez', tipo_documento='CC', numero_documento='100200301',
+            semestre=2, estado_matricula='ACTIVO', email_institucional='luis@ufps.edu.co',
+        )
+        # Ambos matriculados en 2026-1 en Cálculo I y Física I (fila sin notas = matrícula)
+        filas = self.historial_en_riesgo() + [self.fila('2026-1', '1150102', nombre='Física I')]
+        for codigo in (self.estudiante.codigo, otro.codigo):
+            resp = self.importar_historial(filas, codigo=codigo)
+            self.assertEqual(resp.status_code, 200, resp.content)
+
+        # 1. Inicia sesión: matriculado pero sin registros de asistencia
+        self.assertEqual(self.login(cuenta).status_code, 200)
+        data = self.api('get', 'portal-asistencia', cuenta).json()
+        self.assertEqual(data['periodo'], '2026-1')
+        self.assertFalse(data['hay_registros'])
+        self.assertEqual({c['materia'] for c in data['cursos']}, {'Cálculo I', 'Física I'})
+
+        # 2. El docente registra 6 clases de Física I: Ana falta a 2, Luis asiste a todas
+        for dia in range(6):
+            estado_ana = 'FALTA' if dia in (1, 3) else 'ASISTIO'
+            resp = self.api('post', 'course-attendance', self.usuario_docente, args=[self.curso_fisica.id], datos={
+                'fecha': f'2026-02-{dia + 2:02d}',
+                'registros': [
+                    {'codigo_estudiante': self.estudiante.codigo, 'estado': estado_ana,
+                     'observacion': 'Llegó tarde y sin justificación'},
+                    {'codigo_estudiante': otro.codigo, 'estado': 'ASISTIO'},
+                ],
+            })
+            self.assertEqual(resp.status_code, 200, resp.content)
+
+        # 3. Ana consulta su asistencia: 33,33 % supera el umbral del 20 %
+        resp = self.api('get', 'portal-asistencia', cuenta, query={'codigo': otro.codigo})
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn('Llegó tarde', resp.content.decode())
+        data = resp.json()
+        self.assertTrue(data['hay_registros'])
+        fisica = next(c for c in data['cursos'] if c['materia'] == 'Física I')
+        self.assertEqual((fisica['total_clases'], fisica['faltas'], fisica['porcentaje'], fisica['umbral']),
+                         (6, 2, 33.33, 20.0))
+        self.assertTrue(fisica['supera_umbral'])
+        self.assertEqual(len(fisica['detalle']), 6)
+        calculo = next(c for c in data['cursos'] if c['materia'] == 'Cálculo I')
+        self.assertIsNone(calculo['porcentaje'])
+
+        # Coincide con lo que ve el docente y con la alerta de inasistencia que se generó
+        personal = self.api('get', 'student-attendance', self.usuario_docente, args=[self.estudiante.codigo]).json()
+        del_personal = next(c for c in personal['cursos'] if c['curso_id'] == fisica['curso_id'])
+        self.assertEqual(del_personal['porcentaje'], fisica['porcentaje'])
+        self.assertEqual(del_personal['supera_umbral'], fisica['supera_umbral'])
+        self.assertTrue(Alerta.objects.filter(estudiante=self.estudiante, regla__tipo='INASISTENCIA').exists())
+
+        # 4. Luis solo ve la suya
+        cuenta_luis = self._usuario('Luis Gómez', 'luis@ufps.edu.co', 'ESTUDIANTE')
+        otro.usuario = cuenta_luis
+        otro.save(update_fields=['usuario'])
+        data = self.api('get', 'portal-asistencia', cuenta_luis).json()
+        fisica_luis = next(c for c in data['cursos'] if c['materia'] == 'Física I')
+        self.assertEqual((fisica_luis['faltas'], fisica_luis['porcentaje'], fisica_luis['supera_umbral']), (0, 0.0, False))
