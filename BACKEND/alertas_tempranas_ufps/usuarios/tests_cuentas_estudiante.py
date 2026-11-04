@@ -177,3 +177,105 @@ class ObtenerEstudianteAutenticadoTests(TestCase):
         self.cuenta.save()
         _, error = obtener_estudiante_autenticado(self._request(self.cuenta))
         self.assertEqual(error.status_code, 401)
+
+
+class ActivacionCuentaEstudianteTests(TestCase):
+    """
+    HU-37: el estudiante registrado (DIRPLAN) obtiene su cuenta solo, desde
+    «¿Olvidaste tu contraseña?», con su correo institucional. Sin BREVO_API_KEY
+    el enlace sale por send_mail (mail.outbox).
+    """
+
+    def setUp(self):
+        self.estudiante = Estudiante.objects.create(
+            codigo='1151001', nombre='Ana Pérez', tipo_documento='CC', numero_documento='1001',
+            semestre=2, estado_matricula='ACTIVO', email_institucional='Ana.Perez@ufps.edu.co',
+        )
+
+    def _solicitar(self, correo):
+        import os
+        from unittest.mock import patch
+        entorno = {k: v for k, v in os.environ.items() if k != 'BREVO_API_KEY'}
+        with patch.dict('os.environ', entorno, clear=True):
+            return self.client.post(reverse('solicitar_recuperacion'), data=json.dumps({'email': correo}),
+                                    content_type='application/json')
+
+    def _token_del_correo(self):
+        import re
+        from django.core import mail
+        return re.search(r'/reset-password/(\S+)', mail.outbox[-1].body).group(1)
+
+    def test_estudiante_sin_cuenta_la_activa_y_define_su_contrasena(self):
+        from django.core import mail
+        resp = self._solicitar('ana.perez@ufps.edu.co')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()['mensaje'], 'Si el correo existe, se enviarán instrucciones.')
+
+        self.estudiante.refresh_from_db()
+        cuenta = self.estudiante.usuario
+        self.assertIsNotNone(cuenta)
+        self.assertEqual((cuenta.rol, cuenta.correo), ('ESTUDIANTE', 'ana.perez@ufps.edu.co'))
+        self.assertTrue(cuenta.contrasena.startswith('!'))  # sin contraseña utilizable
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['ana.perez@ufps.edu.co'])
+        self.assertTrue(Auditoria.objects.filter(tipo_accion='CREAR_CUENTA_ESTUDIANTE',
+                                                 detalle__contains='1151001').exists())
+
+        resp = self.client.post(reverse('cambiar_contrasena'),
+                                data=json.dumps({'token': self._token_del_correo(), 'password': 'Clave-nueva-2026'}),
+                                content_type='application/json')
+        self.assertEqual(resp.status_code, 200, resp.content)
+        resp = self.client.post(reverse('login'),
+                                data=json.dumps({'email': 'ana.perez@ufps.edu.co', 'password': 'Clave-nueva-2026'}),
+                                content_type='application/json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()['rol'], 'ESTUDIANTE')
+
+    def test_segunda_solicitud_no_crea_otra_cuenta(self):
+        from django.core import mail
+        self._solicitar('ana.perez@ufps.edu.co')
+        self._solicitar('ana.perez@ufps.edu.co')
+        self.assertEqual(Usuario.objects.filter(rol='ESTUDIANTE').count(), 1)
+        self.assertEqual(len(mail.outbox), 2)
+
+    def test_correo_que_no_es_de_un_estudiante_no_crea_nada(self):
+        from django.core import mail
+        for correo in ('otro@ufps.edu.co', 'ana.perez@gmail.com', ''):
+            resp = self._solicitar(correo)
+            self.assertIn(resp.status_code, (200,))
+        self.assertFalse(Usuario.objects.filter(rol='ESTUDIANTE').exists())
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_correo_institucional_externo_al_dominio_no_activa(self):
+        Estudiante.objects.filter(pk=self.estudiante.pk).update(email_institucional='ana@gmail.com')
+        self._solicitar('ana@gmail.com')
+        self.assertFalse(Usuario.objects.filter(rol='ESTUDIANTE').exists())
+
+    def test_correo_compartido_por_dos_estudiantes_no_activa(self):
+        Estudiante.objects.create(
+            codigo='1151002', nombre='Otra', tipo_documento='CC', numero_documento='1002',
+            semestre=2, estado_matricula='ACTIVO', email_institucional='ana.perez@ufps.edu.co',
+        )
+        self._solicitar('ana.perez@ufps.edu.co')
+        self.assertFalse(Usuario.objects.filter(rol='ESTUDIANTE').exists())
+
+    def test_cuenta_desactivada_no_se_reactiva_ni_se_duplica(self):
+        from django.core import mail
+        cuenta = _cuenta_estudiante('ana.perez@ufps.edu.co')
+        cuenta.activo = False
+        cuenta.save()
+        self.estudiante.usuario = cuenta
+        self.estudiante.save()
+        self._solicitar('ana.perez@ufps.edu.co')
+        cuenta.refresh_from_db()
+        self.assertFalse(cuenta.activo)
+        self.assertEqual(Usuario.objects.filter(rol='ESTUDIANTE').count(), 1)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_correo_de_una_cuenta_del_personal_inactiva_no_se_convierte_en_estudiante(self):
+        personal = Usuario.objects.create(nombre='Docente', correo='ana.perez@ufps.edu.co', rol='DOCENTE', activo=False)
+        self._solicitar('ana.perez@ufps.edu.co')
+        personal.refresh_from_db()
+        self.assertEqual(personal.rol, 'DOCENTE')
+        self.estudiante.refresh_from_db()
+        self.assertIsNone(self.estudiante.usuario)
