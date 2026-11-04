@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
 import {
   AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, BookOpen, CalendarCheck, CheckCircle2, ChevronRight,
@@ -606,7 +607,10 @@ function ModalAlerta({ alertaId, onCerrar }: { alertaId: number | null; onCerrar
               {detalle.intervenciones.length === 1
                 ? 'Se ha registrado 1 acompañamiento sobre esta alerta.'
                 : `Se han registrado ${detalle.intervenciones.length} acompañamientos sobre esta alerta.`}{' '}
-              Puedes verlos en «Mi acompañamiento».
+              Puedes verlos en{' '}
+              <Link to="/dashboard/portal/acompanamiento" className="font-medium text-[#C8102E] hover:underline">
+                Mi acompañamiento
+              </Link>.
             </span>
           </p>
         )}
@@ -1405,11 +1409,91 @@ function MiAsistencia() {
   );
 }
 
+/** Resumen de las otras secciones del portal, con enlace a cada una. */
+function AccesosPortal() {
+  const [alertas, setAlertas] = useState<ListadoAlertas | null>(null);
+  const [asistencia, setAsistencia] = useState<AsistenciaPropia | null>(null);
+  const [solicitudes, setSolicitudes] = useState<ListadoSolicitudes | null>(null);
+
+  useEffect(() => {
+    let activo = true;
+    const consultar = <T,>(ruta: string, guardar: (datos: T) => void) =>
+      apiFetch(`${baseUrl}/api/portal/${ruta}`)
+        .then(async (res) => (res.ok ? res.json() : null))
+        .then((json: T | null) => {
+          if (activo && json) guardar(json);
+        })
+        .catch(() => undefined);
+    consultar<ListadoAlertas>('alertas/', setAlertas);
+    consultar<AsistenciaPropia>('asistencia/', setAsistencia);
+    consultar<ListadoSolicitudes>('solicitudes/', setSolicitudes);
+    return () => {
+      activo = false;
+    };
+  }, []);
+
+  const pendientes = alertas ? alertas.conteos.activa + alertas.conteos.en_seguimiento : null;
+  const sinAsistencia = asistencia !== null && !asistencia.hay_registros;
+  const enRiesgo = asistencia ? asistencia.cursos.filter((c) => c.supera_umbral || c.cerca_del_limite).length : null;
+  const enCurso = solicitudes ? solicitudes.en_curso ?? 0 : null;
+
+  const tarjetas = [
+    {
+      ruta: '/dashboard/portal/alertas',
+      titulo: 'Mis alertas',
+      icono: Bell,
+      valor: pendientes,
+      detalle: pendientes === 1 ? 'alerta activa o en seguimiento' : 'alertas activas o en seguimiento',
+      destacar: !!pendientes,
+    },
+    {
+      ruta: '/dashboard/portal/asistencia',
+      titulo: 'Mi asistencia',
+      icono: CalendarCheck,
+      valor: sinAsistencia ? '—' : enRiesgo,
+      detalle: sinAsistencia
+        ? 'Sin registros de asistencia'
+        : enRiesgo === 1 ? 'materia cerca o por encima del límite' : 'materias cerca o por encima del límite',
+      destacar: !!enRiesgo,
+    },
+    {
+      ruta: '/dashboard/portal/acompanamiento',
+      titulo: 'Mi acompañamiento',
+      icono: HeartHandshake,
+      valor: enCurso,
+      detalle: enCurso === 1 ? 'solicitud en curso' : 'solicitudes en curso',
+      destacar: false,
+    },
+  ];
+
+  return (
+    <section>
+      <h2 className="text-lg font-semibold text-gray-900 mb-3">Mi seguimiento</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {tarjetas.map(({ ruta, titulo, icono: Icono, valor, detalle, destacar }) => (
+          <Link key={ruta} to={ruta}
+            className="group bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:border-[#C8102E] transition-colors">
+            <div className="flex items-center justify-between text-gray-500">
+              <span className="flex items-center gap-2">
+                <Icono className="w-4 h-4" />
+                <span className="text-xs font-medium">{titulo}</span>
+              </span>
+              <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-[#C8102E]" />
+            </div>
+            <p className={`text-2xl font-bold mt-2 ${destacar ? 'text-[#C8102E]' : 'text-gray-900'}`}>{valor ?? '…'}</p>
+            <p className="text-xs text-gray-500 mt-1">{valor === null ? 'Cargando…' : detalle}</p>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /**
- * Portal del estudiante: inicio con su nivel de riesgo actual (HU-37), la
- * evolución de su promedio (HU-38), sus alertas (HU-39), su acompañamiento
- * (HU-40), la solicitud de acompañamiento (HU-41) y su asistencia por materia
- * (HU-42), siempre con datos de /api/portal/.
+ * Portal del estudiante, dividido en secciones de la barra lateral: inicio con
+ * su nivel de riesgo (HU-37), indicadores y evolución (HU-38); alertas (HU-39);
+ * asistencia por materia (HU-42); y acompañamiento (HU-40) con la solicitud de
+ * acompañamiento (HU-41). Todo sale de /api/portal/.
  */
 export default function StudentPortal() {
   const [datos, setDatos] = useState<RiesgoPropio | null>(null);
@@ -1449,13 +1533,30 @@ export default function StudentPortal() {
       </header>
 
       <TarjetaRiesgo datos={datos} />
+      <AccesosPortal />
+      <Indicadores indicadores={datos.indicadores} />
       <Causas causas={datos.causas} nivel={datos.riesgo.nivel} />
       <EvolucionAcademica />
-      <MisAlertas />
-      <MiAsistencia />
+    </div>
+  );
+}
+
+/** Sección «Mis alertas» del portal (HU-39). */
+export function PortalAlertas() {
+  return <MisAlertas />;
+}
+
+/** Sección «Mi asistencia» del portal (HU-42). */
+export function PortalAsistencia() {
+  return <MiAsistencia />;
+}
+
+/** Sección «Mi acompañamiento» del portal: seguimiento (HU-40) y solicitudes (HU-41). */
+export function PortalAcompanamiento() {
+  return (
+    <div className="space-y-6">
       <MiAcompanamiento />
       <SolicitarAcompanamiento />
-      <Indicadores indicadores={datos.indicadores} />
     </div>
   );
 }
