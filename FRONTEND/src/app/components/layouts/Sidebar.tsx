@@ -15,6 +15,9 @@ import {
   CalendarClock,
   Gauge,
   HandHelping,
+  Bell,
+  CalendarCheck,
+  HeartHandshake,
 } from 'lucide-react';
 import { cerrarSesionLocal } from '../../../services/session';
 
@@ -24,6 +27,8 @@ type NavItem = {
   icon: React.ElementType;
   roles?: string[];
   section?: string;
+  /** Solo se marca activa en su ruta exacta, no en sus subrutas. */
+  exacta?: boolean;
 };
 
 const navItems: NavItem[] = [
@@ -40,8 +45,11 @@ const navItems: NavItem[] = [
   { path: '/dashboard/teacher', label: 'Panel del Docente', icon: GraduationCap, roles: ['DOCENTE'] },
   { path: '/dashboard/director', label: 'Panel Estratégico', icon: BarChart3, roles: ['ADMINISTRADOR'] },
   { path: '/dashboard/reports', label: 'Exportar Reportes', icon: FileDown, roles: ['ADMINISTRADOR', 'BIENESTAR', 'DOCENTE'] },
-  // Portal del estudiante (EP-09): las HU-38 a HU-42 agregan sus entradas en esta sección
-  { path: '/dashboard/portal', label: 'Mi Riesgo Académico', icon: Gauge, roles: ['ESTUDIANTE'], section: 'Mi Portal' },
+  // Portal del estudiante (EP-09): una entrada por sección
+  { path: '/dashboard/portal', label: 'Inicio', icon: Gauge, roles: ['ESTUDIANTE'], section: 'Mi Portal', exacta: true },
+  { path: '/dashboard/portal/alertas', label: 'Mis alertas', icon: Bell, roles: ['ESTUDIANTE'], section: 'Mi Portal' },
+  { path: '/dashboard/portal/asistencia', label: 'Mi asistencia', icon: CalendarCheck, roles: ['ESTUDIANTE'], section: 'Mi Portal' },
+  { path: '/dashboard/portal/acompanamiento', label: 'Mi acompañamiento', icon: HeartHandshake, roles: ['ESTUDIANTE'], section: 'Mi Portal' },
 ];
 
 export function Sidebar() {
@@ -81,7 +89,7 @@ export function Sidebar() {
       <nav className="flex-1 p-4 space-y-1">
         {filteredItems.map((item, index) => {
           const Icon = item.icon;
-          const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+          const isActive = location.pathname === item.path || (!item.exacta && location.pathname.startsWith(item.path + '/'));
           const nuevaSeccion = item.section && item.section !== filteredItems[index - 1]?.section;
 
           return (
