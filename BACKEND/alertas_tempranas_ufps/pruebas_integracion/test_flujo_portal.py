@@ -5,7 +5,6 @@ riesgo y no puede consultar la información de otro estudiante.
 """
 import re
 
-from django.core import mail
 from django.urls import reverse
 
 from academico.models import Estudiante
@@ -29,7 +28,13 @@ class FlujoPortalEstudianteTests(IntegracionTestCase):
         resp = self.client.post(reverse('solicitar_recuperacion'), data={'email': correo},
                                 content_type='application/json')
         self.assertEqual(resp.status_code, 200)
-        token = re.search(r'/reset-password/(\S+)', mail.outbox[-1].body).group(1)
+        # Con BREVO_API_KEY el enlace sale por la API de Brevo (simulada en la base), no por SMTP
+        correo_recuperacion = next(
+            c.kwargs['json'] for c in reversed(self.brevo.call_args_list)
+            if c.kwargs['json']['subject'].startswith('Recuperación')
+        )
+        self.assertEqual(correo_recuperacion['to'], [{'email': correo}])
+        token = re.search(r'/reset-password/([^"<\s]+)', correo_recuperacion['htmlContent']).group(1)
         resp = self.client.post(reverse('cambiar_contrasena'), data={'token': token, 'password': CONTRASENA},
                                 content_type='application/json')
         self.assertEqual(resp.status_code, 200, resp.content)
