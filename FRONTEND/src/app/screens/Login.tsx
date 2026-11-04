@@ -114,7 +114,10 @@ export default function Login() {
                 />
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex justify-between">
+                <Link to="/forgot-password" className="text-sm text-[#C8102E] hover:underline">
+                  ¿Estudiante? Activa tu cuenta
+                </Link>
                 <Link to="/forgot-password" className="text-sm text-[#C8102E] hover:underline">
                   ¿Olvidaste tu contraseña?
                 </Link>
