@@ -52,6 +52,10 @@ export default function ForgotPassword() {
             <p className="text-sm text-gray-600">
               Ingresa tu correo institucional para recibir un enlace de recuperación.
             </p>
+            <p className="text-sm text-gray-600 mt-2">
+              ¿Eres estudiante y es tu primer ingreso? Usa esta misma opción con tu correo
+              institucional para activar tu cuenta y definir tu contraseña.
+            </p>
           </div>
 
           <div className="bg-white rounded-lg border border-gray-200 p-8 shadow-sm">

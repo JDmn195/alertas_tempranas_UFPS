@@ -172,6 +172,35 @@ def _enviar_correo_recuperacion(usuario, link):
     send_mail(asunto, mensaje, settings.DEFAULT_FROM_EMAIL, [usuario.correo])
 
 
+def _activar_cuenta_estudiante(correo):
+    """
+    HU-37: activación de la cuenta del estudiante desde «¿Olvidaste tu contraseña?».
+    Si el correo es el institucional de un único estudiante registrado (DIRPLAN) que aún no
+    tiene cuenta, se crea su cuenta ESTUDIANTE sin contraseña utilizable y se devuelve, para
+    enviarle el enlace con el que la define. Recibir ese correo prueba que el buzón es suyo.
+    En cualquier otro caso devuelve None y no se envía nada (la respuesta no cambia).
+    """
+    from academico.models import Estudiante
+    from portal.cuentas import CREADA, crear_cuenta_estudiante, DOMINIO_INSTITUCIONAL
+
+    correo = str(correo).strip().lower()
+    if not correo.endswith(DOMINIO_INSTITUCIONAL):
+        return None
+    candidatos = list(Estudiante.objects.filter(email_institucional__iexact=correo, usuario__isnull=True)[:2])
+    if len(candidatos) != 1:
+        return None  # ninguno, o un correo repetido entre estudiantes: no se adivina a quién pertenece
+
+    resultado, usuario = crear_cuenta_estudiante(candidatos[0])
+    if resultado != CREADA:
+        return None
+    registrar_auditoria(
+        None, 'CREAR_CUENTA_ESTUDIANTE',
+        f"Cuenta {usuario.correo} creada y asociada al estudiante {candidatos[0].codigo} "
+        f"por activación desde «¿Olvidaste tu contraseña?».",
+    )
+    return usuario
+
+
 @csrf_exempt
 def solicitar_recuperacion(request):
     if request.method != 'POST':
@@ -182,6 +211,8 @@ def solicitar_recuperacion(request):
         correo = data.get('email')
 
         usuario = Usuario.objects.filter(correo=correo, activo=True).first() if correo else None
+        if usuario is None and correo:
+            usuario = _activar_cuenta_estudiante(correo)
         if usuario:
             link = f"{settings.FRONTEND_URL}/reset-password/{_generar_token_cambio(usuario)}"
             _enviar_correo_recuperacion(usuario, link)
