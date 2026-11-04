@@ -7,6 +7,7 @@ de los parámetros. Las respuestas no incluyen observaciones, anotaciones,
 evidencias, datos del personal ni campos de auditoría.
 """
 import logging
+import re
 
 from django.db.models import Sum
 from django.http import JsonResponse
@@ -15,8 +16,11 @@ from django.views.decorators.http import require_GET
 from academico.models import Materia, Nota
 from academico.services.historial_promedios import serie_promedios_por_periodo, tendencia_promedio
 from alertas.evaluacion import NOTA_APROBATORIA, calcular_indicadores, calcular_ppa
-from alertas.models import Regla, RiesgoEstudiante
+from alertas.models import Alerta, Regla, RiesgoEstudiante
 from usuarios.decorators import obtener_estudiante_autenticado, requiere_rol
+from usuarios.utils import registrar_auditoria
+
+from .alertas import ESTADOS, serializar_alerta
 
 logger = logging.getLogger(__name__)
 
@@ -207,3 +211,121 @@ def evolucion_propia(request):
     except Exception:
         logger.exception("Error al consultar la evolución del estudiante %s", estudiante.codigo)
         return JsonResponse({'error': 'No fue posible consultar tu evolución académica.'}, status=500)
+
+
+PATRON_PERIODO = re.compile(r'^\d{4}-[12]$')
+TIPOS_REGLA = {tipo for tipo, _ in Regla.TIPO_CHOICES}
+
+
+def _filtros_alertas(params):
+    """Valida los filtros del listado. Retorna (filtros, errores)."""
+    filtros, errores = {}, {}
+    estado = (params.get('estado') or '').strip().lower()
+    periodo = (params.get('periodo') or '').strip()
+    tipo = (params.get('tipo') or '').strip().upper()
+
+    if estado:
+        if estado in ESTADOS:
+            filtros['estado'] = estado
+        else:
+            errores['estado'] = f"Estado no válido. Use uno de: {', '.join(ESTADOS)}."
+    if periodo:
+        if PATRON_PERIODO.match(periodo):
+            filtros['periodo'] = periodo
+        else:
+            errores['periodo'] = 'Periodo no válido. Use el formato AAAA-S (por ejemplo, 2026-1).'
+    if tipo:
+        if tipo in TIPOS_REGLA:
+            filtros['tipo'] = tipo
+        else:
+            errores['tipo'] = f"Tipo no válido. Use uno de: {', '.join(sorted(TIPOS_REGLA))}."
+    return filtros, errores
+
+
+@require_GET
+@requiere_rol(['ESTUDIANTE'])
+def alertas_propias(request):
+    """
+    GET /api/portal/alertas/?estado=&periodo=&tipo=  (HU-39)
+    Alertas del estudiante autenticado, de la más reciente a la más antigua. Los
+    filtros son opcionales y acumulables. El periodo es el de las alertas por curso
+    (corte e inasistencia): las de reglas generales no pertenecen a un periodo.
+    """
+    estudiante, error = obtener_estudiante_autenticado(request)
+    if error:
+        return error
+
+    filtros, errores = _filtros_alertas(request.GET)
+    if errores:
+        return JsonResponse({'error': 'Filtros no válidos.', 'detalle': errores}, status=400)
+
+    try:
+        propias = Alerta.objects.filter(estudiante=estudiante).select_related('regla')
+        qs = propias
+        if 'estado' in filtros:
+            qs = qs.filter(estado__in=ESTADOS[filtros['estado']])
+        if 'periodo' in filtros:
+            qs = qs.filter(metadata__periodo=filtros['periodo']).filter(regla__tipo__in=('CORTE', 'INASISTENCIA'))
+        if 'tipo' in filtros:
+            qs = qs.filter(regla__tipo=filtros['tipo'])
+
+        conteos = {
+            clave: propias.filter(estado__in=guardados).count()
+            for clave, guardados in ESTADOS.items()
+        }
+        conteos['total'] = propias.count()
+
+        periodos = sorted(
+            {
+                p for p in propias.filter(regla__tipo__in=('CORTE', 'INASISTENCIA'))
+                .values_list('metadata__periodo', flat=True) if p
+            },
+            reverse=True,
+        )
+
+        alertas = [serializar_alerta(a) for a in qs.order_by('-fecha_generacion', '-id')]
+        mensaje = None
+        if not conteos['total']:
+            mensaje = 'No tienes alertas registradas. ¡Sigue así!'
+        elif not alertas:
+            mensaje = 'Ninguna alerta coincide con los filtros seleccionados.'
+
+        return JsonResponse({
+            'alertas': alertas,
+            'conteos': conteos,
+            'periodos': periodos,
+            'filtros': filtros,
+            'mensaje': mensaje,
+        })
+    except Exception:
+        logger.exception("Error al consultar las alertas del estudiante %s", estudiante.codigo)
+        return JsonResponse({'error': 'No fue posible consultar tus alertas.'}, status=500)
+
+
+@require_GET
+@requiere_rol(['ESTUDIANTE'])
+def detalle_alerta_propia(request, alerta_id):
+    """
+    GET /api/portal/alertas/<id>/  (HU-39)
+    Detalle de una alerta del estudiante autenticado con su explicación. Si la
+    alerta no existe o es de otro estudiante responde 404 (no 403, para no revelar
+    que existe) y el intento queda en la auditoría.
+    """
+    estudiante, error = obtener_estudiante_autenticado(request)
+    if error:
+        return error
+
+    alerta = Alerta.objects.select_related('regla').filter(id=alerta_id).first()
+    if alerta is None or alerta.estudiante_id != estudiante.codigo:
+        situacion = 'que no existe' if alerta is None else f'del estudiante {alerta.estudiante_id}'
+        registrar_auditoria(
+            request.usuario, 'ACCESO_DENEGADO',
+            f"El estudiante {estudiante.codigo} intentó consultar en el portal la alerta ID {alerta_id}, {situacion}",
+        )
+        return JsonResponse({'error': 'Alerta no encontrada.'}, status=404)
+
+    try:
+        return JsonResponse(serializar_alerta(alerta, detalle=True))
+    except Exception:
+        logger.exception("Error al consultar la alerta %s del estudiante %s", alerta_id, estudiante.codigo)
+        return JsonResponse({'error': 'No fue posible consultar la alerta.'}, status=500)

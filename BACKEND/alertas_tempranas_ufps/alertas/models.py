@@ -1,8 +1,12 @@
 from django.db import models
+from django.utils import timezone
 
 # Tipos que el motor general (riesgo y alertas por PPA, reprobación y atraso) no evalúa:
 # CORTE tiene su propio ciclo (alertas_corte.py) e INASISTENCIA lo tendrá en la HU-36.
 TIPOS_FUERA_DEL_MOTOR_GENERAL = ('CORTE', 'INASISTENCIA')
+
+# Estados con los que una alerta queda cerrada (todas las vías de cierre usan alguno)
+ESTADOS_ALERTA_CERRADA = ('cerrada', 'closed')
 
 
 class Regla(models.Model):
@@ -54,6 +58,8 @@ class Alerta(models.Model):
     estado = models.CharField(max_length=30)
     valor_causa = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     metadata = models.JSONField(default=dict, null=True, blank=True)
+    # HU-39: momento en que la alerta pasó a cerrada (lo asigna save, en cualquier vía de cierre)
+    fecha_cierre = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'alerta'
@@ -62,6 +68,18 @@ class Alerta(models.Model):
 
     def __str__(self):
         return f"{self.estudiante.codigo} - {self.estado}"
+
+    def save(self, *args, **kwargs):
+        # La fecha de cierre sigue al estado: se fija al cerrar y se limpia si la alerta se reabre.
+        # Varias vías guardan con update_fields=['estado'], así que se agrega el campo a la lista.
+        cerrada = self.estado in ESTADOS_ALERTA_CERRADA
+        if cerrada == (self.fecha_cierre is not None):
+            return super().save(*args, **kwargs)
+        self.fecha_cierre = timezone.now() if cerrada else None
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            kwargs['update_fields'] = set(update_fields) | {'fecha_cierre'}
+        return super().save(*args, **kwargs)
 
 
 class RiesgoEstudiante(models.Model):
