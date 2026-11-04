@@ -380,17 +380,23 @@ class PrivacidadYAccesoTests(AlertasPortalBase):
         detalle = self.detalle(alerta.id)
         for resp in (listado, detalle):
             contenido = resp.content.decode()
-            for privado in ('OBSERVACION-PRIVADA', 'RESULTADO-PRIVADO', 'ANOTACION-PRIVADA', 'evidencia-privada',
-                            'Docente Prueba', 'docente@ufps.edu.co', 'curso_id', 'regla_id', 'origen_umbral',
-                            'intervenciones', 'usuario', 'auditoria'):
+            for privado in ('OBSERVACION-PRIVADA', 'ANOTACION-PRIVADA', 'evidencia-privada', 'docente@ufps.edu.co',
+                            'DOCENTE', 'curso_id', 'regla_id', 'origen_umbral', 'usuario', 'auditoria'):
                 self.assertNotIn(privado, contenido)
+
+        # El listado no trae nada del acompañamiento
+        for privado in ('RESULTADO-PRIVADO', 'Docente Prueba', 'intervenciones'):
+            self.assertNotIn(privado, listado.content.decode())
 
         data = listado.json()
         self.assertEqual(set(data), {'alertas', 'conteos', 'periodos', 'filtros', 'mensaje'})
         for item in data['alertas']:
             self.assertEqual(set(item), self.CAMPOS_LISTADO)
-        self.assertEqual(set(detalle.json()), self.CAMPOS_LISTADO | {'explicacion', 'cierre'})
+        # HU-40: el detalle incluye el acompañamiento con el serializador del portal (nombre y resultado)
+        self.assertEqual(set(detalle.json()), self.CAMPOS_LISTADO | {'explicacion', 'cierre', 'intervenciones'})
         self.assertEqual(set(detalle.json()['explicacion']), {'mensaje', 'recomendacion', 'datos', 'valores'})
+        [visible] = detalle.json()['intervenciones']
+        self.assertEqual((visible['responsable'], visible['resultado']), ('Docente Prueba', 'RESULTADO-PRIVADO'))
 
     def test_sin_token_401(self):
         alerta = self.alerta_general(self.regla_promedio)
