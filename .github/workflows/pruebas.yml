@@ -1,0 +1,61 @@
+# SDAT-285 (AC-4): pruebas y build en cada pull request.
+#
+# Se ejecuta en los PR hacia main y develop y en los push a esas ramas.
+# No requiere secretos: el backend corre sus pruebas con SQLite (settings.py
+# cambia de base cuando "test" está en sys.argv) y el frontend solo compila.
+name: Pruebas
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Django)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: BACKEND/alertas_tempranas_ufps
+    env:
+      DEBUG: 'True'
+      SECRET_KEY: clave-solo-para-pruebas-en-ci
+      ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: BACKEND/alertas_tempranas_ufps/requirements.txt
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+      - name: Pruebas unitarias y de integración
+        run: python manage.py test
+
+  frontend:
+    name: Frontend (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FRONTEND
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: FRONTEND/package-lock.json
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Compilar
+        run: npm run build
