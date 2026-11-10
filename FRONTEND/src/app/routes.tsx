@@ -22,6 +22,7 @@ import AuditLog from "./screens/AuditLog";
 import AutomaticProcesses from "./screens/AutomaticProcesses";
 import StudentPortal, { PortalAcompanamiento, PortalAlertas, PortalAsistencia } from "./screens/StudentPortal";
 import SolicitudesAcompanamiento from "./screens/SolicitudesAcompanamiento";
+import NotFound from "./screens/NotFound";
 import { PortalLayout } from "./components/layouts/PortalLayout";
 import { rutaInicio } from "../services/session";
 
@@ -142,7 +143,9 @@ export const router = createBrowserRouter([
           { path: "acompanamiento", element: <PortalAcompanamiento /> },  // HU-40 y HU-41
           { path: "*", element: <Navigate to="/dashboard/portal" replace /> },
         ],
-      }
+      },
+      { path: "*", element: <NotFound /> },
     ],
   },
+  { path: "*", element: <NotFound /> },
 ]);
