@@ -43,7 +43,7 @@ const navItems: NavItem[] = [
   { path: '/dashboard/alerts', label: 'Gestión de Alertas', icon: AlertTriangle, roles: ['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR'] },
   { path: '/dashboard/solicitudes', label: 'Solicitudes de Acompañamiento', icon: HandHelping, roles: ['ADMINISTRADOR', 'DIRECTOR', 'BIENESTAR'] },
   { path: '/dashboard/teacher', label: 'Panel del Docente', icon: GraduationCap, roles: ['DOCENTE'] },
-  { path: '/dashboard/director', label: 'Panel Estratégico', icon: BarChart3, roles: ['ADMINISTRADOR'] },
+  { path: '/dashboard/director', label: 'Panel Estratégico', icon: BarChart3, roles: ['ADMINISTRADOR', 'DIRECTOR'] },
   { path: '/dashboard/reports', label: 'Exportar Reportes', icon: FileDown, roles: ['ADMINISTRADOR', 'BIENESTAR', 'DOCENTE'] },
   // Portal del estudiante (EP-09): una entrada por sección
   { path: '/dashboard/portal', label: 'Inicio', icon: Gauge, roles: ['ESTUDIANTE'], section: 'Mi Portal', exacta: true },

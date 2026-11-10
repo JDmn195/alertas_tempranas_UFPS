@@ -15,7 +15,7 @@ test.describe('Inicio de sesión', () => {
   for (const [rol, destino] of [
     ['admin', '/dashboard/admin/import'],
     ['docente', '/dashboard/teacher'],
-    ['director', '/dashboard/students'],
+    ['director', '/dashboard/director'],
     ['bienestar', '/dashboard/students'],
   ] as const) {
     test(`${rol} entra a su pantalla de inicio`, async ({ page }) => {

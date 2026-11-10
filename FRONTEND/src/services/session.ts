@@ -35,6 +35,7 @@ export function rutaInicio(rol?: string | null): string {
   if (rol === 'ESTUDIANTE') return '/dashboard/portal';
   if (rol === 'ADMINISTRADOR') return '/dashboard/admin/import';
   if (rol === 'DOCENTE') return '/dashboard/teacher';
+  if (rol === 'DIRECTOR') return '/dashboard/director';
   return '/dashboard/students';
 }
 
