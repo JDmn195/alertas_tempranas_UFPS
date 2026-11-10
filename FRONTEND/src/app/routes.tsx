@@ -20,7 +20,7 @@ import NotificationHistory from "./screens/NotificationHistory";
 import NotificationInbox from "./screens/NotificationInbox";
 import AuditLog from "./screens/AuditLog";
 import AutomaticProcesses from "./screens/AutomaticProcesses";
-import StudentPortal from "./screens/StudentPortal";
+import StudentPortal, { PortalAcompanamiento, PortalAlertas, PortalAsistencia } from "./screens/StudentPortal";
 import SolicitudesAcompanamiento from "./screens/SolicitudesAcompanamiento";
 import NotFound from "./screens/NotFound";
 import { PortalLayout } from "./components/layouts/PortalLayout";
@@ -132,12 +132,15 @@ export const router = createBrowserRouter([
         path: "admin/notifications-history",
         element: <ProtectedRoute allowedRoles={['ADMINISTRADOR']}><NotificationHistory /></ProtectedRoute>
       },
-      // Portal del estudiante (EP-09). Las HU-38 a HU-42 agregan aquí sus rutas hijas.
+      // Portal del estudiante (EP-09): una ruta por sección de la barra lateral
       {
         path: "portal",
         element: <ProtectedRoute allowedRoles={['ESTUDIANTE']}><PortalLayout /></ProtectedRoute>,
         children: [
-          { index: true, element: <StudentPortal /> },  // HU-37: riesgo actual
+          { index: true, element: <StudentPortal /> },  // Inicio: riesgo (HU-37) y evolución (HU-38)
+          { path: "alertas", element: <PortalAlertas /> },  // HU-39
+          { path: "asistencia", element: <PortalAsistencia /> },  // HU-42
+          { path: "acompanamiento", element: <PortalAcompanamiento /> },  // HU-40 y HU-41
           { path: "*", element: <Navigate to="/dashboard/portal" replace /> },
         ],
       },
