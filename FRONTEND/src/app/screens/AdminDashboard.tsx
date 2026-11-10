@@ -78,8 +78,6 @@ export default function AdminDashboard() {
       setResponseErrors([]);
       setResponseAdvertencias([]);
 
-      console.log("Endpoint usado:", endpoint);
-
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       const response = await apiFetch(
         `${baseUrl}/api/academico/${endpoint}`,
@@ -90,7 +88,6 @@ export default function AdminDashboard() {
       );
 
       const data = await response.json();
-      console.log("Respuesta backend:", data);
 
       if (response.ok && (data.status === 'success' || data.status === 'parcial')) {
         setValidationStatus("success");
