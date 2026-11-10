@@ -115,7 +115,7 @@ export default function DirectorDashboard() {
       {error && (
         <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-sm text-amber-700">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <div>No se pudo conectar al servidor. Verifique que el backend esté en ejecución en <code className="font-mono text-xs bg-amber-100 px-1 rounded">localhost:8000</code>.</div>
+          <div>No se pudo conectar al servidor. Intente nuevamente en unos minutos. Si el problema continúa, comuníquese con el administrador.</div>
         </div>
       )}
 
