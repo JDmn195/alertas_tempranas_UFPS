@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Upload, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 import { Button } from './ui/Button';
 
@@ -45,10 +45,10 @@ export default function AttendanceImport() {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div className="bg-white rounded-[10px] border border-gray-200 shadow-sm">
       <div className="border-b border-gray-100 px-6 py-4 flex items-center gap-2">
-        <Upload className="w-5 h-5 text-[#C8102E]" />
-        <h2 className="text-base font-bold text-gray-900">Cargar asistencia desde archivo</h2>
+        <Upload className="w-5 h-5 text-primary" />
+        <h2 className="text-base font-semibold text-gray-900">Cargar asistencia desde archivo</h2>
       </div>
       <div className="p-6 space-y-4">
         <div className="text-sm text-gray-600">
@@ -74,22 +74,30 @@ export default function AttendanceImport() {
           variant="outline"
           onClick={() => inputRef.current?.click()}
           disabled={uploading}
-          className="text-[#C8102E] border-[#C8102E]/30 hover:bg-red-50"
+          className="text-primary border-primary/30 hover:bg-primary-tint"
         >
-          <Upload className="w-4 h-4 mr-2" />
+          {uploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" /> : <Upload className="w-4 h-4 mr-2" aria-hidden="true" />}
           {uploading ? 'Importando...' : 'Seleccionar archivo'}
         </Button>
 
         {mensaje && (
-          <div className={`p-3 rounded-lg border text-sm flex items-center gap-2 ${exito ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-700'}`}>
-            {exito ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-            {mensaje}
+          <div role={exito ? 'status' : 'alert'} className={`p-3 rounded-[10px] border text-sm flex items-start gap-2 ${exito ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-700'}`}>
+            {exito ? <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" /> : <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />}
+            <div>
+              <p>{mensaje}</p>
+              {!exito && errores.length > 0 && (
+                <p className="mt-0.5 text-xs text-red-600">No se guardó nada. Corrige las filas de la tabla en tu archivo y vuelve a cargarlo.</p>
+              )}
+              {!exito && errores.length === 0 && (
+                <p className="mt-0.5 text-xs text-red-600">Revisa que el archivo sea .xlsx, .xls o .csv con las cinco columnas indicadas arriba.</p>
+              )}
+            </div>
           </div>
         )}
 
         {errores.length > 0 && (
-          <div className="max-h-60 overflow-y-auto border border-red-200 rounded-lg">
-            <table className="w-full text-xs">
+          <div className="max-h-60 overflow-y-auto border border-red-200 rounded-[10px]">
+            <table className="tabular-nums w-full text-xs">
               <thead className="bg-red-100 sticky top-0">
                 <tr>
                   <th className="px-3 py-2 text-left font-semibold text-red-800">Fila</th>
@@ -103,7 +111,7 @@ export default function AttendanceImport() {
                   <tr key={i}>
                     <td className="px-3 py-1.5 text-red-700">{err.fila}</td>
                     <td className="px-3 py-1.5 text-red-700">{err.campo}</td>
-                    <td className="px-3 py-1.5 text-red-700 font-mono">{err.valor}</td>
+                    <td className="px-3 py-1.5 text-red-700 tabular-nums">{err.valor}</td>
                     <td className="px-3 py-1.5 text-red-600">{err.mensaje}</td>
                   </tr>
                 ))}

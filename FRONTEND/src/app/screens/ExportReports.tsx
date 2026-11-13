@@ -9,11 +9,14 @@ import {
   UserCheck, 
   BarChart3, 
   Users,
-  Calendar
+  Calendar,
+  SearchX
 } from 'lucide-react';
+import { EncabezadoPagina } from '../components/Panel';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { apiFetch } from '../../services/apiFetch';
+import { EstadoVacio } from '../components/Estados';
 
 // ─── Interfaces y Configuraciones ─────────────────────────────────────────────
 interface ColumnConfig {
@@ -78,10 +81,10 @@ export default function ExportReports() {
         { header: 'Código', key: 'code' },
         { header: 'Estudiante', key: 'name' },
         { header: 'Semestre', key: 'semester', render: (val) => `Semestre ${val}` },
-        { header: 'Promedio', key: 'gpa', render: (val) => <span className="font-semibold text-gray-900">{val != null ? Number(val).toFixed(2) : '—'}</span> },
+        { header: 'Promedio', key: 'gpa', render: (val) => <span className="font-semibold text-ink">{val != null ? Number(val).toFixed(2) : '—'}</span> },
         { header: 'Alertas Activas', key: 'alerts', render: (val) => (
-          <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-            val > 3 ? 'bg-red-100 text-red-700' : val > 0 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
+          <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold ${
+            val > 3 ? 'bg-red-100 text-red-700' : val > 0 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-ink-muted'
           }`}>{val}</span>
         )},
         { header: 'Nivel de Riesgo', key: 'risk', render: (val) => (
@@ -135,7 +138,7 @@ export default function ExportReports() {
         { header: 'Código', key: 'code' },
         { header: 'Estudiante', key: 'name' },
         { header: 'Semestre', key: 'semester', render: (val) => `Semestre ${val}` },
-        { header: 'Promedio PPA', key: 'gpa', render: (val) => <span className="font-semibold text-gray-900">{val != null ? Number(val).toFixed(2) : '—'}</span> },
+        { header: 'Promedio PPA', key: 'gpa', render: (val) => <span className="font-semibold text-ink">{val != null ? Number(val).toFixed(2) : '—'}</span> },
         { header: 'Aprobadas', key: 'passed', render: (val) => <span className="text-green-600 font-medium">{val}</span> },
         { header: 'Reprobadas', key: 'failed', render: (val) => <span className="text-red-600 font-medium">{val}</span> },
         { header: 'Créditos Aprobados', key: 'credits', render: (val) => `${val} / 165` }
@@ -168,7 +171,7 @@ export default function ExportReports() {
                 style={{ width: `${val}%` }}
               />
             </div>
-            <span className="font-semibold text-gray-800 text-xs">{val}%</span>
+            <span className="font-semibold text-ink text-xs">{val}%</span>
           </div>
         )}
       ],
@@ -202,10 +205,10 @@ export default function ExportReports() {
           </Badge>
         )},
         { header: 'Evidencias', key: 'evidenceCount', render: (val) => (
-          <span className="text-gray-600 text-xs font-medium">{val > 0 ? `📄 ${val} archivos` : '❌ Sin evidencia'}</span>
+          <span className="text-ink-muted text-xs font-medium">{val > 0 ? `📄 ${val} archivos` : '❌ Sin evidencia'}</span>
         )},
         { header: 'Observaciones', key: 'notes', render: (val) => (
-          <span className="text-gray-500 max-w-[200px] truncate block text-xs" title={val}>{val}</span>
+          <span className="text-ink-muted max-w-[200px] truncate block text-xs" title={val}>{val}</span>
         )}
       ],
       data: [
@@ -221,9 +224,9 @@ export default function ExportReports() {
       description: 'Comparativo global del rendimiento, promedio de notas y número de alertas por períodos académicos.',
       icon: <Users className="w-5 h-5" />,
       columns: [
-        { header: 'Cohorte / Semestre', key: 'cohort', render: (val) => <span className="font-bold text-gray-900">{val}</span> },
+        { header: 'Cohorte / Semestre', key: 'cohort', render: (val) => <span className="font-semibold text-ink">{val}</span> },
         { header: 'Total Estudiantes', key: 'totalStudents' },
-        { header: 'Promedio Cohorte', key: 'averageGpa', render: (val) => <span className="font-semibold text-gray-800">{val != null ? Number(val).toFixed(2) : '—'}</span> },
+        { header: 'Promedio Cohorte', key: 'averageGpa', render: (val) => <span className="font-semibold text-ink">{val != null ? Number(val).toFixed(2) : '—'}</span> },
         { header: 'Riesgo Alto', key: 'highRisk', render: (val) => <Badge variant="high" size="xs">{val} est.</Badge> },
         { header: 'Riesgo Medio', key: 'mediumRisk', render: (val) => <Badge variant="medium" size="xs">{val} est.</Badge> },
         { header: 'Riesgo Bajo', key: 'lowRisk', render: (val) => <Badge variant="low" size="xs">{val} est.</Badge> },
@@ -284,29 +287,27 @@ export default function ExportReports() {
   }, [liveData, activeReport, searchTerm, selectedRisk, dateFrom, dateTo]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Cabecera */}
-      <div className="border-l-4 border-[#C8102E] pl-4">
-        <h1 className="text-2xl font-bold text-gray-900">Módulo de Reportes</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Visualiza reportes académicos interactivos y configura parámetros para exportar.
-        </p>
-      </div>
+      <EncabezadoPagina
+        titulo="Reportes"
+        detalle="Elige un reporte, ajusta el periodo y los filtros, revisa la vista previa y expórtalo."
+      />
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         {/* Panel Izquierdo: Configuración */}
-        <div className="xl:col-span-5 bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
-          <h2 className="text-base font-semibold text-gray-900">Configuración del Reporte</h2>
+        <div className="xl:col-span-5 bg-white rounded-[14px] border border-line p-5 space-y-5">
+          <h2 className="text-base font-semibold text-ink">Configuración del Reporte</h2>
 
           {/* Tipo de Reporte */}
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[#C8102E]">
+            <label className="block text-sm font-medium text-ink-muted">
               Tipo de Reporte
             </label>
             <select
               value={selectedReportId}
               onChange={(e) => setSelectedReportId(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border-2 border-[#C8102E] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E]/30 bg-white text-gray-800 font-medium"
+              className="w-full h-10 px-3.5 text-sm border border-line-strong rounded-[10px] bg-white text-ink font-medium"
             >
               {Object.values(reports).map((r) => (
                 <option key={r.id} value={r.id}>{r.title}</option>
@@ -317,34 +318,34 @@ export default function ExportReports() {
           {/* Rango de Fechas */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-[#C8102E]">Fecha Desde</label>
+              <label className="block text-sm font-medium text-ink-muted">Fecha Desde</label>
               <input
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent bg-white text-gray-700"
+                className="w-full h-10 px-3.5 text-sm border border-line-strong rounded-[10px] bg-white text-ink"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-[#C8102E]">Fecha Hasta</label>
+              <label className="block text-sm font-medium text-ink-muted">Fecha Hasta</label>
               <input
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent bg-white text-gray-700"
+                className="w-full h-10 px-3.5 text-sm border border-line-strong rounded-[10px] bg-white text-ink"
               />
             </div>
           </div>
 
           {/* Nivel de Riesgo */}
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[#C8102E]">
-              Nivel de Riesgo <span className="text-gray-400 font-normal">(Opcional)</span>
+            <label className="block text-sm font-medium text-ink-muted">
+              Nivel de Riesgo <span className="text-ink-faint font-normal">(Opcional)</span>
             </label>
             <select
               value={selectedRisk}
               onChange={(e) => setSelectedRisk(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-gray-700"
+              className="w-full h-10 px-3.5 text-sm border border-line-strong rounded-[10px] bg-white text-ink"
             >
               <option value="">Todos los Niveles</option>
               <option value="high">Riesgo Alto</option>
@@ -355,15 +356,15 @@ export default function ExportReports() {
 
           {/* Formato de Exportación */}
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[#C8102E]">Formato de Exportación</label>
+            <label className="block text-sm font-medium text-ink-muted">Formato de Exportación</label>
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setFormat('pdf')}
-                className={`px-4 py-2.5 rounded-lg border-2 font-medium transition-all text-sm flex items-center justify-center gap-2 ${
+                className={`px-4 h-10 rounded-[10px] border font-medium transition-all text-sm flex items-center justify-center gap-2 ${
                   format === 'pdf'
-                    ? 'border-[#C8102E] bg-red-50 text-[#C8102E]'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                    ? 'border-primary bg-primary-tint text-primary'
+                    : 'border-line-strong bg-white text-ink-muted hover:border-ink-faint'
                 }`}
               >
                 <FileText className="w-4 h-4" />
@@ -372,10 +373,10 @@ export default function ExportReports() {
               <button
                 type="button"
                 onClick={() => setFormat('excel')}
-                className={`px-4 py-2.5 rounded-lg border-2 font-medium transition-all text-sm flex items-center justify-center gap-2 ${
+                className={`px-4 h-10 rounded-[10px] border font-medium transition-all text-sm flex items-center justify-center gap-2 ${
                   format === 'excel'
-                    ? 'border-[#C8102E] bg-red-50 text-[#C8102E]'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                    ? 'border-primary bg-primary-tint text-primary'
+                    : 'border-line-strong bg-white text-ink-muted hover:border-ink-faint'
                 }`}
               >
                 <FileText className="w-4 h-4" />
@@ -385,7 +386,7 @@ export default function ExportReports() {
           </div>
 
           {/* Botón principal */}
-          <Button fullWidth size="lg" className="w-full font-bold shadow-sm" onClick={async () => {
+          <Button fullWidth size="lg" className="w-full font-semibold" onClick={async () => {
             const baseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
             const params = new URLSearchParams({
               tipo: selectedReportId,
@@ -417,44 +418,42 @@ export default function ExportReports() {
 
 
         {/* Panel Derecho: Vista Previa Dinámica (7 columnas) */}
-        <div className="xl:col-span-7 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-          <div className="border-b border-gray-200 px-6 py-4 bg-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="xl:col-span-7 bg-white rounded-[14px] border border-line overflow-hidden flex flex-col">
+          <div className="border-b border-line px-5 py-4 bg-paper flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-bold text-gray-900">Vista Previa Interactiva</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Mostrando estructura del {activeReport?.title}</p>
+              <h2 className="text-base font-semibold text-ink">Vista Previa Interactiva</h2>
+              <p className="text-xs text-ink-muted mt-0.5">Mostrando estructura del {activeReport?.title}</p>
             </div>
 
             {/* Barra de Búsqueda Integrada (SDAT-134) */}
             <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-ink-faint" />
               <input
                 type="text"
                 placeholder="Buscar en el reporte..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full md:w-56 pl-9 pr-4 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-gray-700 placeholder-gray-400"
+                className="w-full md:w-56 pl-9 pr-4 py-1.5 text-xs border border-line-strong rounded-[10px] focus:outline-none focus:ring-2 focus:ring-primary bg-white text-ink-soft placeholder-gray-400"
               />
             </div>
           </div>
 
           <div className="p-6 flex-1 flex flex-col">
             {/* Cabecera membretada de la previsualización */}
-            <div className="mb-6 pb-4 border-b border-gray-100 flex justify-between items-start">
+            <div className="mb-6 pb-4 border-b border-line flex justify-between items-start">
               <div>
                 <div className="flex items-center gap-2 mb-1.5">
-                  <div className="w-8 h-8 bg-[#C8102E] rounded-md flex items-center justify-center shadow-sm">
-                    <span className="text-white font-black text-sm">U</span>
-                  </div>
+                  <img src="/logo-ufps.svg" alt="UFPS" className="h-8 w-auto" />
                   <div>
-                    <h3 className="font-bold text-gray-800 text-xs">UFPS</h3>
-                    <p className="text-[10px] text-gray-400 leading-none">División de Planificación y Sistemas</p>
+                    <h3 className="font-semibold text-ink text-xs">UFPS</h3>
+                    <p className="text-[10px] text-ink-faint leading-none">División de Planificación y Sistemas</p>
                   </div>
                 </div>
-                <h4 className="font-bold text-gray-900 text-sm mt-2">{activeReport?.title}</h4>
-                <p className="text-[11px] text-gray-500 mt-1 max-w-md">{activeReport?.description}</p>
+                <h4 className="font-semibold text-ink text-sm mt-2">{activeReport?.title}</h4>
+                <p className="text-[11px] text-ink-muted mt-1 max-w-md">{activeReport?.description}</p>
               </div>
 
-              <div className="text-right text-[10px] text-gray-400">
+              <div className="text-right text-[10px] text-ink-faint">
                 <p>Generado: {new Date().toLocaleDateString()}</p>
                 <p className="mt-0.5">Filtro Período: {dateFrom} al {dateTo}</p>
               </div>
@@ -462,31 +461,31 @@ export default function ExportReports() {
 
             {/* Banner de error de conexión */}
             {fetchError && (
-              <div className="mb-4 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-xs text-amber-700">
+              <div className="mb-4 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-[10px] flex items-center gap-2 text-xs text-amber-700">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>{fetchError}</span>
+                <span>{fetchError} Revisa tu conexión y recarga la página para ver los datos reales.</span>
               </div>
             )}
 
             {/* Tabla Dinámica — preview de 5 filas */}
-            <div className="overflow-x-auto flex-1 border border-gray-100 rounded-lg">
-              <table className="w-full border-collapse text-left">
+            <div className="overflow-x-auto flex-1 border border-line rounded-[10px]">
+              <table className="tabular-nums w-full border-collapse text-left">
                 <thead>
-                  <tr className="bg-[#C8102E] text-white">
+                  <tr className="bg-paper text-ink-soft border-b border-line">
                     {activeReport?.columns.map((col, idx) => (
-                      <th key={idx} className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider">
+                      <th key={idx} className="px-4 py-3 text-xs font-semibold">
                         {col.header}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-line">
                   {isLoading ? (
                     Array.from({ length: 5 }).map((_, rowIdx) => (
-                      <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                      <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-paper'}>
                         {activeReport?.columns.map((_, colIdx) => (
                           <td key={colIdx} className="px-4 py-3">
-                            <div className="h-3 bg-gray-200 rounded animate-pulse" style={{ width: `${60 + (colIdx * 13) % 35}%` }} />
+                            <div className="h-3 bg-wash rounded animate-pulse" style={{ width: `${60 + (colIdx * 13) % 35}%` }} />
                           </td>
                         ))}
                       </tr>
@@ -495,14 +494,14 @@ export default function ExportReports() {
                     filteredData.slice(0, 5).map((row, rowIdx) => (
                       <tr
                         key={rowIdx}
-                        className={`text-sm hover:bg-red-50/20 transition-colors ${
-                          rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
+                        className={`text-sm hover:bg-paper transition-colors ${
+                          rowIdx % 2 === 0 ? 'bg-white' : 'bg-paper'
                         }`}
                       >
                         {activeReport!.columns.map((col, colIdx) => {
                           const cellVal = row[col.key];
                           return (
-                            <td key={colIdx} className="px-4 py-3 text-xs text-gray-700">
+                            <td key={colIdx} className="px-4 py-3 text-xs text-ink-soft">
                               {col.render ? col.render(cellVal, row) : (cellVal ?? '—')}
                             </td>
                           );
@@ -511,14 +510,18 @@ export default function ExportReports() {
                     ))
                   ) : (
                     <tr>
-                      <td
-                        colSpan={activeReport?.columns.length || 1}
-                        className="px-4 py-10 text-center text-gray-400 text-xs"
-                      >
-                        <div className="flex flex-col items-center gap-2">
-                          <AlertCircle className="w-8 h-8 text-gray-300" />
-                          <p>No se encontraron registros con los filtros aplicados.</p>
-                        </div>
+                      <td colSpan={activeReport?.columns.length || 1}>
+                        <EstadoVacio
+                          icono={SearchX}
+                          titulo="Sin registros para este reporte"
+                          detalle={`No hay datos entre ${dateFrom} y ${dateTo}${selectedRisk || searchTerm.trim() ? ' con los filtros aplicados' : ''}. Amplía el rango de fechas o cambia el nivel de riesgo.`}
+                        >
+                          {(searchTerm.trim() || selectedRisk) && (
+                            <Button variant="outline" size="sm" onClick={() => { setSearchTerm(''); setSelectedRisk(''); }}>
+                              Quitar filtros
+                            </Button>
+                          )}
+                        </EstadoVacio>
                       </td>
                     </tr>
                   )}
@@ -532,7 +535,7 @@ export default function ExportReports() {
                 <button
                   type="button"
                   onClick={() => setIsDetailOpen(true)}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border-2 border-[#C8102E] text-[#C8102E] hover:bg-red-50 transition-colors"
+                  className="px-3 py-1.5 text-xs font-semibold rounded-[10px] border border-primary text-primary hover:bg-primary-tint transition-colors"
                 >
                   Ver detalles completos →
                 </button>
@@ -545,72 +548,70 @@ export default function ExportReports() {
       {/* ─── Modal de Detalle Completo ─────────────────────────────────────────── */}
       {isDetailOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 animate-in fade-in duration-150 z-50 flex items-center justify-center p-4"
           style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
           onClick={(e) => { if (e.target === e.currentTarget) setIsDetailOpen(false); }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="bg-white rounded-[14px] shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
             {/* Cabecera del modal */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-line bg-gray-50">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-[#C8102E] rounded-md flex items-center justify-center">
-                  <span className="text-white font-black text-sm">U</span>
-                </div>
+                <img src="/logo-ufps.svg" alt="UFPS" className="h-8 w-auto" />
                 <div>
-                  <h2 className="font-bold text-gray-900 text-base">{activeReport?.title}</h2>
-                  <p className="text-xs text-gray-500">{filteredData.length} registros · Generado {new Date().toLocaleDateString()}</p>
+                  <h2 className="font-semibold text-ink text-base">{activeReport?.title}</h2>
+                  <p className="text-xs text-ink-muted">{filteredData.length} registros · Generado {new Date().toLocaleDateString()}</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsDetailOpen(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-200 text-gray-500 transition-colors text-lg font-bold"
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-200 text-ink-muted transition-colors text-lg font-semibold"
               >
                 ✕
               </button>
             </div>
 
             {/* Barra de búsqueda dentro del modal */}
-            <div className="px-6 py-3 border-b border-gray-100 bg-white flex items-center gap-3">
-              <Search className="w-4 h-4 text-gray-400" />
+            <div className="px-6 py-3 border-b border-line bg-white flex items-center gap-3">
+              <Search className="w-4 h-4 text-ink-faint" />
               <input
                 type="text"
                 placeholder="Buscar en todos los registros..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="flex-1 text-sm border-0 outline-none text-gray-700 placeholder-gray-400"
+                className="flex-1 text-sm border-0 outline-none text-ink-soft placeholder-gray-400"
               />
-              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
+              <span className="text-xs text-ink-faint bg-gray-100 px-2 py-1 rounded">
                 {filteredData.length} resultados
               </span>
             </div>
 
             {/* Tabla completa scrollable */}
             <div className="flex-1 overflow-auto">
-              <table className="w-full border-collapse text-left">
+              <table className="tabular-nums w-full border-collapse text-left">
                 <thead className="sticky top-0 z-10">
-                  <tr className="bg-[#C8102E] text-white">
-                    <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider">#</th>
+                  <tr className="bg-paper text-ink-soft border-b border-line">
+                    <th className="px-4 py-3 text-xs font-semibold">#</th>
                     {activeReport?.columns.map((col, idx) => (
-                      <th key={idx} className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                      <th key={idx} className="px-4 py-3 text-xs font-semibold whitespace-nowrap">
                         {col.header}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-line">
                   {filteredData.map((row, rowIdx) => (
                     <tr
                       key={rowIdx}
-                      className={`text-sm hover:bg-red-50/30 transition-colors ${
-                        rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
+                      className={`text-sm hover:bg-paper transition-colors ${
+                        rowIdx % 2 === 0 ? 'bg-white' : 'bg-paper'
                       }`}
                     >
-                      <td className="px-4 py-3 text-xs text-gray-400 font-mono">{rowIdx + 1}</td>
+                      <td className="px-4 py-3 text-xs text-ink-faint tabular-nums">{rowIdx + 1}</td>
                       {activeReport!.columns.map((col, colIdx) => {
                         const cellVal = row[col.key];
                         return (
-                          <td key={colIdx} className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
+                          <td key={colIdx} className="px-4 py-3 text-xs text-ink-soft whitespace-nowrap">
                             {col.render ? col.render(cellVal, row) : (cellVal ?? '—')}
                           </td>
                         );
@@ -623,11 +624,11 @@ export default function ExportReports() {
 
 
             {/* Footer del modal con botón de exportación */}
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+            <div className="px-6 py-4 border-t border-line bg-gray-50 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setIsDetailOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-ink-muted border border-line-strong rounded-[10px] hover:bg-gray-100 transition-colors"
               >
                 Cerrar
               </button>
@@ -644,7 +645,7 @@ export default function ExportReports() {
                   });
                   window.location.href = `${baseUrl}/api/alertas/reportes/exportar/?${params.toString()}`;
                 }}
-                className="px-4 py-2 text-sm font-bold text-white bg-[#C8102E] rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+                className="px-4 py-2 text-sm font-semibold text-white bg-primary rounded-[10px] hover:bg-primary-strong transition-colors flex items-center gap-2"
               >
                 <Download className="w-4 h-4" />
                 Exportar

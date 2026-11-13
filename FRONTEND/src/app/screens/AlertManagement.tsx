@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Button } from '../components/ui/Button';
+import { EncabezadoPagina } from '../components/Panel';
+import { colorDeRiesgo } from '../components/Riesgo';
 import { Badge } from '../components/ui/Badge';
-import { X, ClipboardList, CheckCircle2, AlertTriangle, Filter, ExternalLink, RefreshCw, ChevronRight, Search, ShieldCheck } from 'lucide-react';
+import { X, ClipboardList, CheckCircle2, AlertTriangle, Filter, ExternalLink, RefreshCw, ChevronRight, Search, SearchX, ShieldCheck } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 
+import { AvisoError, CargandoBloque, CargandoLista, EstadoVacio } from '../components/Estados';
 const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas`;
 
 const RISK_CONFIG: Record<string, { label: string; variant: 'high' | 'medium' | 'low' }> = {
@@ -122,13 +125,13 @@ function ModalRegistrar({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 animate-in fade-in duration-150 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 z-10">
+      <div className="relative bg-white rounded-[14px] shadow-2xl w-full max-w-lg mx-4 z-10 animate-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
-            <ClipboardList className="w-5 h-5 text-[#C8102E]" />
-            <h2 className="text-base font-bold text-gray-900">Registrar Intervención</h2>
+            <ClipboardList className="w-5 h-5 text-primary" />
+            <h2 className="text-base font-semibold text-gray-900">Registrar Intervención</h2>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-5 h-5" />
@@ -147,7 +150,7 @@ function ModalRegistrar({
             <select
               value={tipo}
               onChange={(e) => setTipo(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-[10px] focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm"
             >
               <option value="">Selecciona un tipo...</option>
               <option value="TUTORIA">Tutoría</option>
@@ -164,24 +167,24 @@ function ModalRegistrar({
               onChange={(e) => setObservaciones(e.target.value)}
               rows={4}
               placeholder="Describe las acciones realizadas..."
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] text-sm resize-none"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-[10px] focus:outline-none focus:ring-2 focus:ring-primary text-sm resize-none"
             />
           </div>
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-[10px]">
               <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
               <p className="text-sm text-red-600">{error}</p>
             </div>
           )}
         </div>
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-[10px] hover:bg-gray-50 transition-colors">
             Cancelar
           </button>
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-white bg-[#C8102E] rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+            className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-[10px] hover:bg-primary-strong disabled:opacity-50 transition-colors flex items-center gap-2"
           >
             {loading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
             Guardar intervención
@@ -206,7 +209,7 @@ function ModalHistorial({
   const navigate = useNavigate();
 
   const TIPO_LABEL: Record<string, string> = { TUTORIA: 'Tutoría', CITACION: 'Citación', REMISION: 'Remisión' };
-  const TIPO_COLOR: Record<string, string> = { TUTORIA: 'bg-blue-100 text-blue-700', CITACION: 'bg-yellow-100 text-yellow-700', REMISION: 'bg-purple-100 text-purple-700' };
+  const TIPO_COLOR: Record<string, string> = { TUTORIA: 'bg-blue-100 text-blue-700', CITACION: 'bg-amber-100 text-amber-700', REMISION: 'bg-purple-100 text-purple-700' };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -225,13 +228,13 @@ function ModalHistorial({
   }, [alerta.id]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 animate-in fade-in duration-150 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 z-10 max-h-[80vh] flex flex-col">
+      <div className="relative bg-white rounded-[14px] shadow-2xl w-full max-w-lg mx-4 z-10 max-h-[80vh] flex flex-col animate-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
-            <ClipboardList className="w-5 h-5 text-[#C8102E]" />
-            <h2 className="text-base font-bold text-gray-900">Historial de Intervenciones</h2>
+            <ClipboardList className="w-5 h-5 text-primary" />
+            <h2 className="text-base font-semibold text-gray-900">Historial de Intervenciones</h2>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-5 h-5" />
@@ -242,22 +245,28 @@ function ModalHistorial({
           <p className="text-xs text-gray-500">{alerta.alertType}</p>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          {loading && <div className="text-center py-10">Cargando...</div>}
-          {error && <p className="text-sm text-red-500 text-center">{error}</p>}
-          {!loading && intervenciones.length === 0 && <p className="text-sm text-gray-500 text-center py-10">Sin intervenciones registradas</p>}
+          {loading && <CargandoBloque texto="Cargando..." filas={3} />}
+          {error && <AvisoError mensaje={error} instruccion="Cierra el historial y ábrelo de nuevo. Si sigue fallando, recarga la página." />}
+          {!loading && !error && intervenciones.length === 0 && (
+            <EstadoVacio
+              icono={ClipboardList}
+              titulo="Aún no hay intervenciones"
+              detalle="Cuando alguien registre un seguimiento de esta alerta, aparecerá aquí con su fecha y responsable."
+            />
+          )}
           {!loading && intervenciones.map((item) => (
-            <div key={item.id} className={`border rounded-lg p-4 mb-3 ${item.concluida ? 'border-green-200 bg-green-50/40' : 'border-gray-200'}`}>
+            <div key={item.id} className={`border rounded-[10px] p-4 mb-3 ${item.concluida ? 'border-green-200 bg-green-50/40' : 'border-gray-200'}`}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <span className={`text-xs font-semibold px-2 py-1 rounded-full ${TIPO_COLOR[item.tipo] || 'bg-gray-100 text-gray-600'}`}>
                     {TIPO_LABEL[item.tipo] || item.tipo}
                   </span>
                   {item.concluida ? (
-                    <span className="text-xs font-bold px-2 py-1 rounded-full bg-green-100 text-green-700 flex items-center gap-1">
+                    <span className="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700 flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" /> Concluida
                     </span>
                   ) : (
-                    <span className="text-xs font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-700">
+                    <span className="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">
                       En curso
                     </span>
                   )}
@@ -412,7 +421,7 @@ export default function AlertManagement() {
   );
 
   return (
-    <div className="space-y-6 pb-20 max-w-7xl mx-auto px-4 sm:px-6">
+    <div className="space-y-5 pb-10">
       {showModal && selectedAlert && (
         <ModalRegistrar 
           alerta={selectedAlert} 
@@ -427,33 +436,80 @@ export default function AlertManagement() {
         />
       )}
 
-      {/* Header section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mt-4">
-        <div className="border-l-4 border-[#C8102E] pl-4">
-          <h1 className="text-2xl font-extrabold text-gray-900">Gestión de Alertas</h1>
-          <p className="text-sm text-gray-500 font-medium">Monitoreo y seguimiento del riesgo académico estudiantil.</p>
+      {/* Encabezado y acciones generales */}
+      <EncabezadoPagina titulo="Gestión de Alertas" detalle="Monitoreo y seguimiento del riesgo académico estudiantil.">
+        {/* Fix 3.6: botón Reevaluar alertas */}
+        <Button
+          variant="outline"
+          onClick={handleReevaluarAlertas}
+          disabled={reevaluating || generating}
+          className="gap-2"
+          title="Reevalúa todas las alertas abiertas y cierra las que ya no aplican"
+        >
+          <ShieldCheck className={`w-4 h-4 ${reevaluating ? 'animate-pulse' : ''}`} aria-hidden="true" />
+          {reevaluating ? 'Reevaluando...' : 'Reevaluar alertas'}
+        </Button>
+        <Button onClick={handleGenerateAlerts} disabled={generating || reevaluating} className="gap-2">
+          <RefreshCw className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} aria-hidden="true" />
+          {generating ? 'Procesando...' : 'Actualizar'}
+        </Button>
+      </EncabezadoPagina>
+
+      {successMsg && (
+        <div role="status" className="flex items-center gap-3 px-4 py-3 bg-green-50 border border-green-200 rounded-[10px]">
+          <CheckCircle2 className="w-5 h-5 text-green-600" aria-hidden="true" />
+          <p className="text-sm font-medium text-green-800">{successMsg}</p>
         </div>
-        
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Fix 3.1: Buscador por nombre de estudiante */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar estudiante..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2 text-xs font-medium border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] w-52 shadow-sm"
-            />
+      )}
+
+      {/* Estados de la alerta como pestañas; búsqueda y tipo filtran la pestaña abierta */}
+      <div className="bg-white rounded-[14px] border border-line overflow-hidden">
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-line px-4 sm:px-5 pt-3">
+          <div className="flex gap-5 overflow-x-auto -mb-px">
+            {Object.keys(tabMapping).map((tab) => {
+              const state = tabMapping[tab] as keyof Conteos;
+              const count = conteos[state] || 0;
+              const isActive = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  aria-pressed={isActive}
+                  className={`flex items-center gap-2 pb-3 pt-1 text-sm font-semibold whitespace-nowrap border-b-2 ${
+                    isActive ? 'border-primary text-primary-strong' : 'border-transparent text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  {tab}
+                  <span className={`min-w-5 px-1.5 py-0.5 rounded-full text-xs leading-none ${
+                    isActive && tab === 'Activas' && count > 0 ? 'bg-riesgo-critico text-white' : isActive ? 'bg-primary text-white' : 'bg-wash text-ink-muted'
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-gray-200 shadow-sm">
-            <div className="flex items-center gap-2 px-3 border-r border-gray-100">
-              <Filter className="w-4 h-4 text-gray-400" />
-              <select 
-                value={filterType} 
+          <div className="flex flex-wrap items-center gap-2 pb-3">
+            {/* Fix 3.1: Buscador por nombre de estudiante */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint" aria-hidden="true" />
+              <input
+                type="text"
+                placeholder="Buscar estudiante..."
+                aria-label="Buscar estudiante"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-9 pl-9 pr-3 text-sm border border-line-strong rounded-[10px] bg-white w-52"
+              />
+            </div>
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" aria-hidden="true" />
+              <select
+                value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
-                className="text-xs font-bold text-gray-700 border-none focus:ring-0 bg-transparent cursor-pointer uppercase"
+                aria-label="Filtrar por tipo de alerta"
+                className="h-9 pl-9 pr-3 text-sm border border-line-strong rounded-[10px] bg-white cursor-pointer"
               >
                 <option value="all">TODOS LOS TIPOS</option>
                 <option value="PROMEDIO">PROMEDIO</option>
@@ -463,133 +519,99 @@ export default function AlertManagement() {
                 <option value="INASISTENCIA">INASISTENCIA</option>
               </select>
             </div>
-
-            {/* Fix 3.6: botón Reevaluar alertas */}
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={handleReevaluarAlertas} 
-              disabled={reevaluating || generating}
-              className="text-emerald-600 hover:bg-emerald-50 gap-2 h-9 px-4 rounded-xl"
-              title="Reevalúa todas las alertas abiertas y cierra las que ya no aplican"
-            >
-              <ShieldCheck className={`w-3.5 h-3.5 ${reevaluating ? 'animate-pulse' : ''}`} />
-              <span className="text-[11px] font-extrabold uppercase tracking-widest">
-                {reevaluating ? 'Reevaluando...' : 'Reevaluar alertas'}
-              </span>
-            </Button>
-
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={handleGenerateAlerts} 
-              disabled={generating || reevaluating}
-              className="text-[#C8102E] hover:bg-red-50 gap-2 h-9 px-4 rounded-xl"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${generating ? 'animate-spin' : ''}`} />
-              <span className="text-[11px] font-extrabold uppercase tracking-widest">{generating ? 'Procesando...' : 'Actualizar'}</span>
-            </Button>
           </div>
-        </div>
-      </div>
-
-      {successMsg && (
-        <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-2xl animate-in fade-in slide-in-from-top-4">
-          <CheckCircle2 className="w-5 h-5 text-green-500" />
-          <p className="text-sm font-semibold text-green-700">{successMsg}</p>
-        </div>
-      )}
-
-      {/* Tabs Control */}
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="flex border-b border-gray-100 bg-gray-50/50 p-1.5">
-          {Object.keys(tabMapping).map((tab) => {
-            const state = tabMapping[tab] as keyof Conteos;
-            const count = conteos[state] || 0;
-            const isActive = activeTab === tab;
-            return (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`flex-1 py-3 px-4 text-[10px] font-extrabold uppercase tracking-widest transition-all relative flex items-center justify-center gap-2 rounded-xl ${isActive ? 'bg-white text-[#C8102E] shadow-sm ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100/50'}`}
-              >
-                {tab}
-                <span className={`px-2 py-0.5 rounded-full text-[9px] ${isActive ? 'bg-[#C8102E] text-white' : 'bg-gray-200 text-gray-500'}`}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
         </div>
 
         {/* Content List */}
         <div className="divide-y divide-gray-50">
           {loading ? (
-            <div className="py-24 flex flex-col items-center justify-center space-y-4">
-              <div className="w-12 h-12 border-4 border-gray-100 border-t-[#C8102E] rounded-full animate-spin" />
-              <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Cargando información...</p>
-            </div>
+            <CargandoLista filas={4} texto="Cargando alertas…" />
           ) : studentGroups.length === 0 ? (
-            <div className="py-32 text-center space-y-4">
-              <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto border border-gray-100">
-                <CheckCircle2 className="w-10 h-10 text-gray-200" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">No hay registros</h3>
-                <p className="text-xs text-gray-400 font-medium">Todo está bajo control en esta categoría.</p>
-              </div>
-            </div>
+            (filterType !== 'all' || searchQuery.trim() !== '') ? (
+              <EstadoVacio
+                icono={SearchX}
+                titulo="Ninguna alerta coincide con tu búsqueda"
+                detalle="Hay filtros activos en esta pestaña. Quítalos para ver todas las alertas."
+              >
+                <Button variant="outline" size="sm" onClick={() => { setFilterType('all'); setSearchQuery(''); }}>
+                  Quitar filtros
+                </Button>
+              </EstadoVacio>
+            ) : activeTab === 'Activas' ? (
+              <EstadoVacio
+                icono={ShieldCheck}
+                titulo="No hay alertas activas"
+                detalle="Todo está bajo control. Si acabas de importar notas o cambiar reglas, reevalúa para recalcular las alertas."
+              >
+                <Button variant="outline" size="sm" onClick={handleReevaluarAlertas} disabled={reevaluating}>
+                  {reevaluating ? 'Reevaluando…' : 'Reevaluar alertas'}
+                </Button>
+              </EstadoVacio>
+            ) : (
+              <EstadoVacio
+                icono={CheckCircle2}
+                titulo={`No hay alertas ${activeTab === 'En Seguimiento' ? 'en seguimiento' : activeTab.toLowerCase()}`}
+                detalle={
+                  activeTab === 'En Seguimiento'
+                    ? 'Una alerta pasa a seguimiento cuando se registra una intervención. Revisa las alertas activas para empezar.'
+                    : activeTab === 'Atendidas'
+                      ? 'Aquí aparecen las alertas con una intervención concluida, pendientes de cierre.'
+                      : 'Las alertas cerradas, manual o automáticamente, quedan archivadas en esta pestaña.'
+                }
+              />
+            )
           ) : (
             studentGroups.map((group: any) => (
               <div key={group.studentCode} className="group border-b border-gray-50 last:border-0">
                 {/* Header: Student Name */}
                 <div 
                   onClick={() => toggleStudent(group.studentCode)}
-                  className={`px-8 py-5 flex items-center justify-between cursor-pointer transition-all ${expandedStudents[group.studentCode] ? 'bg-gray-50' : 'hover:bg-gray-50/50'}`}
+                  style={{ borderLeftColor: colorDeRiesgo(group.studentRiskLevel) }}
+                  className={`px-4 sm:px-5 py-3.5 flex items-center justify-between gap-3 cursor-pointer border-l-[3px] ${expandedStudents[group.studentCode] ? 'bg-paper' : 'hover:bg-paper'}`}
                 >
-                  <div className="flex items-center gap-5">
-                    <div className="w-12 h-12 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center justify-center text-[#C8102E] font-extrabold text-sm group-hover:scale-105 transition-transform">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-wash flex items-center justify-center text-ink-soft font-semibold text-sm shrink-0">
                       {group.studentName.split(' ').filter(Boolean).map((n: string) => n[0]).join('').substring(0, 2)}
                     </div>
                     <div>
-                      <h3 className="text-sm font-extrabold text-gray-900 group-hover:text-[#C8102E] transition-colors tracking-tight uppercase">
+                      <h3 className="text-[0.95rem] font-semibold text-ink">
                         {group.studentName}
                       </h3>
-                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">{group.studentCode}</p>
+                      <p className="text-xs text-ink-muted">{group.studentCode}</p>
                     </div>
-                    <Badge variant="gray" size="sm" className="text-[9px] font-extrabold px-2 py-0.5">
+                    <Badge variant="gray" size="sm" className="text-xs font-semibold px-2 py-0.5">
                       {group.alerts.length} {group.alerts.length === 1 ? 'ALERTA' : 'ALERTAS'}
                     </Badge>
                     {RISK_CONFIG[group.studentRiskLevel] && (
-                      <Badge variant={RISK_CONFIG[group.studentRiskLevel].variant} size="sm" className="text-[9px] font-extrabold px-2 py-0.5">
+                      <Badge variant={RISK_CONFIG[group.studentRiskLevel].variant} size="sm" className="text-xs font-semibold px-2 py-0.5">
                         RIESGO {RISK_CONFIG[group.studentRiskLevel].label}
                       </Badge>
                     )}
                   </div>
-                  <ChevronRight className={`w-5 h-5 text-gray-300 transition-all duration-300 ${expandedStudents[group.studentCode] ? 'rotate-90 text-[#C8102E]' : 'group-hover:text-gray-400'}`} />
+                  <ChevronRight className={`w-5 h-5 text-gray-300 transition-all duration-300 ${expandedStudents[group.studentCode] ? 'rotate-90 text-primary' : 'group-hover:text-gray-400'}`} />
                 </div>
 
                 {/* Expanded: Alerts List */}
                 {expandedStudents[group.studentCode] && (
-                  <div className="px-8 pb-8 pt-2 bg-gray-50/50 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="px-4 sm:px-5 pb-5 pt-1 bg-paper space-y-3 border-l-[3px]" style={{ borderLeftColor: colorDeRiesgo(group.studentRiskLevel) }}>
                     {group.alerts.map((alert: AlertItem) => (
-                      <div key={alert.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 hover:shadow-md transition-all border-l-4 border-l-[#C8102E]/20">
+                      <div key={alert.id} className="bg-white p-4 rounded-[10px] border border-line flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                         <div className="space-y-2 flex-1">
                           <div className="flex items-center gap-3">
-                            <span className="text-sm font-extrabold text-gray-800 uppercase tracking-tight">{alert.alertType}</span>
+                            <span className="text-sm font-semibold text-ink">{alert.alertType}</span>
                             {RISK_CONFIG[alert.riskLevel] && (
-                              <Badge variant={RISK_CONFIG[alert.riskLevel].variant} size="xs" className="text-[9px] font-extrabold">
+                              <Badge variant={RISK_CONFIG[alert.riskLevel].variant} size="xs" className="text-xs font-semibold">
                                 {RISK_CONFIG[alert.riskLevel].label}
                               </Badge>
                             )}
                           </div>
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-gray-400 font-semibold">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink-muted font-medium">
                             <div className="flex items-center gap-1.5">
                               <RefreshCw className="w-3 h-3" />
                               <span>Creada: {alert.generatedDate}</span>
                             </div>
                             <span>•</span>
-                            <span className="text-[#C8102E] font-bold uppercase tracking-wider">
+                            <span className="text-ink-soft font-medium">
                               {alert.tipo_regla === 'INASISTENCIA'
                                 ? causaInasistencia(alert)
                                 : alert.tipo_regla === 'CORTE'
@@ -600,18 +622,18 @@ export default function AlertManagement() {
                           
                           {/* HU-36: detalle de inasistencia */}
                           {alert.tipo_regla === 'INASISTENCIA' && alert.metadata && (
-                            <div className="flex flex-wrap gap-1.5 mt-3 text-[10px] font-bold text-gray-600">
-                              <span className="px-2.5 py-1 rounded-lg border bg-red-50 text-red-700 border-red-100">
+                            <div className="flex flex-wrap gap-1.5 mt-3 text-[10px] font-semibold text-gray-600">
+                              <span className="px-2.5 py-1 rounded-[10px] border bg-red-50 text-red-700 border-red-100">
                                 Faltas: {alert.metadata.faltas ?? 0}
                               </span>
-                              <span className="px-2.5 py-1 rounded-lg border bg-gray-50 border-gray-100">
+                              <span className="px-2.5 py-1 rounded-[10px] border bg-gray-50 border-gray-100">
                                 Faltas justificadas: {alert.metadata.faltas_justificadas ?? 0}
                               </span>
-                              <span className="px-2.5 py-1 rounded-lg border bg-gray-50 border-gray-100">
+                              <span className="px-2.5 py-1 rounded-[10px] border bg-gray-50 border-gray-100">
                                 Total de clases: {alert.metadata.total_clases ?? 0}
                               </span>
                               {alert.metadata.cierre_automatico && alert.metadata.motivo_cierre && (
-                                <span className="px-2.5 py-1 rounded-lg border bg-green-50 text-green-700 border-green-100">
+                                <span className="px-2.5 py-1 rounded-[10px] border bg-green-50 text-green-700 border-green-100">
                                   Cierre automático: {alert.metadata.motivo_cierre}
                                 </span>
                               )}
@@ -620,11 +642,11 @@ export default function AlertManagement() {
 
                           {/* HU-32: notas por corte de la alerta */}
                           {alert.tipo_regla === 'CORTE' && alert.metadata?.notas && (
-                            <div className="flex flex-wrap gap-1.5 mt-3 text-[10px] font-bold text-gray-600">
+                            <div className="flex flex-wrap gap-1.5 mt-3 text-[10px] font-semibold text-gray-600">
                               {(['corte1', 'corte2', 'corte3'] as const).map((k, i) => (
                                 <span
                                   key={k}
-                                  className={`px-2.5 py-1 rounded-lg border ${
+                                  className={`px-2.5 py-1 rounded-[10px] border ${
                                     alert.metadata.notas[k] != null && Number(alert.metadata.notas[k]) < 3
                                       ? 'bg-red-50 text-red-700 border-red-100'
                                       : 'bg-gray-50 border-gray-100'
@@ -634,7 +656,7 @@ export default function AlertManagement() {
                                 </span>
                               ))}
                               {alert.metadata.cierre_automatico && alert.metadata.motivo_cierre && (
-                                <span className="px-2.5 py-1 rounded-lg border bg-green-50 text-green-700 border-green-100">
+                                <span className="px-2.5 py-1 rounded-[10px] border bg-green-50 text-green-700 border-green-100">
                                   Cierre automático: {alert.metadata.motivo_cierre}
                                 </span>
                               )}
@@ -645,7 +667,7 @@ export default function AlertManagement() {
                           {(alert.metadata?.materias || alert.metadata?.materias_atrasadas) && (
                             <div className="flex flex-wrap gap-1.5 mt-3">
                               {(alert.metadata.materias || alert.metadata.materias_atrasadas).map((m: string, i: number) => (
-                                <span key={i} className={`text-[9px] font-extrabold px-2.5 py-1 rounded-lg border tracking-wide uppercase ${alert.tipo_regla === 'REPROBACION' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
+                                <span key={i} className={`text-xs font-semibold px-2.5 py-1 rounded-[10px] border tracking-wide uppercase ${alert.tipo_regla === 'REPROBACION' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
                                   {m}
                                 </span>
                               ))}
@@ -658,20 +680,20 @@ export default function AlertManagement() {
                           <Button 
                             variant="ghost" 
                             size="sm" 
-                            className="h-9 px-4 text-gray-500 hover:bg-gray-100 rounded-xl flex-1 lg:flex-none"
+                            className="h-9 px-4 text-gray-500 hover:bg-gray-100 rounded-[10px] flex-1 lg:flex-none"
                             onClick={() => navigate(`/dashboard/students/${alert.studentCode}`)}
                           >
                             <ExternalLink className="w-3.5 h-3.5 mr-2" />
-                            <span className="text-[10px] font-extrabold uppercase tracking-widest">Perfil</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-widest">Perfil</span>
                           </Button>
                           <Button 
                             variant="ghost" 
                             size="sm" 
-                            className="h-9 px-4 text-gray-500 hover:bg-gray-100 rounded-xl flex-1 lg:flex-none"
+                            className="h-9 px-4 text-gray-500 hover:bg-gray-100 rounded-[10px] flex-1 lg:flex-none"
                             onClick={() => { setSelectedAlert(alert); setShowHistory(true); }}
                           >
                             <ClipboardList className="w-3.5 h-3.5 mr-2" />
-                            <span className="text-[10px] font-extrabold uppercase tracking-widest">Historial</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-widest">Historial</span>
                           </Button>
                           
                           {/* Activas y En Seguimiento: Intervenir + Cerrar */}
@@ -679,15 +701,15 @@ export default function AlertManagement() {
                             <>
                               <Button 
                                 size="sm" 
-                                className="h-9 px-5 bg-[#C8102E] text-white hover:bg-red-700 shadow-md shadow-red-100 rounded-xl flex-1 lg:flex-none"
+                                className="h-9 px-5 bg-primary text-white hover:bg-primary-strong rounded-[10px] flex-1 lg:flex-none"
                                 onClick={() => { setSelectedAlert(alert); setShowModal(true); }}
                               >
-                                <span className="text-[10px] font-extrabold uppercase tracking-widest">Intervenir</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-widest">Intervenir</span>
                               </Button>
                               <Button 
                                 variant="outline" 
                                 size="sm" 
-                                className="h-9 px-3 border-gray-200 text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-xl"
+                                className="h-9 px-3 border-gray-200 text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-[10px]"
                                 onClick={() => { if(window.confirm('¿Seguro que deseas cerrar esta alerta?')) handleCerrarAlerta(alert.id); }}
                               >
                                 <X className="w-4 h-4" />
@@ -700,19 +722,19 @@ export default function AlertManagement() {
                             <>
                               <Button 
                                 size="sm" 
-                                className="h-9 px-5 bg-[#C8102E] text-white hover:bg-red-700 shadow-md shadow-red-100 rounded-xl flex-1 lg:flex-none"
+                                className="h-9 px-5 bg-primary text-white hover:bg-primary-strong rounded-[10px] flex-1 lg:flex-none"
                                 onClick={() => { setSelectedAlert(alert); setShowModal(true); }}
                               >
-                                <span className="text-[10px] font-extrabold uppercase tracking-widest">Intervenir</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-widest">Intervenir</span>
                               </Button>
                               <Button 
                                 variant="outline" 
                                 size="sm" 
-                                className="h-9 px-4 border-gray-200 text-gray-500 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-xl flex-1 lg:flex-none"
+                                className="h-9 px-4 border-gray-200 text-gray-500 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-[10px] flex-1 lg:flex-none"
                                 onClick={() => { if(window.confirm('¿Cerrar esta alerta? Ya no se podrán registrar más intervenciones.')) handleCerrarAlerta(alert.id); }}
                               >
                                 <X className="w-3.5 h-3.5 mr-2" />
-                                <span className="text-[10px] font-extrabold uppercase tracking-widest">Cerrar Alerta</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-widest">Cerrar Alerta</span>
                               </Button>
                             </>
                           )}

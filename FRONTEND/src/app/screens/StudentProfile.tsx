@@ -39,7 +39,7 @@ import {
   ReferenceLine
 } from 'recharts';
 import { Button } from '../components/ui/Button';
-import { Badge } from '../components/ui/Badge';
+import { NivelRiesgoChip } from '../components/Riesgo';
 import { apiFetch } from '../../services/apiFetch';
 
 interface StudentDetail {
@@ -65,103 +65,73 @@ interface StudentDetail {
 function FichaAcademica({ student }: { student: StudentDetail | null }) {
   if (!student) return null;
 
+  const personales: [string, string][] = [
+    ['Nombre Completo', student.nombre],
+    ['Código Estudiantil', student.codigo],
+    ['Tipo de Documento', student.tipo_documento],
+    ['Número de Documento', student.numero_documento],
+    ['Celular', student.celular || 'No registrado'],
+    ['Correo Personal', student.email_personal || 'No registrado'],
+    ['Correo Institucional', student.email_institucional || 'No registrado'],
+    ['Municipio Nacimiento', student.municipio_nacimiento || 'No registrado'],
+  ];
+  const academicos: [string, string][] = [
+    ['Semestre Actual', `${student.semestre}° Semestre`],
+    ['Pensum', student.pensum || 'No definido'],
+    ['Fecha de Ingreso', student.ingreso || 'Sin dato'],
+    ['Estado de Matrícula', student.estado_matricula],
+    ['Colegio Egresado', student.colegio_egresado || 'No registrado'],
+  ];
+  const sinDato = ['No registrado', 'No definido', 'Sin dato'];
+
+  const filas = (datos: [string, string][]) => (
+    <dl className="divide-y divide-wash">
+      {datos.map(([label, value]) => (
+        <div key={label} className="grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)] gap-4 py-2.5 text-sm">
+          <dt className="text-ink-muted">{label}</dt>
+          <dd className={`break-words ${sinDato.includes(value) ? 'text-ink-faint' : 'font-medium text-ink'}`}>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-      {/* Header de sección */}
-      <div className="bg-[#C8102E] px-6 py-4 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-          <User className="w-4 h-4 text-white" />
-        </div>
+    <section className="bg-white rounded-[14px] border border-line overflow-hidden">
+      <div className="border-b border-line px-5 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-base font-semibold text-white">Ficha Académica</h2>
-          <p className="text-xs text-red-200">Información personal y académica del estudiante</p>
+          <h2 className="text-base font-semibold text-ink">Ficha Académica</h2>
+          <p className="text-sm text-ink-muted">Información personal y académica del estudiante</p>
         </div>
-        <div className="ml-auto">
-          <span className="text-xs bg-white/20 text-white px-2 py-1 rounded-full">
-            Datos Verificados
-          </span>
-        </div>
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-soft border border-line rounded-md px-2 py-1">
+          <CheckCircle2 className="w-3.5 h-3.5 text-riesgo-bajo" aria-hidden="true" />
+          Datos Verificados
+        </span>
       </div>
 
-      {/* Contenido placeholder */}
-      <div className="p-6">
-        <div className="grid grid-cols-2 gap-6">
-          {/* Col izquierda: datos personales */}
-          <div className="space-y-4">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-2">
-              Datos Personales
-            </h3>
-            {[
-              { icon: User,      label: 'Nombre Completo',       value: student.nombre },
-              { icon: Hash,      label: 'Código Estudiantil',    value: student.codigo },
-              { icon: FileText,  label: 'Tipo de Documento',     value: student.tipo_documento },
-              { icon: Hash,      label: 'Número de Documento',   value: student.numero_documento },
-              { icon: Phone,     label: 'Celular',               value: student.celular || 'No registrado' },
-              { icon: Mail,      label: 'Correo Personal',       value: student.email_personal || 'No registrado' },
-              { icon: Mail,      label: 'Correo Institucional',  value: student.email_institucional || 'No registrado' },
-              { icon: MapPin,    label: 'Municipio Nacimiento',  value: student.municipio_nacimiento || 'No registrado' },
-            ].map(({ icon: Icon, label, value }) => (
-              <div key={label} className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-                  <Icon className="w-4 h-4 text-[#C8102E]" />
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">{label}</p>
-                  <p className="text-sm text-gray-900 font-medium">{value}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="grid md:grid-cols-2 md:divide-x divide-line">
+        <div className="px-5 sm:px-6 py-4">
+          <h3 className="text-sm font-semibold text-ink mb-1">Datos Personales</h3>
+          {filas(personales)}
+        </div>
+        <div className="px-5 sm:px-6 py-4 border-t md:border-t-0 border-line">
+          <h3 className="text-sm font-semibold text-ink mb-1">Datos Académicos</h3>
+          {filas(academicos)}
 
-          {/* Col derecha: datos académicos */}
-          <div className="space-y-4">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100 pb-2">
-              Datos Académicos
-            </h3>
-            {[
-              { icon: Layers,       label: 'Semestre Actual',     value: `${student.semestre}° Semestre` },
-              { icon: BookOpen,     label: 'Pensum',              value: student.pensum || 'No definido' },
-              { icon: Calendar,     label: 'Fecha de Ingreso',    value: student.ingreso || 'Sin dato' },
-              { icon: GraduationCap,label: 'Estado de Matrícula', value: student.estado_matricula },
-              { icon: MapPin,       label: 'Colegio Egresado',    value: student.colegio_egresado || 'No registrado' },
-            ].map(({ icon: Icon, label, value }) => (
-              <div key={label} className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-                  <Icon className="w-4 h-4 text-[#C8102E]" />
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">{label}</p>
-                  <p className="text-sm text-gray-900 font-medium">{value}</p>
-                </div>
-              </div>
-            ))}
-
-            {/* Nivel de riesgo real */}
-            <div className={`mt-6 rounded-lg p-4 text-center border-2 ${
-              student.nivel_riesgo === 'high' ? 'bg-red-50 border-red-200' :
-              student.nivel_riesgo === 'medium' ? 'bg-yellow-50 border-yellow-200' :
-              student.nivel_riesgo === 'low' ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'
-            }`}>
-              <AlertTriangle className={`w-6 h-6 mx-auto mb-1 ${
-                student.nivel_riesgo === 'high' ? 'text-red-500' :
-                student.nivel_riesgo === 'medium' ? 'text-yellow-500' :
-                student.nivel_riesgo === 'low' ? 'text-green-500' : 'text-gray-400'
-              }`} />
-              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Nivel de Riesgo</p>
-              <p className={`text-lg font-black ${
-                student.nivel_riesgo === 'high' ? 'text-red-700' :
-                student.nivel_riesgo === 'medium' ? 'text-yellow-700' :
-                student.nivel_riesgo === 'low' ? 'text-green-700' : 'text-gray-500'
-              }`}>
-                {student.nivel_riesgo === 'high' ? 'ALTO' :
-                 student.nivel_riesgo === 'medium' ? 'MEDIO' :
-                 student.nivel_riesgo === 'low' ? 'BAJO' : 'DESCONOCIDO'}
-              </p>
-            </div>
+          {/* Nivel de riesgo real */}
+          <div className="mt-4 flex items-center justify-between gap-3 rounded-[10px] border border-line bg-paper px-4 py-3">
+            <p className="text-sm font-medium text-ink-soft">Nivel de Riesgo</p>
+            <NivelRiesgoChip
+              nivel={student.nivel_riesgo}
+              texto={
+                student.nivel_riesgo === 'high' ? 'ALTO' :
+                student.nivel_riesgo === 'medium' ? 'MEDIO' :
+                student.nivel_riesgo === 'low' ? 'BAJO' : 'DESCONOCIDO'
+              }
+            />
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -240,19 +210,19 @@ function ModalMateriasReprobadas({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 z-10 max-h-[80vh] flex flex-col">
+      <div className="relative bg-white rounded-[14px] shadow-2xl w-full max-w-lg mx-4 z-10 max-h-[80vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-orange-50 rounded-t-2xl">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-[10px] bg-orange-100 flex items-center justify-center">
               <Activity className="w-4 h-4 text-orange-600" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-gray-900">Materias Reprobadas</h2>
+              <h2 className="text-sm font-semibold text-gray-900">Materias Reprobadas</h2>
               <p className="text-xs text-gray-500">{reprobadas.length} registros en el historial</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-[10px] hover:bg-gray-100">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -267,21 +237,21 @@ function ModalMateriasReprobadas({
             </div>
           ) : (
             Object.entries(agrupadas).map(([nombre, intentos]) => (
-              <div key={nombre} className="border border-orange-100 rounded-xl overflow-hidden">
+              <div key={nombre} className="border border-orange-100 rounded-[10px] overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 bg-orange-50/60">
                   <div>
-                    <p className="text-xs font-bold text-gray-800">{nombre}</p>
-                    <p className="text-[10px] text-gray-400 font-mono mt-0.5">{intentos[0].codigo}</p>
+                    <p className="text-xs font-semibold text-gray-800">{nombre}</p>
+                    <p className="text-[10px] text-gray-400 tabular-nums mt-0.5">{intentos[0].codigo}</p>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
                     {intentos.length} {intentos.length === 1 ? 'vez' : 'veces'}
                   </span>
                 </div>
                 <div className="divide-y divide-orange-50">
                   {intentos.map((it, i) => (
                     <div key={i} className="flex items-center justify-between px-4 py-2.5 bg-white">
-                      <span className="text-xs text-gray-500 font-mono">{it.periodo}</span>
-                      <span className="font-mono text-sm font-bold px-2.5 py-1 rounded-lg bg-red-50 text-red-700 border border-red-100">
+                      <span className="text-xs text-gray-500 tabular-nums">{it.periodo}</span>
+                      <span className="tabular-nums text-sm font-semibold px-2.5 py-1 rounded-[10px] bg-red-50 text-red-700 border border-red-100">
                         {it.nota.toFixed(1)}
                       </span>
                     </div>
@@ -295,7 +265,7 @@ function ModalMateriasReprobadas({
         <div className="px-6 py-3 border-t border-gray-100 flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-xs font-bold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 text-xs font-semibold text-gray-600 border border-gray-200 rounded-[10px] hover:bg-gray-50 transition-colors"
           >
             Cerrar
           </button>
@@ -387,7 +357,7 @@ function IndicadoresSection({
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+    <div className="bg-white rounded-[14px] border border-line overflow-hidden">
       {/* Modal materias reprobadas — 4.3 */}
       {showReprobadas && (
         <ModalMateriasReprobadas
@@ -397,71 +367,73 @@ function IndicadoresSection({
       )}
 
       {/* Header de sección */}
-      <div className="bg-gray-800 px-6 py-4 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-          <BarChart2 className="w-4 h-4 text-white" />
-        </div>
+      <div className="border-b border-line px-5 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-base font-semibold text-white">Indicadores de Desempeño</h2>
-          <p className="text-xs text-gray-400">Métricas clave del rendimiento académico</p>
+          <h2 className="text-base font-semibold text-ink">Indicadores de Desempeño</h2>
+          <p className="text-sm text-ink-muted">Métricas clave del rendimiento académico</p>
         </div>
         {!loading && (
-          <div className="ml-auto">
-            <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full border border-green-500/30">
-              Datos Actualizados
-            </span>
-          </div>
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-soft border border-line rounded-md px-2 py-1">
+            <CheckCircle2 className="w-3.5 h-3.5 text-riesgo-bajo" aria-hidden="true" />
+            Datos Actualizados
+          </span>
         )}
       </div>
 
-      {/* Grid de indicadores */}
-      <div className="p-6">
-        <div className="grid grid-cols-3 gap-4">
-          {indicadores.map(({ icon: Icon, label, sublabel, color, value, onClick }) => (
-            <div
-              key={label}
-              onClick={!loading && onClick ? onClick : undefined}
-              className={`rounded-xl border ${colorMap[color].split(' ').slice(0,2).join(' ')} p-4 flex flex-col items-center text-center gap-2 transition-all ${
-                !loading && onClick
-                  ? 'cursor-pointer hover:shadow-md hover:scale-[1.02] active:scale-[0.98]'
-                  : ''
-              }`}
-            >
-              <div className={`w-10 h-10 rounded-full ${colorMap[color].split(' ').slice(0,2).join(' ')} flex items-center justify-center`}>
-                <Icon className={`w-5 h-5 ${colorMap[color].split(' ').slice(2).join(' ')}`} />
-              </div>
-              
-              {/* Valor Real o Placeholder */}
-              {loading || (value === null && label !== 'Promedio Acumulado' && label !== 'Tendencia del Promedio' && label !== 'Alertas Activas') ? (
-                <div className="w-12 h-8 rounded bg-gray-100 animate-pulse" />
-              ) : (
-                <div className="text-lg font-bold text-gray-800">
-                  {value ?? '—'}
+      {/* Indicadores: una cinta de celdas; las que abren detalle son botones */}
+      <div>
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 border-b border-line overflow-hidden">
+          {indicadores.map(({ icon: Icon, label, sublabel, color, value, onClick }) => {
+            const activo = !loading && !!onClick;
+            return (
+              <div
+                key={label}
+                onClick={activo ? onClick : undefined}
+                onKeyDown={activo ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick!(); } } : undefined}
+                role={activo ? 'button' : undefined}
+                tabIndex={activo ? 0 : undefined}
+                className={`relative px-4 sm:px-5 py-4 border-line border-r border-b -mb-px -mr-px flex flex-col gap-1.5 ${
+                  activo ? 'cursor-pointer hover:bg-paper' : ''
+                }`}
+              >
+                {/* Valor Real o Placeholder */}
+                {loading || (value === null && label !== 'Promedio Acumulado' && label !== 'Tendencia del Promedio' && label !== 'Alertas Activas') ? (
+                  <div className="w-12 h-7 rounded bg-wash animate-pulse" />
+                ) : (
+                  <div className={`text-2xl font-semibold leading-none tracking-[-0.02em] ${
+                    color === 'red' && value !== 0 ? 'text-riesgo-critico' : 'text-ink'
+                  } ${typeof value === 'string' && value.length > 8 ? 'text-base leading-tight tracking-normal' : ''}`}>
+                    {value ?? '—'}
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-sm font-medium text-ink-soft">{label}</p>
+                  <p className="text-xs text-ink-muted">{sublabel}</p>
                 </div>
-              )}
 
-              <div>
-                <p className="text-xs font-semibold text-gray-600">{label}</p>
-                <p className="text-xs text-gray-400">{sublabel}</p>
+                {/* Indicador visual de interactividad */}
+                {activo ? (
+                  <ExternalLink className="absolute top-3.5 right-3.5 w-3.5 h-3.5 text-ink-faint" aria-hidden="true" />
+                ) : (
+                  <Icon className="absolute top-3.5 right-3.5 w-4 h-4 text-line-strong" aria-hidden="true" />
+                )}
               </div>
-
-              {/* Indicador visual de interactividad */}
-              {!loading && onClick && (
-                <ExternalLink className="w-3 h-3 text-gray-300 mt-auto" />
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
+      </div>
 
+      <div className="p-5 sm:p-6">
         {/* ─── Sub-sección: Materias Repetidas (Acordeón) ─────────────────── */}
         {data && data.materias_repetidas.length > 0 && (
-          <div className="mt-8 space-y-4">
+          <div className="mb-6 space-y-4">
             <div className="flex items-center gap-2 px-2 pb-2 border-b border-gray-100">
               <History className="w-4 h-4 text-gray-400" />
-              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-tight">
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-tight">
                 Historial de Materias Repetidas
               </h3>
-              <span className="ml-auto text-[10px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-bold">
+              <span className="ml-auto text-[10px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-semibold">
                 {data.materias_repetidas.length} MATERIAS
               </span>
             </div>
@@ -475,23 +447,23 @@ function IndicadoresSection({
         )}
 
         {/* Gráfico de evolución */}
-        <div className="mt-6 rounded-xl border border-gray-100 bg-gray-50/30 p-6">
+        <div className="rounded-[10px] border border-line p-5">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-sm font-bold text-gray-700">Evolución del Promedio Acumulado</h3>
+              <h3 className="text-sm font-semibold text-gray-700">Evolución del Promedio Acumulado</h3>
               <p className="text-xs text-gray-400 mt-0.5">Historial del PPA periodo a periodo</p>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-[#C8102E]" />
-                <span className="text-[10px] font-bold text-gray-500 uppercase">Promedio Acumulado</span>
+                <div className="w-3 h-3 rounded-full bg-primary" />
+                <span className="text-[10px] font-semibold text-gray-500 uppercase">Promedio Acumulado</span>
               </div>
             </div>
           </div>
           
           <div className="h-64 w-full">
             {loading ? (
-              <div className="w-full h-full bg-gray-100 animate-pulse rounded-lg" />
+              <div className="w-full h-full bg-wash animate-pulse rounded-[10px]" />
             ) : data && data.evolucion.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.evolucion} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -506,14 +478,14 @@ function IndicadoresSection({
                     dataKey="periodo" 
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
+                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9C8D8A' }}
                     dy={10}
                   />
                   <YAxis 
                     domain={[2, 5]} 
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
+                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9C8D8A' }}
                   />
                   <Tooltip 
                     contentStyle={{ 
@@ -538,7 +510,7 @@ function IndicadoresSection({
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-100 rounded-xl">
+              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-100 rounded-[10px]">
                 <Activity className="w-8 h-8 mb-2 opacity-20" />
                 <p className="text-xs font-medium">No hay datos históricos suficientes</p>
               </div>
@@ -550,9 +522,9 @@ function IndicadoresSection({
       {/* Gráfica de evolución de riesgo por periodo */}
       {data?.riesgo_evolucion && data.riesgo_evolucion.length > 0 && (
         <div className="px-6 pb-6">
-          <div className="bg-gray-50 rounded-xl p-5">
+          <div className="bg-gray-50 rounded-[10px] p-5">
             <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-[#C8102E]" />
+              <AlertTriangle className="w-4 h-4 text-primary" />
               Evolución del Nivel de Riesgo por Periodo
             </h3>
             {/* Gráfica de línea con niveles numéricos */}
@@ -571,7 +543,7 @@ function IndicadoresSection({
                     dataKey="periodo"
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
+                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9C8D8A' }}
                     dy={8}
                   />
                   <YAxis
@@ -580,7 +552,7 @@ function IndicadoresSection({
                     tickFormatter={(v) => v === 3 ? 'Alto' : v === 2 ? 'Medio' : v === 1 ? 'Bajo' : ''}
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }}
+                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9C8D8A' }}
                   />
                   <Tooltip
                     contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }}
@@ -598,8 +570,8 @@ function IndicadoresSection({
                     strokeWidth={2.5}
                     dot={(props: any) => {
                       const { cx, cy, payload, index } = props;
-                      const colors: Record<string, string> = { high: '#C8102E', medium: '#f59e0b', low: '#22c55e', unknown: '#9ca3af' };
-                      return <circle key={index} cx={cx} cy={cy} r={5} fill={colors[payload.nivel] ?? '#9ca3af'} stroke="#fff" strokeWidth={2} />;
+                      const colors: Record<string, string> = { high: '#B02A2B', medium: '#C98A12', low: '#2F8F6B', unknown: '#9C8D8A' };
+                      return <circle key={index} cx={cx} cy={cy} r={5} fill={colors[payload.nivel] ?? '#9C8D8A'} stroke="#fff" strokeWidth={2} />;
                     }}
                     activeDot={{ r: 7 }}
                   />
@@ -618,11 +590,11 @@ function IndicadoresSection({
                 const c = riesgoColors[item.nivel_riesgo] ?? riesgoColors.unknown;
                 return (
                   <div key={idx} className="flex items-center gap-3">
-                    <span className="text-xs font-mono text-gray-500 w-16 flex-shrink-0">{item.periodo}</span>
+                    <span className="text-xs tabular-nums text-gray-500 w-16 flex-shrink-0">{item.periodo}</span>
                     <div className="flex-1 bg-gray-200 rounded-full h-2.5 overflow-hidden">
                       <div className={`${c.bar} h-2.5 rounded-full transition-all`} style={{ width: c.width }} />
                     </div>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${c.bg} ${c.text} w-16 text-center flex-shrink-0`}>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${c.bg} ${c.text} w-16 text-center flex-shrink-0`}>
                       {c.label}
                     </span>
                   </div>
@@ -640,13 +612,13 @@ function MateriaRepetidaCard({ materia }: { materia: MateriaRepetida }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="border border-gray-100 rounded-xl overflow-hidden transition-all duration-200 hover:shadow-md">
+    <div className="border border-gray-100 rounded-[10px] overflow-hidden transition-all duration-200 hover:shadow-md">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between p-4 bg-gray-50/50 hover:bg-gray-50 transition-colors"
       >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-500 shadow-sm">
+          <div className="w-8 h-8 rounded-[10px] bg-white border border-gray-200 flex items-center justify-center text-xs font-semibold text-gray-500 shadow-sm">
             {materia.veces}
           </div>
           <div className="text-left">
@@ -666,8 +638,8 @@ function MateriaRepetidaCard({ materia }: { materia: MateriaRepetida }) {
           {materia.intentos.map((intento, idx) => (
             <div key={idx} className="py-2.5 flex items-center justify-between first:pt-0 last:pb-0">
               <div className="flex flex-col">
-                <span className="text-xs font-bold text-gray-600">{intento.periodo}</span>
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                <span className="text-xs font-semibold text-gray-600">{intento.periodo}</span>
+                <span className={`text-[10px] font-semibold uppercase tracking-wider ${
                   intento.estado === 'Aprobado' ? 'text-green-500'
                     : intento.estado === 'En curso' ? 'text-blue-500' : 'text-red-500'
                 }`}>
@@ -676,7 +648,7 @@ function MateriaRepetidaCard({ materia }: { materia: MateriaRepetida }) {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-gray-400 font-medium">Definitiva</span>
-                <div className={`px-3 py-1 rounded-lg font-mono text-sm font-bold ${
+                <div className={`px-3 py-1 rounded-[10px] tabular-nums text-sm font-semibold ${
                   intento.nota === null
                     ? 'bg-gray-50 text-gray-500 border border-gray-100'
                     : intento.nota < 3.0
@@ -735,7 +707,7 @@ function NotaCelda({ valor, destacada = false }: { valor: number | null; destaca
   const baja = valor < NOTA_APROBATORIA;
   return (
     <span
-      className={`font-mono text-sm px-2 py-1 rounded ${destacada ? 'font-bold' : 'font-medium'} ${
+      className={`tabular-nums text-sm px-2 py-1 rounded ${destacada ? 'font-semibold' : 'font-medium'} ${
         baja ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
       }`}
     >
@@ -765,19 +737,19 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
   const activePeriodData = data?.find(p => p.periodo === activeTab);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+    <div className="bg-white rounded-[14px] border border-line overflow-hidden">
       {/* Header de sección */}
-      <div className="bg-gray-700 px-6 py-4 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-          <BookOpen className="w-4 h-4 text-white" />
+      <div className="bg-white border-b border-line px-6 py-4 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-primary-tint flex items-center justify-center">
+          <BookOpen className="w-4 h-4 text-primary" />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-white">Historial Académico</h2>
-          <p className="text-xs text-gray-400">Notas por corte y materias cursadas por semestre</p>
+          <h2 className="text-base font-semibold text-ink">Historial Académico</h2>
+          <p className="text-xs text-ink-muted">Notas por corte y materias cursadas por semestre</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           {!loading && data && (
-            <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full border border-green-500/30">
+            <span className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full border border-green-200">
               {data.length} Periodos
             </span>
           )}
@@ -788,8 +760,8 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
       <div className="border-b border-gray-100 px-6 pt-4 flex gap-2 overflow-x-auto">
         {loading ? (
           <div className="flex gap-2">
-            <div className="w-20 h-8 bg-gray-100 rounded-t-lg animate-pulse" />
-            <div className="w-20 h-8 bg-gray-100 rounded-t-lg animate-pulse" />
+            <div className="w-20 h-8 bg-wash rounded-t-lg animate-pulse" />
+            <div className="w-20 h-8 bg-wash rounded-t-lg animate-pulse" />
           </div>
         ) : data && data.length > 0 ? (
           data.map((sem) => (
@@ -798,7 +770,7 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
               onClick={() => setActiveTab(sem.periodo)}
               className={`px-4 py-2 text-xs font-medium rounded-t-lg border-b-2 whitespace-nowrap transition-colors ${
                 activeTab === sem.periodo
-                  ? 'border-[#C8102E] text-[#C8102E] bg-red-50'
+                  ? 'border-primary text-primary bg-primary-tint'
                   : 'border-transparent text-gray-400 hover:text-gray-600 hover:bg-gray-50'
               }`}
             >
@@ -826,21 +798,21 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
             {loading ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                  <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-16 animate-pulse" /></td>
-                  <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-40 animate-pulse" /></td>
-                  <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-8 animate-pulse" /></td>
-                  <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-8 animate-pulse" /></td>
-                  <td className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-32 animate-pulse" /></td>
+                  <td className="px-5 py-3.5"><div className="h-3.5 bg-wash rounded w-16 animate-pulse" /></td>
+                  <td className="px-5 py-3.5"><div className="h-3.5 bg-wash rounded w-40 animate-pulse" /></td>
+                  <td className="px-5 py-3.5"><div className="h-3.5 bg-wash rounded w-8 animate-pulse" /></td>
+                  <td className="px-5 py-3.5"><div className="h-3.5 bg-wash rounded w-8 animate-pulse" /></td>
+                  <td className="px-5 py-3.5"><div className="h-3.5 bg-wash rounded w-32 animate-pulse" /></td>
                   {Array.from({ length: 5 }).map((__, j) => (
-                    <td key={j} className="px-5 py-3.5"><div className="h-3.5 bg-gray-100 rounded w-10 animate-pulse" /></td>
+                    <td key={j} className="px-5 py-3.5"><div className="h-3.5 bg-wash rounded w-10 animate-pulse" /></td>
                   ))}
-                  <td className="px-5 py-3.5"><div className="h-5 bg-gray-100 rounded-full w-16 animate-pulse" /></td>
+                  <td className="px-5 py-3.5"><div className="h-5 bg-wash rounded-full w-16 animate-pulse" /></td>
                 </tr>
               ))
             ) : activePeriodData ? (
               activePeriodData.materias.map((mat, i) => (
-                <tr key={mat.codigo} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50 hover:bg-gray-50 transition-colors'}>
-                  <td className="px-5 py-3.5 text-xs font-mono text-gray-500">{mat.codigo}</td>
+                <tr key={mat.codigo} className="bg-white hover:bg-paper transition-colors duration-150">
+                  <td className="px-5 py-3.5 text-xs tabular-nums text-gray-500">{mat.codigo}</td>
                   <td className="px-5 py-3.5 text-sm font-medium text-gray-900">
                     {mat.materia}
                     {mat.alertas_corte && mat.alertas_corte.length > 0 && (
@@ -877,7 +849,7 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
                   </td>
                   <td className="px-5 py-3.5"><NotaCelda valor={mat.nota_final} destacada /></td>
                   <td className="px-5 py-3.5">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
                       mat.estado === 'Aprobado'
                         ? 'bg-green-100 text-green-700'
                         : mat.estado === 'En curso'
@@ -904,20 +876,20 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
       <div className="border-t border-gray-100 px-6 py-4 flex items-center justify-between bg-gray-50">
         <div className="flex items-center gap-6">
           <div>
-            <p className="text-[10px] uppercase font-bold text-gray-400">Promedio del Semestre</p>
-            <p className="text-lg font-black text-gray-800">
+            <p className="text-[10px] uppercase font-semibold text-gray-400">Promedio del Semestre</p>
+            <p className="text-lg font-semibold text-gray-800">
               {loading ? <span className="text-gray-300 animate-pulse">--</span> : activePeriodData?.promedio_semestre.toFixed(2) || '0.00'}
             </p>
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold text-gray-400">Créditos Cursados</p>
-            <p className="text-lg font-black text-gray-800">
+            <p className="text-[10px] uppercase font-semibold text-gray-400">Créditos Cursados</p>
+            <p className="text-lg font-semibold text-gray-800">
               {loading ? <span className="text-gray-300 animate-pulse">--</span> : activePeriodData?.creditos_intentados || 0}
             </p>
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold text-gray-400">Créditos Aprobados</p>
-            <p className="text-lg font-black text-green-600">
+            <p className="text-[10px] uppercase font-semibold text-gray-400">Créditos Aprobados</p>
+            <p className="text-lg font-semibold text-green-600">
               {loading ? <span className="text-gray-300 animate-pulse">--</span> : activePeriodData?.creditos_aprobados || 0}
             </p>
           </div>
@@ -950,12 +922,12 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
   };
   const TIPO_COLOR: Record<string, string> = {
     TUTORIA: 'bg-blue-100 text-blue-700',
-    CITACION: 'bg-yellow-100 text-yellow-700',
+    CITACION: 'bg-amber-100 text-amber-700',
     REMISION: 'bg-purple-100 text-purple-700',
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+    <div className="bg-white rounded-[14px] border border-line overflow-hidden">
       {/* Panel lateral de detalle — 4.1 */}
       {selected && (
         <div className="fixed inset-0 z-50 flex justify-end">
@@ -966,13 +938,13 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
               <div className="flex items-center gap-2">
                 <History className="w-5 h-5 text-white" />
                 <div>
-                  <h2 className="text-sm font-bold text-white">Detalle de Intervención</h2>
+                  <h2 className="text-sm font-semibold text-white">Detalle de Intervención</h2>
                   <p className="text-[10px] text-red-200">#{selected.id}</p>
                 </div>
               </div>
               <button
                 onClick={() => setSelected(null)}
-                className="text-white/80 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10"
+                className="text-white/80 hover:text-white transition-colors p-1 rounded-[10px] hover:bg-white/10"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -982,20 +954,20 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
             <div className="p-6 space-y-5 flex-1">
               {/* Tipo y fecha */}
               <div className="flex items-center justify-between">
-                <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${TIPO_COLOR[selected.tipo] ?? 'bg-gray-100 text-gray-600'}`}>
+                <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${TIPO_COLOR[selected.tipo] ?? 'bg-gray-100 text-gray-600'}`}>
                   {TIPO_LABEL[selected.tipo] ?? selected.tipo}
                 </span>
-                <span className="text-xs font-mono text-gray-400">{selected.fecha}</span>
+                <span className="text-xs tabular-nums text-gray-400">{selected.fecha}</span>
               </div>
 
               {/* Causa de la alerta */}
-              <div className="bg-red-50 border border-red-100 rounded-xl p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-red-400 mb-1">Causa de la Alerta</p>
+              <div className="bg-red-50 border border-red-100 rounded-[10px] p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-red-400 mb-1">Causa de la Alerta</p>
                 <p className="text-sm font-semibold text-red-800">
                   {selected.alerta_causa}
-                  <span className="ml-2 text-xs font-mono text-red-400">(Alerta #{selected.alerta_id})</span>
+                  <span className="ml-2 text-xs tabular-nums text-red-400">(Alerta #{selected.alerta_id})</span>
                 </p>
-                <span className={`mt-2 inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                <span className={`mt-2 inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                   selected.alerta_estado === 'activa' || selected.alerta_estado === 'active'
                     ? 'bg-red-100 text-red-700'
                     : selected.alerta_estado === 'cerrada' || selected.alerta_estado === 'closed'
@@ -1008,14 +980,14 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
 
               {/* Atendido por */}
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Atendido por</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Atendido por</p>
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500">
+                  <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-semibold text-gray-500">
                     {selected.usuario.charAt(0)}
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-gray-800">{selected.usuario}</p>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
                       selected.usuario_rol === 'BIENESTAR' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
                     }`}>
                       {selected.usuario_rol}
@@ -1026,8 +998,8 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
 
               {/* Observaciones */}
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Observaciones</p>
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Observaciones</p>
+                <div className="bg-gray-50 rounded-[10px] p-4 border border-gray-100">
                   <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
                     {selected.observaciones}
                   </p>
@@ -1037,8 +1009,8 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
               {/* Resultado */}
               {selected.resultado && (
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-green-600 mb-2">Resultado / Conclusión</p>
-                  <div className="bg-green-50 rounded-xl p-4 border border-green-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-green-600 mb-2">Resultado / Conclusión</p>
+                  <div className="bg-green-50 rounded-[10px] p-4 border border-green-100">
                     <p className="text-sm text-green-800 font-medium leading-relaxed">
                       {selected.resultado}
                     </p>
@@ -1049,12 +1021,12 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
               {/* Evidencia */}
               {selected.evidencia && (
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Evidencia adjunta</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Evidencia adjunta</p>
                   <a
                     href={selected.evidencia}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-xs text-[#C8102E] font-semibold bg-red-50 border border-red-100 px-4 py-2.5 rounded-xl hover:bg-red-100 transition-colors"
+                    className="inline-flex items-center gap-2 text-xs text-primary font-semibold bg-red-50 border border-red-100 px-4 py-2.5 rounded-[10px] hover:bg-red-100 transition-colors"
                   >
                     <FileText className="w-4 h-4" />
                     Ver documento adjunto
@@ -1068,14 +1040,14 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
             <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex gap-3">
               <button
                 onClick={() => navigate(`/dashboard/intervenciones/${selected.id}/evidencias`)}
-                className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-[#C8102E] rounded-xl hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-primary rounded-[10px] hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
               >
                 <ExternalLink className="w-4 h-4" />
                 Ver Evidencias
               </button>
               <button
                 onClick={() => setSelected(null)}
-                className="flex-1 px-4 py-2.5 text-sm font-bold text-gray-600 border border-gray-200 rounded-xl hover:bg-white transition-colors"
+                className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 border border-gray-200 rounded-[10px] hover:bg-white transition-colors"
               >
                 Cerrar
               </button>
@@ -1085,17 +1057,17 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
       )}
 
       {/* Header de sección */}
-      <div className="bg-red-800 px-6 py-4 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-          <History className="w-4 h-4 text-white" />
+      <div className="bg-white border-b border-line px-6 py-4 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-primary-tint flex items-center justify-center">
+          <History className="w-4 h-4 text-primary" />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-white">Historial de Intervenciones</h2>
-          <p className="text-xs text-red-200">Seguimiento de acciones de acompañamiento realizadas al estudiante</p>
+          <h2 className="text-base font-semibold text-ink">Historial de Intervenciones</h2>
+          <p className="text-xs text-ink-muted">Seguimiento de acciones de acompañamiento realizadas al estudiante</p>
         </div>
         {!loading && data && data.length > 0 && (
           <div className="ml-auto">
-            <span className="text-xs bg-white/20 text-white px-2.5 py-1 rounded-full font-semibold">
+            <span className="text-xs bg-wash text-ink-soft px-2.5 py-1 rounded-full font-semibold">
               {data.length} {data.length === 1 ? 'Intervención' : 'Intervenciones'}
             </span>
           </div>
@@ -1107,7 +1079,7 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
         {loading ? (
           <div className="space-y-4">
             {Array.from({ length: 2 }).map((_, i) => (
-              <div key={i} className="flex gap-4 p-4 border border-gray-100 rounded-xl animate-pulse">
+              <div key={i} className="flex gap-4 p-4 border border-gray-100 rounded-[10px] animate-pulse">
                 <div className="h-4 bg-gray-200 rounded w-24" />
                 <div className="h-4 bg-gray-200 rounded w-48" />
                 <div className="h-4 bg-gray-200 rounded w-32" />
@@ -1121,23 +1093,23 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
             <p className="text-xs text-gray-400 mt-1">El estudiante no cuenta con acciones de seguimiento en este momento.</p>
           </div>
         ) : (
-          <div className="relative border-l-2 border-red-100 ml-4 pl-6 space-y-6">
+          <div className="relative border-l-2 border-line ml-4 pl-6 space-y-6">
             {data.map((intervencion) => (
               <div key={intervencion.id} className="relative">
                 {/* Dot/Indicator */}
-                <div className="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full border-2 border-white bg-[#C8102E] shadow-sm" />
+                <div className="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full border-2 border-white bg-primary shadow-sm ring-4 ring-primary-tint" />
 
                 {/* Tarjeta clickeable — 4.1 */}
                 <button
                   onClick={() => setSelected(intervencion)}
-                  className="w-full text-left bg-gray-50/50 rounded-xl p-5 border border-gray-200 hover:border-red-200 hover:bg-white hover:shadow-md transition-all duration-200 shadow-sm group"
+                  className="w-full text-left bg-gray-50/50 rounded-[10px] p-5 border border-gray-200 hover:border-red-200 hover:bg-white hover:shadow-md transition-all duration-200 shadow-sm group"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-gray-800 group-hover:text-[#C8102E] transition-colors">
+                      <span className="text-sm font-semibold text-gray-800 group-hover:text-primary transition-colors">
                         {TIPO_LABEL[intervencion.tipo] ?? intervencion.tipo}
                       </span>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
                         intervencion.usuario_rol === 'BIENESTAR'
                           ? 'bg-purple-100 text-purple-700'
                           : 'bg-blue-100 text-blue-700'
@@ -1146,8 +1118,8 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400 font-mono">{intervencion.fecha}</span>
-                      <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-[#C8102E] transition-colors" />
+                      <span className="text-xs text-gray-400 tabular-nums">{intervencion.fecha}</span>
+                      <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-primary transition-colors" />
                     </div>
                   </div>
                   <p className="text-xs text-gray-500 line-clamp-2 text-left">
@@ -1157,7 +1129,7 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
                   <p className="text-[10px] text-gray-400 mt-1 text-left">
                     Por: <span className="font-medium text-gray-600">{intervencion.usuario}</span>
                     {intervencion.resultado && (
-                      <span className="ml-2 text-green-500 font-bold">· Con resultado</span>
+                      <span className="ml-2 text-green-500 font-semibold">· Con resultado</span>
                     )}
                   </p>
                 </button>
@@ -1242,14 +1214,14 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
   const cursosSobre = cursos.filter(c => c.supera_umbral);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-      <div className="bg-gray-700 px-6 py-4 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-          <Calendar className="w-4 h-4 text-white" />
+    <div className="bg-white rounded-[14px] border border-line overflow-hidden">
+      <div className="bg-white border-b border-line px-6 py-4 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-primary-tint flex items-center justify-center">
+          <Calendar className="w-4 h-4 text-primary" />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-white">Asistencia</h2>
-          <p className="text-xs text-gray-400">
+          <h2 className="text-base font-semibold text-ink">Asistencia</h2>
+          <p className="text-xs text-ink-muted">
             Porcentaje de inasistencia por curso.{' '}
             {data?.umbral != null ? `Umbral general: ${data.umbral}%` : 'Sin umbral general activo'}
           </p>
@@ -1263,7 +1235,7 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
           <select
             value={periodo}
             onChange={e => { setPeriodo(e.target.value); setCursoFiltro(''); setExpandido(null); }}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-800"
+            className="h-10 px-3 text-sm border border-line-strong rounded-[10px] bg-white text-gray-800 transition-colors hover:border-ink-faint"
           >
             {(data?.periodos_disponibles ?? []).map(p => (
               <option key={p} value={p}>{p}</option>
@@ -1275,7 +1247,7 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
           <select
             value={cursoFiltro}
             onChange={e => { setCursoFiltro(e.target.value); setExpandido(null); }}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-800"
+            className="h-10 px-3 text-sm border border-line-strong rounded-[10px] bg-white text-gray-800 transition-colors hover:border-ink-faint"
           >
             <option value="">Todos los cursos</option>
             {(data?.cursos ?? []).map(c => (
@@ -1291,7 +1263,7 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
       {!loading && !error && (cursosSobre.length > 0 || cursosCerca.length > 0) && (
         <div className="px-6 pt-4 space-y-2">
           {cursosSobre.length > 0 && (
-            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <div className="flex items-start gap-2 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
               <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
               <p>
                 <strong>Supera el umbral de inasistencia</strong> en{' '}
@@ -1300,7 +1272,7 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
             </div>
           )}
           {cursosCerca.length > 0 && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="flex items-start gap-2 rounded-[10px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
               <p>
                 <strong>Se aproxima al umbral de inasistencia</strong> en{' '}
@@ -1353,7 +1325,7 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
                       </td>
                       <td className="px-5 py-3.5 text-sm font-medium text-gray-900">
                         {c.materia}
-                        <span className="block text-xs font-mono text-gray-400">{c.codigo}</span>
+                        <span className="block text-xs tabular-nums text-gray-400">{c.codigo}</span>
                       </td>
                       <td className="px-5 py-3.5 text-sm text-gray-500">{c.grupo}</td>
                       <td className="px-5 py-3.5 text-sm text-gray-700">{c.total_clases}</td>
@@ -1363,7 +1335,7 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
                         {c.porcentaje === null ? (
                           <span className="text-xs text-gray-400">Sin registros</span>
                         ) : (
-                          <span className={`font-mono text-sm font-bold px-2 py-1 rounded ${
+                          <span className={`tabular-nums text-sm font-semibold px-2 py-1 rounded ${
                             c.supera_umbral
                               ? 'bg-red-50 text-red-700'
                               : c.cerca_umbral
@@ -1393,7 +1365,7 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
                               <thead>
                                 <tr>
                                   {['Fecha', 'Estado', 'Observación'].map(col => (
-                                    <th key={col} className="py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                    <th key={col} className="py-2 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                                       {col}
                                     </th>
                                   ))}
@@ -1402,9 +1374,9 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
                               <tbody className="divide-y divide-gray-100">
                                 {c.detalle.map(d => (
                                   <tr key={d.fecha}>
-                                    <td className="py-2 text-sm font-mono text-gray-600">{d.fecha}</td>
+                                    <td className="py-2 text-sm tabular-nums text-gray-600">{d.fecha}</td>
                                     <td className="py-2">
-                                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${ESTADO_ASISTENCIA[d.estado].className}`}>
+                                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${ESTADO_ASISTENCIA[d.estado].className}`}>
                                         {ESTADO_ASISTENCIA[d.estado].label}
                                       </span>
                                     </td>
@@ -1525,7 +1497,7 @@ export default function StudentProfile() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-        <div className="w-12 h-12 border-4 border-[#C8102E] border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
         <p className="text-gray-500 animate-pulse">Obteniendo ficha académica e indicadores...</p>
       </div>
     );
@@ -1538,7 +1510,7 @@ export default function StudentProfile() {
           <AlertTriangle className="w-10 h-10 text-red-500" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-gray-900">{error || 'Estudiante no encontrado'}</h2>
+          <h2 className="text-xl font-semibold text-gray-900">{error || 'Estudiante no encontrado'}</h2>
           <p className="text-gray-500 mt-2">No se pudo recuperar la información del código {id}</p>
         </div>
         <Link to="/dashboard/students">
@@ -1550,37 +1522,30 @@ export default function StudentProfile() {
 
   return (
     <div className="space-y-6">
-      {/* Back button */}
-      <div className="flex items-center justify-between">
-        <Link to="/dashboard/students">
-          <Button variant="secondary" size="sm">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Volver a Estudiantes
-          </Button>
+      {/* Volver y acciones */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link to="/dashboard/students" className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink rounded-[10px]">
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+          Volver a Estudiantes
         </Link>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleRecalcular}
-            disabled={recalculating || loading}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[#C8102E] bg-white border border-[#C8102E]/20 rounded-xl hover:bg-red-50 hover:border-[#C8102E]/40 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Recalcula el promedio desde las notas y actualiza el nivel de riesgo"
-          >
-            <RefreshCw className={`w-4 h-4 ${recalculating ? 'animate-spin' : ''}`} />
-            {recalculating ? 'Actualizando...' : 'Actualizar riesgo'}
-          </button>
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <Hash className="w-3 h-3" />
-            <span>ID: {id}</span>
-          </div>
-        </div>
+        <Button
+          variant="outline"
+          onClick={handleRecalcular}
+          disabled={recalculating || loading}
+          title="Recalcula el promedio desde las notas y actualiza el nivel de riesgo"
+          className="gap-2"
+        >
+          <RefreshCw className={`w-4 h-4 ${recalculating ? 'animate-spin' : ''}`} aria-hidden="true" />
+          {recalculating ? 'Actualizando...' : 'Actualizar riesgo'}
+        </Button>
       </div>
 
       {/* Mensaje de resultado del recálculo */}
       {recalcMsg && (
-        <div className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold border ${
+        <div role="status" className={`flex items-center gap-3 px-4 py-3 rounded-[10px] text-sm font-medium border ${
           recalcMsg.startsWith('Error')
-            ? 'bg-red-50 border-red-200 text-red-700'
-            : 'bg-green-50 border-green-200 text-green-700'
+            ? 'bg-red-50 border-red-200 text-red-800'
+            : 'bg-green-50 border-green-200 text-green-800'
         }`}>
           {recalcMsg.startsWith('Error')
             ? <AlertTriangle className="w-4 h-4 flex-shrink-0" />
@@ -1589,52 +1554,68 @@ export default function StudentProfile() {
         </div>
       )}
 
-      {/* Header del estudiante */}
-      <div className="bg-gradient-to-r from-[#C8102E] to-[#a00d25] text-white rounded-xl p-6 shadow-md">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-              <User className="w-7 h-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold leading-tight">{student.nombre}</h1>
-              <p className="text-sm text-red-200 mt-0.5">
-                Código: <span className="font-mono font-semibold text-white">{student.codigo}</span>
-              </p>
-              <div className="flex items-center gap-3 mt-2">
-                <span className="flex items-center gap-1 text-xs text-white bg-white/10 px-2 py-0.5 rounded">
-                  <Layers className="w-3 h-3" />
-                  {student.semestre}° Semestre
-                </span>
-                <span className="flex items-center gap-1 text-xs text-white bg-white/10 px-2 py-0.5 rounded">
-                  <CheckCircle2 className="w-3 h-3" />
-                  {student.estado_matricula}
-                </span>
-              </div>
-            </div>
+      {/* Cabecera del estudiante: quién es y cómo va, en una sola lectura */}
+      <header className="bg-white border border-line rounded-[14px] overflow-hidden">
+        <div className="p-5 sm:p-6 flex flex-wrap items-center gap-4">
+          <div className="w-14 h-14 rounded-full bg-primary-tint text-primary-strong text-lg font-semibold flex items-center justify-center shrink-0" aria-hidden="true">
+            {student.nombre.trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase()}
           </div>
-          <div className="flex flex-col items-end gap-2 text-right">
-            <div className="text-xs text-red-200 uppercase tracking-wider font-bold">Promedio Acumulado</div>
-            <div className="text-4xl font-black">{student.promedio?.toFixed(2) || '—'}</div>
-            {student.alertas_activas > 0 && (
-              <Badge variant="high" className="animate-pulse">
-                {student.alertas_activas} ALERTAS ACTIVAS
-              </Badge>
-            )}
+          <div className="min-w-0 flex-1">
+            <h1 className="text-[1.65rem] font-semibold text-ink leading-tight tracking-[-0.02em]">{student.nombre}</h1>
+            <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-muted">
+              <span>Código: <span className="font-semibold text-ink">{student.codigo}</span></span>
+              <span className="inline-flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5" aria-hidden="true" />
+                {student.semestre}° Semestre
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                {student.estado_matricula}
+              </span>
+            </p>
           </div>
         </div>
-      </div>
+
+        <dl className="grid grid-cols-1 sm:grid-cols-3 border-t border-line divide-y sm:divide-y-0 sm:divide-x divide-line">
+          <div className="px-5 sm:px-6 py-4">
+            <dt className="text-sm font-medium text-ink-muted">Riesgo actual</dt>
+            <dd className="mt-2">
+              <NivelRiesgoChip nivel={student.nivel_riesgo} className="text-sm" />
+            </dd>
+          </div>
+          <div className="px-5 sm:px-6 py-4">
+            <dt className="text-sm font-medium text-ink-muted">Promedio Acumulado</dt>
+            <dd className={`mt-1 text-3xl font-semibold leading-none tracking-[-0.02em] ${
+              student.promedio != null && student.promedio < 3 ? 'text-riesgo-critico' : 'text-ink'
+            }`}>
+              {student.promedio?.toFixed(2) || '—'}
+              <span className="ml-1.5 text-sm font-medium text-ink-muted tracking-normal">de 5.00</span>
+            </dd>
+          </div>
+          <div className="px-5 sm:px-6 py-4">
+            <dt className="text-sm font-medium text-ink-muted">Alertas</dt>
+            <dd className="mt-1 text-3xl font-semibold leading-none tracking-[-0.02em] text-ink">
+              {student.alertas_activas > 0 ? (
+                <span className="text-base font-semibold text-riesgo-critico tracking-normal">{student.alertas_activas} ALERTAS ACTIVAS</span>
+              ) : (
+                <span className="text-base font-medium text-ink-muted tracking-normal">Sin alertas activas</span>
+              )}
+            </dd>
+          </div>
+        </dl>
+      </header>
 
       {/* Pestañas */}
-      <div className="flex gap-2 border-b border-gray-200">
+      <div className="flex gap-6 border-b border-line">
         {([['resumen', 'Resumen académico'], ['asistencia', 'Asistencia']] as const).map(([clave, label]) => (
           <button
             key={clave}
             onClick={() => setPestana(clave)}
-            className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+            aria-pressed={pestana === clave}
+            className={`-mb-px pb-2.5 text-sm font-semibold border-b-2 ${
               pestana === clave
-                ? 'border-[#C8102E] text-[#C8102E]'
-                : 'border-transparent text-gray-400 hover:text-gray-600'
+                ? 'border-primary text-primary-strong'
+                : 'border-transparent text-ink-muted hover:text-ink'
             }`}
           >
             {label}
@@ -1643,9 +1624,11 @@ export default function StudentProfile() {
       </div>
 
       {pestana === 'asistencia' ? (
-        <AsistenciaEstudiante codigo={student.codigo} />
+        <div key="asistencia" className="">
+          <AsistenciaEstudiante codigo={student.codigo} />
+        </div>
       ) : (
-        <>
+        <div key="resumen" className="space-y-6 ">
         {/* ── Bloque 1: Ficha Académica ─────────────────────────────────────── */}
         <FichaAcademica student={student} />
 
@@ -1657,7 +1640,7 @@ export default function StudentProfile() {
 
         {/* ── Bloque 4: Historial de Intervenciones ────────────────────────── */}
         <HistorialIntervenciones data={intervenciones} loading={loading} />
-        </>
+        </div>
       )}
     </div>
   );

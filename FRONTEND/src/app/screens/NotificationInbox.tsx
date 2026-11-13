@@ -3,6 +3,9 @@ import { Badge } from '../components/ui/Badge';
 import { Mail, Check, Bell, Calendar, Filter } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 
+import { CargandoBloque, EstadoVacio } from '../components/Estados';
+import { EncabezadoPagina } from '../components/Panel';
+import { MedidorRiesgo } from '../components/Riesgo';
 export default function NotificationInbox() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -42,98 +45,103 @@ export default function NotificationInbox() {
     ? notifications 
     : notifications.filter(n => n.alerta?.nivel === filterPriority);
 
+  const sinLeer = notifications.filter((n) => !n.leida).length;
+  const prioridades: [string, string][] = [
+    ['all', 'Todas'],
+    ['high', 'Prioridad alta'],
+    ['medium', 'Prioridad media'],
+    ['low', 'Prioridad baja'],
+  ];
+  const cuenta = (clave: string) =>
+    clave === 'all' ? notifications.length : notifications.filter((n) => n.alerta?.nivel === clave).length;
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pt-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="border-l-4 border-[#C8102E] pl-4">
-          <h1 className="text-2xl font-bold text-gray-900">Bandeja de Notificaciones</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Avisos internos sobre el estado académico de tus estudiantes
+    <div className="max-w-4xl space-y-5">
+      <EncabezadoPagina
+        titulo="Bandeja de Notificaciones"
+        detalle="Avisos internos sobre el estado académico de tus estudiantes"
+      >
+        {!isLoading && (
+          <p className="text-sm text-ink-muted">
+            <span className="font-semibold text-ink">{sinLeer}</span> sin leer de {notifications.length}
           </p>
-        </div>
-        
-        <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-gray-200 shadow-sm">
-          <Filter className="w-4 h-4 text-gray-400 ml-2" />
-          <select 
-            value={filterPriority} 
-            onChange={(e) => setFilterPriority(e.target.value)}
-            className="text-xs font-bold text-gray-700 border-none focus:ring-0 bg-transparent cursor-pointer uppercase outline-none pr-8"
+        )}
+      </EncabezadoPagina>
+
+      {/* Prioridad: filtro visible con la cantidad de avisos de cada nivel */}
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por prioridad">
+        {prioridades.map(([clave, texto]) => (
+          <button
+            key={clave}
+            type="button"
+            onClick={() => setFilterPriority(clave)}
+            aria-pressed={filterPriority === clave}
+            className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium ${
+              filterPriority === clave
+                ? 'border-primary bg-primary text-white'
+                : 'border-line bg-white text-ink-soft hover:border-line-strong hover:text-ink'
+            }`}
           >
-            <option value="all">TODAS LAS PRIORIDADES</option>
-            <option value="high">PRIORIDAD ALTA</option>
-            <option value="medium">PRIORIDAD MEDIA</option>
-            <option value="low">PRIORIDAD BAJA</option>
-          </select>
-        </div>
+            {clave !== 'all' && <MedidorRiesgo nivel={clave} />}
+            {texto}
+            <span className={filterPriority === clave ? 'text-white/80' : 'text-ink-muted'}>{isLoading ? '—' : cuenta(clave)}</span>
+          </button>
+        ))}
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-[14px] border border-line overflow-hidden">
         {isLoading ? (
-          <div className="p-10 text-center text-gray-500">Cargando notificaciones...</div>
+          <CargandoBloque texto="Cargando notificaciones..." filas={5} />
         ) : notifications.length === 0 ? (
-          <div className="p-20 text-center flex flex-col items-center">
-            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-              <Bell className="w-8 h-8 text-gray-300" />
-            </div>
-            <p className="text-gray-500 font-medium">No tienes notificaciones pendientes</p>
-            <p className="text-sm text-gray-400 mt-1">Te avisaremos cuando haya novedades</p>
-          </div>
+          <EstadoVacio icono={Bell} titulo="No tienes notificaciones pendientes" detalle="Te avisaremos cuando haya novedades" />
         ) : filteredNotifications.length === 0 ? (
-          <div className="p-20 text-center flex flex-col items-center">
-            <p className="text-gray-500 font-medium">No hay notificaciones para este filtro</p>
-          </div>
+          <EstadoVacio titulo="No hay notificaciones para este filtro" detalle="Prueba con otro filtro o vuelve más tarde." />
         ) : (
-          <div className="divide-y divide-gray-100">
+          <ul className="divide-y divide-wash">
             {filteredNotifications.map((notif) => (
-              <div 
-                key={notif.id} 
-                className={`p-6 transition-colors ${notif.leida ? 'bg-white' : 'bg-red-50/30'}`}
+              <li
+                key={notif.id}
+                className={`px-4 sm:px-5 py-4 flex items-start gap-3 ${notif.leida ? '' : 'bg-primary-tint/40'}`}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-4">
-                    <div className={`mt-1 w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      notif.alerta?.nivel === 'high' ? 'bg-red-100' : 
-                      notif.alerta?.nivel === 'medium' ? 'bg-yellow-100' : 'bg-gray-100'
-                    }`}>
-                      <Bell className={`w-5 h-5 ${
-                        notif.alerta?.nivel === 'high' ? 'text-red-600' : 
-                        notif.alerta?.nivel === 'medium' ? 'text-yellow-600' : 'text-gray-600'
-                      }`} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        {/* HU-41: las de una solicitud de acompañamiento no tienen alerta */}
-                        {notif.alerta ? (
-                          <Badge variant={notif.alerta.nivel as any} size="sm">
-                            Prioridad {notif.alerta.nivel === 'high' ? 'Alta' : notif.alerta.nivel === 'medium' ? 'Media' : 'Baja'}
-                          </Badge>
-                        ) : (
-                          <Badge variant="gray" size="sm">Solicitud de acompañamiento</Badge>
-                        )}
-                        <span className="text-xs text-gray-400 flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(notif.fecha).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className={`text-sm ${notif.leida ? 'text-gray-600' : 'text-gray-900 font-medium'}`}>
-                        {notif.mensaje}
-                      </p>
-                    </div>
+                {/* Punto de lectura: lleno si está sin leer */}
+                <span
+                  className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${notif.leida ? 'border border-line-strong' : 'bg-primary'}`}
+                  role="img"
+                  aria-label={notif.leida ? 'Leída' : 'Sin leer'}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
+                    {/* HU-41: las de una solicitud de acompañamiento no tienen alerta */}
+                    {notif.alerta ? (
+                      <Badge variant={notif.alerta.nivel as any} size="sm">
+                        Prioridad {notif.alerta.nivel === 'high' ? 'Alta' : notif.alerta.nivel === 'medium' ? 'Media' : 'Baja'}
+                      </Badge>
+                    ) : (
+                      <Badge variant="gray" size="sm">Solicitud de acompañamiento</Badge>
+                    )}
+                    <span className="text-xs text-ink-muted flex items-center gap-1">
+                      <Calendar className="w-3 h-3" aria-hidden="true" />
+                      {new Date(notif.fecha).toLocaleString()}
+                    </span>
                   </div>
-                  
-                  {!notif.leida && (
-                    <button 
-                      onClick={() => markAsRead(notif.id)}
-                      className="p-2 text-gray-400 hover:text-[#C8102E] hover:bg-red-50 rounded-lg transition-all"
-                      title="Marcar como leída"
-                    >
-                      <Check className="w-5 h-5" />
-                    </button>
-                  )}
+                  <p className={`text-sm ${notif.leida ? 'text-ink-muted' : 'text-ink font-medium'}`}>
+                    {notif.mensaje}
+                  </p>
                 </div>
-              </div>
+
+                {!notif.leida && (
+                  <button
+                    onClick={() => markAsRead(notif.id)}
+                    className="shrink-0 inline-flex items-center gap-1.5 rounded-[10px] border border-line bg-white px-2.5 py-1.5 text-xs font-medium text-ink-soft hover:border-primary hover:text-primary"
+                    title="Marcar como leída"
+                  >
+                    <Check className="w-4 h-4" aria-hidden="true" />
+                    <span className="hidden sm:inline">Marcar como leída</span>
+                  </button>
+                )}
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </div>

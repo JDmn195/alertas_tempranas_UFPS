@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { ArrowLeft, MailCheck } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { AuthLayout, campoAcceso, etiquetaAcceso } from '../components/layouts/AuthLayout';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -40,71 +42,65 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5] flex flex-col">
-      <div className="h-2 bg-[#C8102E]" />
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-[#C8102E] rounded-2xl mb-6">
-              <span className="text-white font-bold text-4xl">U</span>
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Recuperar contraseña</h1>
-            <p className="text-sm text-gray-600">
-              Ingresa tu correo institucional para recibir un enlace de recuperación.
-            </p>
-            <p className="text-sm text-gray-600 mt-2">
-              ¿Eres estudiante y es tu primer ingreso? Usa esta misma opción con tu correo
-              institucional para activar tu cuenta y definir tu contraseña.
-            </p>
+    <AuthLayout>
+      <Link to="/login" className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink mb-5">
+        <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+        Volver al inicio de sesión
+      </Link>
+
+      {message ? (
+        <div role="status">
+          <div className="w-11 h-11 rounded-full bg-green-50 border border-green-200 text-green-700 flex items-center justify-center mb-4">
+            <MailCheck className="w-5 h-5" aria-hidden="true" />
           </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-8 shadow-sm">
-            {message ? (
-              <div className="text-center">
-                <div className="p-3 bg-green-100 border border-green-200 text-green-700 text-sm rounded-lg mb-6">
-                  {message}
-                </div>
-                <Link to="/login" className="text-[#C8102E] font-medium hover:underline">
-                  Volver al inicio de sesión
-                </Link>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-5">
-                {error && (
-                  <div className="p-3 bg-red-100 border border-red-200 text-red-700 text-sm rounded-lg">
-                    {error}
-                  </div>
-                )}
-                <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                    Correo electrónico
-                  </label>
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    disabled={isLoading}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent disabled:opacity-50"
-                    placeholder="usuario@ufps.edu.co"
-                  />
-                </div>
-
-                <Button type="submit" fullWidth size="lg" disabled={isLoading}>
-                  {isLoading ? 'Enviando...' : 'Enviar enlace de recuperación'}
-                </Button>
-
-                <div className="text-center">
-                  <Link to="/login" className="text-sm text-gray-600 hover:text-[#C8102E] hover:underline">
-                    ¿Recordaste tu contraseña? Inicia sesión
-                  </Link>
-                </div>
-              </form>
-            )}
-          </div>
+          <h1 className="text-2xl font-semibold text-ink">Revisa tu correo</h1>
+          <p className="mt-2 p-3 bg-green-100 border border-green-200 text-green-800 text-sm rounded-[10px]">{message}</p>
+          <p className="mt-4 text-sm text-ink-muted">Si no llega en unos minutos, revisa la carpeta de correo no deseado.</p>
         </div>
-      </div>
-    </div>
+      ) : (
+        <>
+          <h1 className="text-2xl font-semibold text-ink">Recuperar contraseña</h1>
+          <p className="mt-1.5 text-ink-muted">Ingresa tu correo institucional para recibir un enlace de recuperación.</p>
+          <p className="mt-4 mb-6 text-sm text-ink-soft bg-paper border border-line rounded-[10px] px-3.5 py-3">
+            ¿Eres estudiante y es tu primer ingreso? Usa esta misma opción con tu correo institucional para activar tu
+            cuenta y definir tu contraseña.
+          </p>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+              <div role="alert" className="p-3 bg-red-100 border border-red-200 text-red-800 text-sm rounded-[10px]">
+                {error}
+              </div>
+            )}
+            <div>
+              <label htmlFor="email" className={etiquetaAcceso}>
+                Correo electrónico
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isLoading}
+                autoComplete="username"
+                className={campoAcceso}
+                placeholder="usuario@ufps.edu.co"
+              />
+            </div>
+
+            <Button type="submit" fullWidth size="lg" disabled={isLoading}>
+              {isLoading ? 'Enviando...' : 'Enviar enlace de recuperación'}
+            </Button>
+
+            <p className="text-center">
+              <Link to="/login" className="text-sm text-ink-muted hover:text-primary hover:underline">
+                ¿Recordaste tu contraseña? Inicia sesión
+              </Link>
+            </p>
+          </form>
+        </>
+      )}
+    </AuthLayout>
   );
 }

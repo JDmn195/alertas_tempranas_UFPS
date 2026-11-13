@@ -1,3 +1,124 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+/* ==========================================================================
+   SAT UFPS · sistema de diseño «Pizarra y papel»
+   Una sola familia (Schibsted Grotesk), neutros cálidos, rojo institucional como
+   color de acción y de marca. El riesgo crítico usa su propio rojo, más oscuro.
+   ========================================================================== */
+
+html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body {
+  font-family: var(--font-sans);
+  background: var(--background);
+  color: var(--ink);
+  line-height: 1.5;
+  font-feature-settings: 'ss01', 'cv05';
+}
+::selection { background: #CFE3DC; color: var(--ink); }
+
+/* Las cifras de tablas e indicadores no bailan */
+/* Schibsted Grotesk separa demasiado el punto decimal en cifras tabulares: se usan las proporcionales */
+.tabular-nums { font-variant-numeric: normal; }
+
+/* Foco visible y uniforme */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* ---------- Superficies ---------- */
+/* Tarjeta: plana, con borde fino. La profundidad se reserva para lo que flota (menús, diálogos). */
+main div.bg-white.rounded-lg, main div.bg-white.rounded-xl, main div.bg-white.rounded-2xl,
+main section.bg-white.rounded-lg, main section.bg-white.rounded-xl, main section.bg-white.rounded-2xl {
+  border-color: var(--line);
+  border-radius: 14px;
+  box-shadow: none;
+}
+main .shadow-sm, main .shadow, main .shadow-md { box-shadow: var(--shadow-card); }
+.fixed .shadow-xl, .fixed .shadow-2xl, .fixed .shadow-lg { box-shadow: var(--shadow-pop); }
+
+/* ---------- Tablas ---------- */
+main table { border-collapse: separate; border-spacing: 0; width: 100%; }
+main thead, main thead tr { background: transparent; }
+main thead th {
+  font-size: .75rem; font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--ink-muted); background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+main thead th:first-child { border-top-left-radius: 10px; }
+main thead th:last-child { border-top-right-radius: 10px; }
+main tbody td { border-bottom: 1px solid var(--wash); border-top: 0; }
+main tbody tr:last-child td { border-bottom: 0; }
+main tbody tr { transition: background-color .12s ease; }
+main tbody tr:hover { background: var(--paper); }
+main tbody.divide-y > tr { border: 0; }
+
+/* ---------- Formularios ---------- */
+:where(main, [role="dialog"], .fixed) :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea) {
+  border-radius: 10px;
+  border-color: var(--line-strong);
+  background-color: #fff;
+  color: var(--ink);
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+:where(main, [role="dialog"], .fixed) :is(input, select, textarea)::placeholder { color: var(--ink-faint); }
+:where(main, [role="dialog"], .fixed) :is(input:not([type=checkbox]):not([type=radio]), select, textarea):hover { border-color: var(--ink-faint); }
+:where(main, [role="dialog"], .fixed) :is(input:not([type=checkbox]):not([type=radio]), select, textarea):focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(30,77,69,.16);
+  outline: none;
+}
+input[type=checkbox], input[type=radio] { accent-color: var(--brand); }
+label { color: var(--ink-soft); }
+
+/* ---------- Texto ---------- */
+/* Las etiquetas no van en mayúsculas forzadas ni por debajo de 12 px */
+main .uppercase, .fixed .uppercase { text-transform: none; letter-spacing: 0; }
+main [class*="text-[10px]"], main [class*="text-[11px]"] { font-size: .75rem; line-height: 1.1rem; }
+main [class*="tracking-wide"], main [class*="tracking-wider"], main [class*="tracking-widest"] { letter-spacing: 0; }
+
+/* El título de pantalla no lleva barra decorativa */
+main .border-l-4.border-primary { border-left-width: 0; padding-left: 0; }
+
+/* El contenido usa el ancho de la hoja */
+main:not(.portal) [class*="max-w-7xl"][class*="mx-auto"], main:not(.portal) [class*="max-w-6xl"][class*="mx-auto"],
+main:not(.portal) [class*="max-w-5xl"][class*="mx-auto"], main:not(.portal) [class*="max-w-4xl"][class*="mx-auto"] {
+  max-width: none; margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0;
+}
+
+/* ---------- Componentes del sistema ---------- */
+/* Medidor de riesgo: cuatro segmentos; se llenan según el nivel */
+.riesgo-medidor { display: inline-flex; gap: 3px; align-items: center; }
+.riesgo-medidor > i { width: 14px; height: 6px; border-radius: 2px; background: var(--line); }
+.riesgo-medidor[data-nivel="1"] > i:nth-child(-n+1) { background: var(--riesgo-bajo); }
+.riesgo-medidor[data-nivel="2"] > i:nth-child(-n+2) { background: var(--riesgo-medio); }
+.riesgo-medidor[data-nivel="3"] > i:nth-child(-n+3) { background: var(--riesgo-alto); }
+.riesgo-medidor[data-nivel="4"] > i:nth-child(-n+4) { background: var(--riesgo-critico); }
+
+/* Scroll discreto */
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+
+/* ---------- Movimiento ---------- */
+/* Una sola entrada por pantalla; el resto del movimiento responde a una acción del usuario */
+/* Solo opacidad: un transform aquí encerraría los diálogos fijos dentro de la hoja */
+@keyframes hoja-entra { from { opacity: 0; } to { opacity: 1; } }
+.page-enter { animation: hoja-entra .2s ease-out backwards; }
+@keyframes flota-entra { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
+.flota-entra { animation: flota-entra .14s ease-out both; transform-origin: top right; }
+@keyframes cajon-entra { from { transform: translateX(-100%); } to { transform: none; } }
+main button, main a, header button, header a, nav a, nav button {
+  transition-property: color, background-color, border-color, box-shadow, opacity;
+  transition-duration: .12s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  .page-enter, .flota-entra { animation: none !important; }
+}
+
+/* Los fondos de diálogo viven dentro de contenedores con space-y: sin este ajuste heredan un margen y no cubren el borde inferior */
+main .fixed.inset-0 { margin: 0 !important; }

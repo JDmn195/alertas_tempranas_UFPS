@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { EncabezadoPagina, Seccion } from '../components/Panel';
 import { useParams, useNavigate } from 'react-router';
 import { 
   Upload, 
@@ -17,6 +18,7 @@ import {
   Lock,
   CheckCircle
 } from 'lucide-react';
+import { AvisoError, CargandoBloque, EstadoVacio } from '../components/Estados';
 import { evidenceService, Evidencia, Anotacion, IntervencionDetalle } from '../../services/evidenceService';
 
 export default function EvidenceManagement() {
@@ -168,75 +170,59 @@ export default function EvidenceManagement() {
   const getFileIcon = (tipo: string) => {
     if (tipo.includes('image')) return <ImageIcon className="w-8 h-8 text-blue-500" />;
     if (tipo.includes('pdf')) return <FileText className="w-8 h-8 text-red-500" />;
-    return <File className="w-8 h-8 text-gray-500" />;
+    return <File className="w-8 h-8 text-ink-muted" />;
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-5 animate-in fade-in duration-300">
       
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <button 
+      <EncabezadoPagina
+        titulo={intervencionInfo ? `Evidencias: ${intervencionInfo.estudiante_nombre}` : 'Gestión de Evidencias'}
+        detalle={intervencionInfo ? (
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="tabular-nums">Código {intervencionInfo.estudiante_codigo}</span>
+            {isClosed ? (
+              <span className="text-xs font-semibold bg-wash text-ink-muted px-2 py-1 rounded-full inline-flex items-center gap-1">
+                <Lock className="w-3 h-3" /> Alerta cerrada
+              </span>
+            ) : intervencionInfo?.alerta_estado.toLowerCase() === 'atendida' ? (
+              <span className="text-xs font-semibold bg-primary-tint text-primary px-2 py-1 rounded-full inline-flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" /> Atendida
+              </span>
+            ) : (
+              <span className="text-xs font-semibold bg-green-50 text-green-700 px-2 py-1 rounded-full inline-flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-600"></span> Activa
+              </span>
+            )}
+          </span>
+        ) : undefined}
+      >
+        <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-gray-500 hover:text-[#C8102E] transition-colors font-medium"
+          className="h-10 px-3.5 inline-flex items-center gap-2 text-sm font-medium text-ink-soft border border-line-strong rounded-[10px] bg-white hover:border-ink-faint"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft className="w-4 h-4" />
           Volver
         </button>
-        
-        <div className="flex flex-col items-end text-right">
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
-            {intervencionInfo ? `Estudiante: ${intervencionInfo.estudiante_nombre}` : 'Gestión de Evidencias'}
-          </h1>
-          {intervencionInfo && (
-            <div className="flex items-center gap-3 mt-1">
-              <span className="text-sm font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-md">
-                Cód: {intervencionInfo.estudiante_codigo}
-              </span>
-              {isClosed ? (
-                <span className="text-xs font-bold bg-gray-200 text-gray-600 px-2 py-1 rounded-full flex items-center gap-1">
-                  <Lock className="w-3 h-3" /> ALERTA CERRADA
-                </span>
-              ) : intervencionInfo?.alerta_estado.toLowerCase() === 'atendida' ? (
-                <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full flex items-center gap-1">
-                  <CheckCircle className="w-3 h-3" /> ATENDIDA
-                </span>
-              ) : (
-                <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> ACTIVA
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+      </EncabezadoPagina>
 
       {intervencionInfo?.resultado && (
-        <div className="bg-gray-800 text-white rounded-2xl p-6 shadow-lg relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-10">
-            <CheckCircle className="w-24 h-24" />
-          </div>
-          <h2 className="text-lg font-bold flex items-center gap-2 mb-3 text-gray-100">
-            <CheckCircle2 className="w-5 h-5 text-green-400" />
-            Resumen Final de Intervención
-          </h2>
-          <p className="text-gray-300 leading-relaxed max-w-3xl relative z-10">
-            {intervencionInfo.resultado}
-          </p>
-        </div>
+        <Seccion titulo={<span className="inline-flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-green-600" />Resumen final de la intervención</span>}>
+          <p className="text-ink-soft leading-relaxed max-w-3xl">{intervencionInfo.resultado}</p>
+        </Seccion>
       )}
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
         
         {/* Upload Section */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
-            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-              <Upload className="w-5 h-5 text-[#C8102E]" />
-              {isClosed ? 'Evidencias (Solo lectura)' : 'Subir Evidencia'}
+        <div className="lg:col-span-1 space-y-4">
+          <div className="bg-white rounded-[14px] border border-line p-5 space-y-4">
+            <h2 className="text-base font-semibold text-ink flex items-center gap-2">
+              <Upload className="w-5 h-5 text-primary" />
+              {isClosed ? 'Evidencias (solo lectura)' : 'Subir evidencia'}
             </h2>
-            <p className="text-sm text-gray-500 leading-relaxed">
+            <p className="text-sm text-ink-muted leading-relaxed">
               {isClosed 
                 ? 'Esta alerta ha sido cerrada. No se pueden adjuntar más archivos.'
                 : 'Sube fotos, actas escaneadas o reportes en PDF que sirvan como soporte.'}
@@ -253,20 +239,20 @@ export default function EvidenceManagement() {
                     accept="image/*,.pdf"
                   />
                   <div className={`
-                    border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center gap-3 transition-all
-                    ${uploading ? 'bg-gray-50 border-gray-200' : 'group-hover:border-[#C8102E] group-hover:bg-red-50/30 border-gray-200'}
+                    border-2 border-dashed rounded-[10px] p-8 flex flex-col items-center justify-center gap-3 transition-all
+                    ${uploading ? 'bg-gray-50 border-gray-200' : 'group-hover:border-primary group-hover:bg-primary-tint border-gray-200'}
                   `}>
                     {uploading ? (
-                      <Loader2 className="w-10 h-10 text-[#C8102E] animate-spin" />
+                      <Loader2 className="w-10 h-10 text-primary animate-spin" />
                     ) : (
-                      <Plus className="w-10 h-10 text-gray-300 group-hover:text-[#C8102E] transition-colors" />
+                      <Plus className="w-10 h-10 text-gray-300 group-hover:text-primary transition-colors" />
                     )}
-                    <span className="text-xs font-bold text-gray-400 group-hover:text-[#C8102E] uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-ink-faint group-hover:text-primary uppercase tracking-wider">
                       {uploading ? 'Subiendo...' : 'Seleccionar Archivo'}
                     </span>
                   </div>
                 </div>
-                <p className="text-[10px] text-center text-gray-400 uppercase font-bold tracking-widest">
+                <p className="text-[10px] text-center text-ink-faint uppercase font-semibold tracking-widest">
                   Formatos: PDF, JPG, PNG (Max 5MB)
                 </p>
               </>
@@ -274,13 +260,17 @@ export default function EvidenceManagement() {
           </div>
 
           {error && (
-            <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl flex items-start gap-3 shadow-sm animate-in slide-in-from-left">
-              <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
-              <p className="text-sm text-red-700 font-medium">{error}</p>
-            </div>
+            <AvisoError
+              mensaje={error}
+              instruccion={
+                /grande/i.test(error) ? 'Comprime el archivo o elige otro de máximo 5 MB.'
+                : /subir|cargar/i.test(error) ? 'Revisa tu conexión y vuelve a intentarlo.'
+                : 'Si el problema continúa, recarga la página o vuelve a iniciar sesión.'
+              }
+            />
           )}
           {successMsg && (
-            <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-r-xl flex items-start gap-3 shadow-sm animate-in slide-in-from-left">
+            <div className="bg-green-50 border border-green-200 p-4 rounded-[10px] flex items-start gap-3">
               <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5" />
               <p className="text-sm text-green-700 font-medium">{successMsg}</p>
             </div>
@@ -289,7 +279,7 @@ export default function EvidenceManagement() {
           {!isClosed && !intervencionInfo?.concluida && (
             <button
               onClick={() => setShowConcludeModal(true)}
-              className="w-full py-4 bg-gray-900 hover:bg-black text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+              className="w-full h-11 bg-ink hover:bg-ink-soft text-white font-semibold rounded-[10px] transition-colors flex items-center justify-center gap-2"
             >
               <CheckCircle2 className="w-5 h-5" />
               Concluir Intervención
@@ -298,49 +288,58 @@ export default function EvidenceManagement() {
         </div>
 
         {/* Gallery Section */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-gray-900">Archivos Adjuntos ({evidencias.length})</h3>
-          </div>
+        <div className="lg:col-span-2 bg-white rounded-[14px] border border-line p-5 space-y-4">
+          <h2 className="text-base font-semibold text-ink">Archivos adjuntos ({evidencias.length})</h2>
 
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <Loader2 className="w-10 h-10 text-gray-200 animate-spin" />
-              <p className="text-gray-400 font-medium italic">Cargando galería...</p>
+            <div role="status" aria-live="polite" className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[0, 1, 2, 3].map((n) => (
+                <div key={n} className="bg-white border border-line rounded-[10px] p-3 flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-[10px] bg-wash animate-pulse shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 rounded-md bg-wash animate-pulse w-3/4" />
+                    <div className="h-3 rounded-md bg-wash animate-pulse w-1/2" />
+                  </div>
+                </div>
+              ))}
+              <span className="sr-only">Cargando galería…</span>
             </div>
           ) : evidencias.length === 0 ? (
-            <div className="bg-gray-50 border-2 border-dotted border-gray-200 rounded-3xl py-20 flex flex-col items-center justify-center gap-4">
-              <div className="bg-white p-4 rounded-2xl shadow-sm">
-                <FileText className="w-8 h-8 text-gray-300" />
-              </div>
-              <p className="text-gray-400 font-medium">Aún no hay evidencias para esta intervención</p>
+            <div className="bg-white border-2 border-dashed border-line-strong rounded-[10px]">
+              <EstadoVacio
+                icono={FileText}
+                titulo="Esta intervención aún no tiene evidencias"
+                detalle={isClosed
+                  ? 'La alerta está cerrada, por eso ya no se pueden adjuntar archivos.'
+                  : 'Adjunta fotos, actas escaneadas o reportes en PDF desde «Seleccionar Archivo» (máximo 5 MB) para dejar soporte del seguimiento.'}
+              />
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {evidencias.map((evidencia) => (
                 <div 
                   key={evidencia.id}
-                  className="group bg-white border border-gray-100 rounded-2xl p-4 flex items-center gap-4 hover:shadow-xl hover:shadow-gray-100 transition-all hover:-translate-y-1"
+                  className="group bg-white border border-line rounded-[10px] p-3 flex items-center gap-3 hover:border-line-strong transition-colors"
                 >
-                  <div className="bg-gray-50 p-3 rounded-xl group-hover:bg-white transition-colors">
+                  <div className="bg-paper p-2.5 rounded-[10px]">
                     {getFileIcon(evidencia.tipo)}
                   </div>
                   
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-gray-800 truncate" title={evidencia.nombre}>
+                    <p className="text-sm font-semibold text-ink truncate" title={evidencia.nombre}>
                       {evidencia.nombre}
                     </p>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter mt-1">
+                    <p className="text-[10px] text-ink-faint font-semibold uppercase tracking-tighter mt-1">
                       {evidencia.fecha}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1">
                     <a 
                       href={evidencia.url} 
                       target="_blank" 
                       rel="noreferrer"
-                      className="p-2 text-gray-400 hover:text-[#C8102E] transition-colors"
+                      className="p-2 text-ink-faint hover:text-primary transition-colors"
                       title="Ver/Descargar"
                     >
                       <Download className="w-4 h-4" />
@@ -348,7 +347,7 @@ export default function EvidenceManagement() {
                     {!isClosed && (
                       <button 
                         onClick={() => handleDelete(evidencia.id)}
-                        className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                        className="p-2 text-ink-faint hover:text-red-600 transition-colors"
                         title="Eliminar"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -363,9 +362,9 @@ export default function EvidenceManagement() {
       </div>
 
       {/* Seccion de Anotaciones / Observaciones */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6 mt-8">
-        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-          <MessageSquare className="w-5 h-5 text-[#C8102E]" />
+      <div className="bg-white rounded-[14px] border border-line p-5 space-y-5">
+        <h2 className="text-base font-semibold text-ink flex items-center gap-2">
+          <MessageSquare className="w-5 h-5 text-primary" />
           Historial de Observaciones
         </h2>
         
@@ -376,12 +375,12 @@ export default function EvidenceManagement() {
               value={nuevaAnotacion}
               onChange={(e) => setNuevaAnotacion(e.target.value)}
               placeholder="Añadir una nueva observación o nota sobre esta intervención..."
-              className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] outline-none text-sm transition-all"
+              className="flex-1 h-10 px-3.5 bg-white border border-line-strong rounded-[10px] outline-none focus:border-primary text-sm"
             />
             <button
               type="submit"
               disabled={!nuevaAnotacion.trim() || enviandoAnotacion}
-              className="px-6 bg-[#C8102E] hover:bg-red-700 text-white font-medium text-sm rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-5 h-10 bg-primary hover:bg-primary-strong text-white font-medium text-sm rounded-[10px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {enviandoAnotacion ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               Agregar
@@ -389,36 +388,42 @@ export default function EvidenceManagement() {
           </form>
         )}
 
-        <div className="space-y-4 pt-4">
+        <div className="space-y-4">
           {loadingAnotaciones ? (
-            <p className="text-sm text-gray-400">Cargando observaciones...</p>
+            <CargandoBloque texto="Cargando observaciones…" filas={2} />
           ) : anotaciones.length === 0 ? (
-            <p className="text-sm text-gray-400 italic bg-gray-50 p-4 rounded-xl text-center border border-dashed border-gray-200">
-              No hay observaciones registradas aún.
-            </p>
+            <div className="bg-white border border-dashed border-line-strong rounded-[10px]">
+              <EstadoVacio
+                icono={MessageSquare}
+                titulo="Aún no hay observaciones"
+                detalle={isClosed
+                  ? 'No se registraron observaciones antes de cerrar la alerta.'
+                  : 'Escribe la primera para dejar constancia de lo conversado con el estudiante.'}
+              />
+            </div>
           ) : (
             <div className="space-y-3">
               {anotaciones.map((anota) => (
-                <div key={anota.id} className="group bg-gray-50 border border-gray-100 p-4 rounded-xl flex gap-4 animate-in slide-in-from-bottom-2">
-                  <div className="w-10 h-10 bg-[#C8102E]/10 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-[#C8102E] font-bold text-sm">
+                <div key={anota.id} className="group bg-paper border border-line p-4 rounded-[10px] flex gap-4">
+                  <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-primary font-semibold text-sm">
                       {anota.usuario.charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div className="flex-1">
                     <div className="flex items-baseline justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-bold text-gray-900">{anota.usuario}</h4>
-                        <span className="text-[10px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">
+                        <h4 className="text-sm font-semibold text-ink">{anota.usuario}</h4>
+                        <span className="text-[10px] bg-wash text-ink-muted px-2 py-0.5 rounded-full font-semibold">
                           {anota.usuario_rol}
                         </span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-xs text-gray-400 font-medium">{anota.fecha}</span>
+                        <span className="text-xs text-ink-faint font-medium">{anota.fecha}</span>
                         {!isClosed && (
                           <button
                             onClick={() => handleDeleteAnotacion(anota.id)}
-                            className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="text-ink-faint hover:text-riesgo-critico"
                             title="Eliminar observación"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -426,7 +431,7 @@ export default function EvidenceManagement() {
                         )}
                       </div>
                     </div>
-                    <p className="text-sm text-gray-700 leading-relaxed mt-1">{anota.texto}</p>
+                    <p className="text-sm text-ink-soft leading-relaxed mt-1">{anota.texto}</p>
                   </div>
                 </div>
               ))}
@@ -437,14 +442,14 @@ export default function EvidenceManagement() {
 
       {/* Modal de Conclusión */}
       {showConcludeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/50 animate-in fade-in">
+          <div className="bg-white rounded-[14px] shadow-xl w-full max-w-lg p-6 space-y-6">
             <div>
-              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <CheckCircle2 className="w-6 h-6 text-[#C8102E]" />
+              <h3 className="text-xl font-semibold text-ink flex items-center gap-2">
+                <CheckCircle2 className="w-6 h-6 text-primary" />
                 Concluir Intervención
               </h3>
-              <p className="text-sm text-gray-500 mt-2">
+              <p className="text-sm text-ink-muted mt-2">
                 Escribe un resumen final de esta intervención. Al confirmar, la intervención quedará marcada como concluida. Si todas las intervenciones de la alerta están concluidas, la alerta pasará a estado "Atendida".
               </p>
             </div>
@@ -453,21 +458,21 @@ export default function EvidenceManagement() {
               value={resumenFinal}
               onChange={(e) => setResumenFinal(e.target.value)}
               placeholder="Ej: El estudiante se comprometió a asistir a tutorías semanales y firmó el acta. Mejora esperada..."
-              className="w-full h-32 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] outline-none text-sm resize-none"
+              className="w-full h-32 px-4 py-3 bg-gray-50 border border-gray-200 rounded-[10px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm resize-none"
             />
             
             <div className="flex justify-end gap-3 pt-2">
               <button
                 onClick={() => setShowConcludeModal(false)}
                 disabled={concluding}
-                className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-colors"
+                className="px-5 py-2.5 text-ink-muted font-semibold hover:bg-gray-100 rounded-[10px] transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleConcluir}
                 disabled={concluding || !resumenFinal.trim()}
-                className="px-5 py-2.5 bg-[#C8102E] hover:bg-red-700 text-white font-bold rounded-xl transition-colors disabled:opacity-50 flex items-center gap-2"
+                className="px-5 py-2.5 bg-primary hover:bg-primary-strong text-white font-semibold rounded-[10px] transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {concluding ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Confirmar Cierre'}
               </button>

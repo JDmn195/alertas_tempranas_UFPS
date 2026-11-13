@@ -3,6 +3,8 @@ import { ShieldAlert, RefreshCw, Search, Calendar, Filter } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { apiFetch } from '../../services/apiFetch';
 
+import { CargandoBloque, EstadoVacio } from '../components/Estados';
+import { CintaIndicadores, EncabezadoPagina } from '../components/Panel';
 interface AuditRecord {
   id: number;
   usuario_nombre: string;
@@ -58,33 +60,44 @@ export default function AuditLog() {
     });
   };
 
+  const campo = 'h-10 px-3.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink';
+  const hayFiltros = Boolean(filterAction || filterStartDate || filterEndDate);
+  const denegados = records.filter((r) => r.tipo_accion === 'ACCESO_DENEGADO').length;
+  const usuariosDistintos = new Set(records.map((r) => r.usuario_correo)).size;
+
   return (
-    <div className="space-y-6">
-      {/* Page header */}
-      <div className="border-l-4 border-[#C8102E] pl-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Registro de Auditoría</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Monitoreo y trazabilidad de las acciones críticas del sistema
-          </p>
-        </div>
+    <div className="space-y-5">
+      <EncabezadoPagina
+        titulo="Registro de Auditoría"
+        detalle="Trazabilidad de las acciones críticas del sistema: quién hizo qué y cuándo."
+      >
         <Button variant="outline" onClick={fetchAuditLogs}>
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Actualizar
         </Button>
-      </div>
+      </EncabezadoPagina>
+
+      <CintaIndicadores
+        cargando={loading && records.length === 0}
+        indicadores={[
+          { etiqueta: 'Registros', valor: records.length, detalle: hayFiltros ? 'Con los filtros aplicados' : 'Más recientes' },
+          { etiqueta: 'Accesos denegados', valor: denegados, tono: denegados > 0 ? 'alerta' : undefined, detalle: 'Intentos sin permiso (403)' },
+          { etiqueta: 'Usuarios distintos', valor: usuariosDistintos, detalle: 'Con actividad en la lista' },
+        ]}
+      />
 
       {/* Filtros */}
-      <div className="bg-white rounded-lg border border-gray-200 p-5">
-        <div className="flex items-center gap-4 flex-wrap">
+      <div className="bg-white border border-line rounded-[14px] p-3 sm:p-4">
+        <div className="flex items-end gap-3 flex-wrap">
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-              Tipo de Acción
+            <label htmlFor="auditoria-accion" className="block text-sm font-medium text-ink-muted mb-1.5">
+              Tipo de acción
             </label>
             <select
+              id="auditoria-accion"
               value={filterAction}
               onChange={(e) => setFilterAction(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+              className={`${campo} w-full`}
             >
               <option value="">Todas las acciones</option>
               <option value="CREAR_USUARIO">Crear Usuario</option>
@@ -109,92 +122,94 @@ export default function AuditLog() {
           </div>
           
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-              Fecha Inicio
+            <label htmlFor="auditoria-desde" className="block text-sm font-medium text-ink-muted mb-1.5">
+              Desde
             </label>
             <input
+              id="auditoria-desde"
               type="date"
               value={filterStartDate}
               onChange={(e) => setFilterStartDate(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm"
+              className={`${campo} w-full`}
             />
           </div>
 
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-              Fecha Fin
+            <label htmlFor="auditoria-hasta" className="block text-sm font-medium text-ink-muted mb-1.5">
+              Hasta
             </label>
             <input
+              id="auditoria-hasta"
               type="date"
               value={filterEndDate}
               onChange={(e) => setFilterEndDate(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm"
+              className={`${campo} w-full`}
             />
           </div>
+
+          {hayFiltros && (
+            <button
+              type="button"
+              onClick={() => { setFilterAction(''); setFilterStartDate(''); setFilterEndDate(''); }}
+              className="h-10 px-3 text-sm font-medium text-primary rounded-[10px] hover:bg-primary-tint"
+            >
+              Limpiar filtros
+            </button>
+          )}
         </div>
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 flex items-center gap-2">
+        <div className="p-4 bg-red-50 text-red-700 rounded-[10px] border border-red-200 flex items-center gap-2">
           <ShieldAlert className="w-5 h-5" />
           {error}
         </div>
       )}
 
       {/* Tabla */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-white border border-line rounded-[14px] overflow-hidden">
+        <div className="border-b border-line px-5 py-4">
+          <h2 className="text-base font-semibold text-ink">
+            {loading && records.length === 0 ? 'Cargando...' : `${records.length} registro${records.length !== 1 ? 's' : ''}`}
+          </h2>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 text-gray-600 border-b border-gray-200">
+          <table className="tabular-nums w-full min-w-[720px]">
+            <thead className="bg-paper text-ink-soft border-b border-line">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">
-                  Fecha y Hora
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">
-                  Usuario
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">
-                  Acción
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">
-                  Detalle
-                </th>
+                <th className="px-5 py-3 text-left text-xs font-semibold">Fecha y hora</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold">Usuario</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold">Acción</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold">Detalle</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {loading && records.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
-                    Cargando registros...
-                  </td>
+                  <td colSpan={4} className="px-6 py-6"><CargandoBloque texto="Cargando registros..." filas={5} /></td>
                 </tr>
               ) : records.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
-                    Sin registros para los filtros seleccionados.
-                  </td>
+                  <td colSpan={4}><EstadoVacio titulo="Sin registros para los filtros seleccionados." detalle="Amplía el rango de fechas o quita algún filtro." /></td>
                 </tr>
               ) : (
                 records.map((record) => (
-                  <tr key={record.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
+                  <tr key={record.id} className="hover:bg-paper transition-colors">
+                    <td className="px-5 py-3.5 text-sm text-ink-muted whitespace-nowrap">
                       {formatDate(record.fecha_hora)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
+                    <td className="px-5 py-3.5 text-sm text-ink">
                       <div className="font-medium">{record.usuario_nombre}</div>
-                      <div className="text-xs text-gray-500">{record.usuario_correo}</div>
+                      <div className="text-xs text-ink-muted">{record.usuario_correo}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-5 py-3.5 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                        record.tipo_accion === 'ACCESO_DENEGADO' ? 'bg-red-100 text-red-800' :
-                        record.tipo_accion.includes('CREAR') ? 'bg-green-100 text-green-800' :
-                        record.tipo_accion.includes('DESACTIVAR') ? 'bg-orange-100 text-orange-800' :
-                        'bg-blue-100 text-blue-800'
+                        record.tipo_accion === 'ACCESO_DENEGADO' ? 'bg-riesgo-critico text-white' : 'bg-wash text-ink-soft'
                       }`}>
                         {record.tipo_accion_display}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-5 py-3.5 text-sm text-ink-muted">
                       {record.detalle || '-'}
                     </td>
                   </tr>

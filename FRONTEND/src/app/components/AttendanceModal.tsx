@@ -4,6 +4,7 @@ import { apiFetch } from '../../services/apiFetch';
 import { Button } from './ui/Button';
 import { toast } from 'sonner';
 
+import { CargandoBloque } from './Estados';
 interface AttendanceModalProps {
   curso: any;
   onClose: () => void;
@@ -139,15 +140,15 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
 
   return (
     <>
-      <div className="fixed inset-0 z-[60] bg-black/50" onClick={onClose} />
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
-          <div className="bg-[#C8102E] text-white px-6 py-4 flex items-center justify-between">
+      <div className="fixed inset-0 animate-in fade-in duration-150 z-[60] bg-black/50" onClick={onClose} />
+      <div className="fixed inset-0 animate-in fade-in duration-150 z-[70] flex items-center justify-center p-4">
+        <div className="bg-white rounded-[14px] shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
+          <div className="bg-white text-ink border-b border-line px-6 py-4 flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold">Tomar Asistencia: {curso.materia}</h2>
-              <p className="text-xs opacity-80">{curso.codigo} · Grupo {curso.grupo}</p>
+              <h2 className="text-xl font-semibold">Tomar Asistencia: {curso.materia}</h2>
+              <p className="text-sm text-ink-muted">{curso.codigo} · Grupo {curso.grupo}</p>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/20 transition-colors">
+            <button onClick={onClose} className="p-1.5 rounded-[10px] text-ink-muted hover:text-ink hover:bg-wash transition-colors">
               <X className="w-6 h-6" />
             </button>
           </div>
@@ -156,13 +157,13 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
             <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center mb-6">
               <div className="flex items-center gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1">Fecha de clase</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Fecha de clase</label>
                   <input 
                     type="date" 
                     value={selectedDate}
                     max={hoyLocal()}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-[#C8102E] focus:border-[#C8102E] outline-none"
+                    className="border border-gray-300 rounded-[10px] px-3 py-2 text-sm focus:ring-primary focus:border-primary outline-none"
                   />
                 </div>
                 {attendanceData?.estudiantes && attendanceData.estudiantes.length > 0 && (
@@ -176,10 +177,10 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
               {attendanceData?.estudiantes && attendanceData.estudiantes.length > 0 && (
                 <div className="flex flex-col items-end">
                   <div className="text-sm">
-                    <span className="font-bold">{faltasCount}</span> faltas / <span className="font-bold">{attendanceData.estudiantes.length}</span> estudiantes
+                    <span className="font-semibold">{faltasCount}</span> faltas / <span className="font-semibold">{attendanceData.estudiantes.length}</span> estudiantes
                   </div>
                   {attendanceData.ya_registrada && (
-                    <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded mt-1 border border-amber-200">
+                    <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-1 rounded mt-1 border border-amber-200">
                       Modificando registro existente
                     </span>
                   )}
@@ -189,7 +190,7 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
 
             {attendanceData && attendanceData.fechas_registradas.length > 0 && (
               <div className="mb-4">
-                <p className="text-xs font-bold text-gray-600 mb-1">
+                <p className="text-xs font-semibold text-gray-600 mb-1">
                   Fechas registradas en {attendanceData.periodo} (selecciona una para corregirla)
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -198,7 +199,7 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
                       key={f}
                       type="button"
                       onClick={() => setSelectedDate(f)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-mono border transition-colors ${f === selectedDate ? 'bg-[#C8102E] border-[#C8102E] text-white' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                      className={`px-2.5 py-1 rounded-full text-xs tabular-nums border transition-colors ${f === selectedDate ? 'bg-primary border-primary text-white' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
                     >
                       {f}
                     </button>
@@ -207,11 +208,11 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-xl">
+            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-[10px]">
               {loading ? (
-                <div className="py-12 text-center text-gray-400">Cargando estudiantes...</div>
+                <CargandoBloque texto="Cargando estudiantes..." filas={6} />
               ) : error ? (
-                <div className="m-4 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 flex items-center gap-2 text-sm">
+                <div className="m-4 p-4 bg-red-50 text-red-700 rounded-[10px] border border-red-200 flex items-center gap-2 text-sm">
                   <AlertTriangle className="w-4 h-4" /> {error}
                 </div>
               ) : !attendanceData?.estudiantes || attendanceData.estudiantes.length === 0 ? (
@@ -220,12 +221,12 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
                   <p>No hay estudiantes matriculados en este curso en el periodo actual.</p>
                 </div>
               ) : (
-                <table className="w-full text-sm">
+                <table className="tabular-nums w-full text-sm">
                   <thead className="bg-gray-50 text-gray-700 sticky top-0 z-10 shadow-sm">
                     <tr>
-                      <th className="px-4 py-3 text-left font-bold">Estudiante</th>
-                      <th className="px-4 py-3 text-left font-bold">Estado de Asistencia</th>
-                      <th className="px-4 py-3 text-left font-bold">Observación</th>
+                      <th className="px-4 py-3 text-left font-semibold">Estudiante</th>
+                      <th className="px-4 py-3 text-left font-semibold">Estado de Asistencia</th>
+                      <th className="px-4 py-3 text-left font-semibold">Observación</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -233,14 +234,14 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
                       <tr key={est.codigo} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50 hover:bg-gray-100/50 transition-colors'}>
                         <td className="px-4 py-3">
                           <p className="font-semibold text-gray-900">{est.nombre}</p>
-                          <p className="text-gray-500 font-mono text-xs">{est.codigo}</p>
+                          <p className="text-gray-500 tabular-nums text-xs">{est.codigo}</p>
                           {saveErrors[est.codigo] && (
                             <p className="text-xs text-red-600 mt-1">{saveErrors[est.codigo]}</p>
                           )}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2">
-                            <label className={`cursor-pointer px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${records[est.codigo] === 'ASISTIO' ? 'bg-green-100 border-green-300 text-green-800' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                            <label className={`cursor-pointer px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${records[est.codigo] === 'ASISTIO' ? 'bg-green-100 border-green-300 text-green-800' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
                               <input 
                                 type="radio" 
                                 className="hidden" 
@@ -250,7 +251,7 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
                               />
                               Asistió
                             </label>
-                            <label className={`cursor-pointer px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${records[est.codigo] === 'FALTA' ? 'bg-red-100 border-red-300 text-red-800' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                            <label className={`cursor-pointer px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${records[est.codigo] === 'FALTA' ? 'bg-red-100 border-red-300 text-red-800' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
                               <input 
                                 type="radio" 
                                 className="hidden" 
@@ -260,7 +261,7 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
                               />
                               Falta
                             </label>
-                            <label className={`cursor-pointer px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${records[est.codigo] === 'FALTA_JUSTIFICADA' ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                            <label className={`cursor-pointer px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${records[est.codigo] === 'FALTA_JUSTIFICADA' ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
                               <input 
                                 type="radio" 
                                 className="hidden" 
@@ -279,7 +280,7 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
                             value={observaciones[est.codigo] || ''}
                             onChange={(e) => setObservaciones(prev => ({ ...prev, [est.codigo]: e.target.value }))}
                             placeholder="Opcional"
-                            className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#C8102E]"
+                            className="w-full border border-gray-200 rounded-[10px] px-2 py-1 text-xs outline-none focus:border-primary"
                           />
                         </td>
                       </tr>
@@ -296,7 +297,7 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
               <Button 
                 onClick={handleSave} 
                 disabled={saving || loading || !attendanceData?.estudiantes || attendanceData.estudiantes.length === 0}
-                className="bg-[#C8102E] hover:bg-red-700 text-white"
+                className="bg-primary hover:bg-primary-strong text-white"
               >
                 {saving ? (
                   <span className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Guardando...</span>

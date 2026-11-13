@@ -9,7 +9,9 @@ import {
   Cell, PieChart, Pie, Legend,
 } from 'recharts';
 import { apiFetch } from '../../services/apiFetch';
+import { BarraDistribucion, EncabezadoPagina, Seccion } from '../components/Panel';
 
+import { CargandoBloque } from '../components/Estados';
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CourseIndicator {
   curso_id: number;
@@ -73,10 +75,10 @@ function CustomBarTooltip({ active, payload }: any) {
   if (active && payload && payload.length) {
     const d = payload[0].payload;
     return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs">
-        <p className="font-bold text-gray-800 mb-1">{d.materia}</p>
+      <div className="bg-white border border-gray-200 rounded-[10px] shadow-lg p-3 text-xs">
+        <p className="font-semibold text-gray-800 mb-1">{d.materia}</p>
         <p className="text-gray-500">Grupo: {d.grupo}</p>
-        <p className={`font-semibold mt-1 ${d.tasa >= UMBRAL_CRITICO ? 'text-red-600' : d.tasa >= 15 ? 'text-yellow-600' : 'text-green-600'}`}>
+        <p className={`font-semibold mt-1 ${d.tasa >= UMBRAL_CRITICO ? 'text-red-600' : d.tasa >= 15 ? 'text-amber-600' : 'text-green-600'}`}>
           Tasa reprobación: {d.tasa.toFixed(1)}%
         </p>
       </div>
@@ -167,9 +169,9 @@ export default function CourseList() {
     }));
 
   const donaData = [
-    { name: 'Crítico', value: countCriticos, color: '#EF4444' },
-    { name: 'En observación', value: countMedio, color: '#F59E0B' },
-    { name: 'Estable', value: countOk, color: '#22C55E' },
+    { name: 'Crítico', value: countCriticos, color: '#B02A2B' },
+    { name: 'En observación', value: countMedio, color: '#C98A12' },
+    { name: 'Estable', value: countOk, color: '#2F8F6B' },
   ].filter(d => d.value > 0);
 
   useEffect(() => {
@@ -261,102 +263,60 @@ export default function CourseList() {
   useEffect(() => { fetchAllForCharts(); }, [fetchAllForCharts]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
 
-      {/* Header */}
-      <div className="border-l-4 border-[#C8102E] pl-4">
-        <h1 className="text-2xl font-bold text-gray-900">Indicadores por Curso</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Matrícula, tasa de reprobación y tendencia para identificar cursos críticos
-        </p>
-      </div>
+      <EncabezadoPagina
+        titulo="Indicadores por Curso"
+        detalle="Matrícula, tasa de reprobación y tendencia para identificar cursos críticos"
+      />
 
       {/* Banner de advertencia de periodo */}
       {advertencia && (
-        <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-sm text-amber-700">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-500" />
+        <div role="status" className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-[10px] flex items-center gap-2 text-sm text-amber-800">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
           <span>{advertencia}</span>
         </div>
       )}
 
-      {/* Tarjetas resumen */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
-          </div>
-          <div>
-            <p className="text-xs text-red-600 font-medium uppercase tracking-wide">Cursos Críticos</p>
-            <p className="text-2xl font-bold text-red-700">{loading ? '—' : countCriticos}</p>
-            <p className="text-xs text-red-400">Reprobación ≥ {UMBRAL_CRITICO}%</p>
-          </div>
-        </div>
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center">
-            <BarChart2 className="w-5 h-5 text-yellow-600" />
-          </div>
-          <div>
-            <p className="text-xs text-yellow-600 font-medium uppercase tracking-wide">Riesgo Medio</p>
-            <p className="text-2xl font-bold text-yellow-700">{loading ? '—' : countMedio}</p>
-            <p className="text-xs text-yellow-400">Reprobación 15–29%</p>
-          </div>
-        </div>
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-            <BookOpen className="w-5 h-5 text-green-600" />
-          </div>
-          <div>
-            <p className="text-xs text-green-600 font-medium uppercase tracking-wide">Sin Riesgo</p>
-            <p className="text-2xl font-bold text-green-700">{loading ? '—' : countOk}</p>
-            <p className="text-xs text-green-400">Reprobación &lt; 15%</p>
-          </div>
-        </div>
-      </div>
+      {/* Estado de los cursos (una sola lectura) y los que más reprueban */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+        <Seccion titulo="Distribución de estados" detalle="Cursos según su tasa de reprobación.">
+          {loading ? (
+            <div className="h-24 bg-wash rounded-[10px] animate-pulse" />
+          ) : (
+            <BarraDistribucion
+              unidad="cursos"
+              tramos={[
+                { etiqueta: `Cursos Críticos (≥ ${UMBRAL_CRITICO}%)`, valor: countCriticos, color: '#B02A2B' },
+                { etiqueta: 'Riesgo Medio (15–29%)', valor: countMedio, color: '#C98A12' },
+                { etiqueta: 'Sin Riesgo (< 15%)', valor: countOk, color: '#2F8F6B' },
+              ]}
+            />
+          )}
+        </Seccion>
 
-      {/* Gráficas */}
-      {allCourses.length > 0 && (
-        <div className="grid grid-cols-3 gap-4">
-          <div className="col-span-2 bg-white rounded-lg border border-gray-200 p-5">
-            <h3 className="text-sm font-semibold text-gray-800 mb-4">
-              Top 10 — Cursos con mayor tasa de reprobación
-            </h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 20, top: 0, bottom: 0 }}>
-                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} tickFormatter={v => `${v}%`} />
-                <YAxis type="category" dataKey="materia" tick={{ fontSize: 10 }} width={130} />
-                <Tooltip content={<CustomBarTooltip />} />
-                <Bar dataKey="tasa" radius={[0, 4, 4, 0]}>
+        <Seccion titulo="Top 10 — Cursos con mayor tasa de reprobación">
+          {allCourses.length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(120, Math.min(barData.length, 10) * 34 + 30)}>
+              <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 20, top: 0, bottom: 0 }} barCategoryGap="28%">
+                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12, fill: '#6E5F5C' }} tickFormatter={v => `${v}%`} axisLine={{ stroke: '#E8D6D2' }} tickLine={false} />
+                <YAxis type="category" dataKey="materia" tick={{ fontSize: 12, fill: '#4A3C3A' }} width={130} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomBarTooltip />} cursor={{ fill: '#FAF1EF' }} />
+                <Bar dataKey="tasa" radius={[0, 3, 3, 0]} maxBarSize={18}>
                   {barData.map((entry, index) => (
-                    <Cell key={index} fill={entry.tasa >= UMBRAL_CRITICO ? '#EF4444' : entry.tasa >= 15 ? '#F59E0B' : '#22C55E'} />
+                    <Cell key={index} fill={entry.tasa >= UMBRAL_CRITICO ? '#B02A2B' : entry.tasa >= 15 ? '#C98A12' : '#2F8F6B'} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-5">
-            <h3 className="text-sm font-semibold text-gray-800 mb-4">Distribución de estados</h3>
-            {donaData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={donaData} cx="50%" cy="45%" innerRadius={55} outerRadius={80} paddingAngle={3} dataKey="value">
-                    {donaData.map((entry, index) => (
-                      <Cell key={index} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value, name) => [`${value} cursos`, name]} />
-                  <Legend iconType="circle" iconSize={8} formatter={(value) => <span style={{ fontSize: 11 }}>{value}</span>} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[220px] flex items-center justify-center text-xs text-gray-400">Sin datos para este periodo</div>
-            )}
-          </div>
-        </div>
-      )}
+          ) : (
+            <p className="py-8 text-center text-sm text-ink-muted bg-paper border border-dashed border-line-strong rounded-[10px]">Sin datos para este periodo</p>
+          )}
+        </Seccion>
+      </div>
 
       {/* Filtros */}
-      <div className="bg-white rounded-lg border border-gray-200 p-5">
+      <div className="bg-white rounded-[10px] border border-gray-200 p-5">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex-1 min-w-[220px] relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -364,11 +324,11 @@ export default function CourseList() {
               type="text" value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar por materia o código..."
-              className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent text-sm"
+              className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-[10px] focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
             />
           </div>
           <select value={periodoAnio} onChange={(e) => { setPeriodoAnio(e.target.value); setCurrentPage(1); }}
-            className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm">
+            className="px-4 py-2.5 border border-gray-300 rounded-[10px] focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm">
             <option value="todos">Todos los periodos</option>
             <option value="2024">2024</option>
             <option value="2025">2025</option>
@@ -376,27 +336,27 @@ export default function CourseList() {
           </select>
           {periodoAnio !== 'todos' && (
             <select value={periodoSemestre} onChange={(e) => { setPeriodoSemestre(e.target.value); setCurrentPage(1); }}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm">
+              className="px-4 py-2.5 border border-gray-300 rounded-[10px] focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm">
               <option value="1">Semestre 1</option>
               <option value="2">Semestre 2</option>
             </select>
           )}
           <select value={estadoFilter} onChange={(e) => { setEstadoFilter(e.target.value); setCurrentPage(1); }}
-            className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm">
+            className="px-4 py-2.5 border border-gray-300 rounded-[10px] focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm">
             <option value="">Todos los cursos</option>
             <option value="CRÍTICO">Solo críticos</option>
             <option value="EN OBSERVACIÓN">Riesgo medio</option>
             <option value="ESTABLE">Sin riesgo crítico</option>
           </select>
           <button onClick={() => { fetchCourses(); fetchAllForCharts(); }}
-            className="p-2.5 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-500 hover:text-[#C8102E] transition-colors" title="Actualizar">
+            className="p-2.5 rounded-[10px] border border-gray-300 hover:bg-gray-50 text-gray-500 hover:text-primary transition-colors" title="Actualizar">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
       {/* Tabla */}
-      <div className="bg-white rounded-lg border border-gray-200">
+      <div className="bg-white rounded-[10px] border border-gray-200">
         <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-gray-900">
             {loading ? 'Cargando...' : `${total} curso${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`}
@@ -408,7 +368,7 @@ export default function CourseList() {
           <div className="p-8 text-center">
             <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
             <p className="text-sm text-red-600 font-medium">{error}</p>
-            <button onClick={fetchCourses} className="mt-3 text-sm text-[#C8102E] underline hover:no-underline">Reintentar</button>
+            <button onClick={fetchCourses} className="mt-3 text-sm text-primary underline hover:no-underline">Reintentar</button>
           </div>
         )}
 
@@ -422,8 +382,8 @@ export default function CourseList() {
 
         {!error && courses.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-[#C8102E] text-white">
+            <table className="tabular-nums w-full">
+              <thead className="bg-paper text-ink-soft border-b border-line">
                 <tr>
                   <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider">Código</th>
                   <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider">Materia</th>
@@ -451,7 +411,7 @@ export default function CourseList() {
                       onClick={() => setSelectedCourseDetail(course.curso_id)}
                       className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${course.es_critico ? '!bg-red-50' : ''} hover:bg-red-50 transition-colors duration-100 cursor-pointer`}
                     >
-                      <td className="px-5 py-3.5 text-sm font-mono font-medium text-gray-700">{course.codigo_materia}</td>
+                      <td className="px-5 py-3.5 text-sm tabular-nums font-medium text-gray-700">{course.codigo_materia}</td>
                       <td className="px-5 py-3.5 text-sm text-gray-900 max-w-[200px] truncate font-medium">{course.materia}</td>
                       <td className="px-5 py-3.5 text-sm text-gray-600">G-{course.grupo}</td>
                       <td className="px-5 py-3.5 text-sm text-gray-700 max-w-[160px] truncate">{course.docente}</td>
@@ -462,21 +422,21 @@ export default function CourseList() {
                       <td className="px-5 py-3.5 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                            <div className={`h-1.5 rounded-full ${risk === 'high' ? 'bg-red-500' : risk === 'medium' ? 'bg-yellow-400' : 'bg-green-500'}`}
+                            <div className={`h-1.5 rounded-full ${risk === 'high' ? 'bg-red-500' : risk === 'medium' ? 'bg-amber-400' : 'bg-green-500'}`}
                               style={{ width: `${Math.min(course.tasa_reprobacion, 100)}%` }} />
                           </div>
-                          <span className={`text-sm font-bold ${risk === 'high' ? 'text-red-600' : risk === 'medium' ? 'text-yellow-600' : 'text-green-600'}`}>
+                          <span className={`text-sm font-semibold ${risk === 'high' ? 'text-red-600' : risk === 'medium' ? 'text-amber-600' : 'text-green-600'}`}>
                             {course.tasa_reprobacion.toFixed(1)}%
                           </span>
                         </div>
                       </td>
                       <td className="px-5 py-3.5 text-center">
-                        <span className={`text-sm font-bold ${course.promedio_curso === null ? 'text-gray-400' : course.promedio_curso < 3.0 ? 'text-red-600' : course.promedio_curso < 3.5 ? 'text-yellow-600' : 'text-green-600'}`}>
+                        <span className={`text-sm font-semibold ${course.promedio_curso === null ? 'text-gray-400' : course.promedio_curso < 3.0 ? 'text-red-600' : course.promedio_curso < 3.5 ? 'text-amber-600' : 'text-green-600'}`}>
                           {course.promedio_curso !== null ? course.promedio_curso.toFixed(2) : '—'}
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-center">
-                        <span className={`text-sm font-semibold ${course.zona_riesgo > 0 ? 'text-yellow-600' : 'text-gray-400'}`}>
+                        <span className={`text-sm font-semibold ${course.zona_riesgo > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
                           {course.zona_riesgo > 0 ? course.zona_riesgo : '—'}
                         </span>
                       </td>
@@ -498,13 +458,13 @@ export default function CourseList() {
                       </td>
                       <td className="px-5 py-3.5 text-center">
                         {course.es_critico ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-200">
                             <AlertTriangle className="w-3 h-3" /> CRÍTICO
                           </span>
                         ) : risk === 'medium' ? (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700 border border-yellow-200">MEDIO</span>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">MEDIO</span>
                         ) : (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200">OK</span>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">OK</span>
                         )}
                       </td>
                       <td className="px-5 py-3.5 text-center">
@@ -514,7 +474,7 @@ export default function CourseList() {
                           ) : (
                             <div className="flex flex-col items-center">
                               <span className="text-sm font-semibold text-gray-900">{course.umbral_inasistencia}%</span>
-                              <span className={`text-[10px] font-semibold uppercase ${course.origen_umbral_inasistencia === 'curso' ? 'text-[#C8102E]' : 'text-gray-400'}`}>
+                              <span className={`text-[10px] font-semibold uppercase ${course.origen_umbral_inasistencia === 'curso' ? 'text-primary' : 'text-gray-400'}`}>
                                 {course.origen_umbral_inasistencia === 'curso' ? 'Propio' : 'General'}
                               </span>
                             </div>
@@ -570,7 +530,7 @@ export default function CourseList() {
                 const p = i + 1;
                 return (
                   <button key={p} onClick={() => setCurrentPage(p)}
-                    className={`w-7 h-7 rounded text-xs font-medium transition-colors ${p === currentPage ? 'bg-[#C8102E] text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+                    className={`w-7 h-7 rounded text-xs font-medium transition-colors ${p === currentPage ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                     {p}
                   </button>
                 );
@@ -586,16 +546,16 @@ export default function CourseList() {
 
       {/* ── HU-35: Modal de umbral de inasistencia del curso ─────────────── */}
       {umbralEditando && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md">
-            <div className="bg-[#C8102E] text-white px-6 py-4 flex items-center justify-between rounded-t-lg">
+        <div className="fixed inset-0 animate-in fade-in duration-150 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(36, 26, 25, 0.5)' }}>
+          <div className="bg-white rounded-[14px] shadow-2xl w-full max-w-md animate-in zoom-in-95 duration-150">
+            <div className="bg-white text-ink border-b border-line px-6 py-4 flex items-center justify-between rounded-t-lg">
               <div>
-                <h2 className="text-lg font-bold">Umbral de inasistencia</h2>
+                <h2 className="text-lg font-semibold">Umbral de inasistencia</h2>
                 <p className="text-xs opacity-90">
                   {umbralEditando.codigo_materia} G-{umbralEditando.grupo} · {umbralEditando.materia}
                 </p>
               </div>
-              <button onClick={cerrarEdicionUmbral} className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-1.5">
+              <button onClick={cerrarEdicionUmbral} className="text-ink-muted hover:text-ink hover:bg-wash rounded-[10px] p-1.5">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -621,12 +581,12 @@ export default function CourseList() {
                   autoFocus
                   onChange={(e) => setUmbralValor(e.target.value)}
                   placeholder="Entre 0 y 100"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-[10px] focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
                 <p className="text-xs text-gray-500 mt-1">Déjelo vacío o use "Volver al general" para usar el umbral general.</p>
               </div>
               {umbralError && (
-                <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2" role="alert">
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-[10px] px-3 py-2" role="alert">
                   <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                   <span>{umbralError}</span>
                 </div>
@@ -646,7 +606,7 @@ export default function CourseList() {
                     Cancelar
                   </button>
                   <button type="submit" disabled={umbralGuardando}
-                    className="px-4 py-2 text-sm rounded-md bg-[#C8102E] text-white hover:bg-[#a00d25] disabled:opacity-50">
+                    className="px-4 py-2 text-sm rounded-md bg-primary text-white hover:bg-primary-strong disabled:opacity-50">
                     {umbralGuardando ? 'Guardando…' : 'Guardar'}
                   </button>
                 </div>
@@ -660,21 +620,21 @@ export default function CourseList() {
       {selectedCourseDetail !== null && (
         <>
           <div
-            className="fixed inset-0 z-40 transition-opacity"
-            style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+            className="fixed inset-0 animate-in fade-in duration-150 z-40 transition-opacity"
+            style={{ backgroundColor: 'rgba(36, 26, 25, 0.5)' }}
             onClick={() => { setSelectedCourseDetail(null); setCourseDetailData(null); }}
           />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg shadow-2xl border border-gray-200 w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 animate-in fade-in duration-150 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-[14px] shadow-2xl border border-gray-200 w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200 animate-in zoom-in-95 duration-150">
               {/* Header */}
-              <div className="bg-[#C8102E] text-white px-6 py-4 flex items-center justify-between">
+              <div className="bg-white text-ink border-b border-line px-6 py-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-bold">Detalle del Curso</h2>
+                  <h2 className="text-xl font-semibold">Detalle del Curso</h2>
                   <p className="text-xs opacity-90">Consulta de estudiantes matriculados</p>
                 </div>
                 <button
                   onClick={() => { setSelectedCourseDetail(null); setCourseDetailData(null); }}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-1.5 transition-colors"
+                  className="text-ink-muted hover:text-ink hover:bg-wash rounded-[10px] p-1.5 transition-colors"
                 >
                   <X className="w-6 h-6" />
                 </button>
@@ -683,40 +643,40 @@ export default function CourseList() {
               {/* Content */}
               <div className="p-6 overflow-y-auto flex-1 space-y-4">
                 {detailLoading ? (
-                  <div className="py-12 text-center text-gray-500">Cargando información del curso...</div>
+                  <CargandoBloque texto="Cargando información del curso..." filas={5} />
                 ) : detailError ? (
-                  <div className="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 flex items-center gap-2">
+                  <div className="p-4 bg-red-50 text-red-700 rounded-[10px] border border-red-200 flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5 flex-shrink-0" />
                     {detailError}
                   </div>
                 ) : courseDetailData ? (
                   <>
                     {/* Course Metadata Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-[10px] border border-gray-200">
                       <div>
-                        <span className="text-[10px] text-gray-500 uppercase font-bold block">Materia</span>
+                        <span className="text-[10px] text-gray-500 uppercase font-semibold block">Materia</span>
                         <span className="text-sm font-semibold text-gray-900">{courseDetailData.materia}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] text-gray-500 uppercase font-bold block">Código / Grupo</span>
-                        <span className="text-sm font-semibold text-gray-900 font-mono">{courseDetailData.codigo_materia} / G-{courseDetailData.grupo}</span>
+                        <span className="text-[10px] text-gray-500 uppercase font-semibold block">Código / Grupo</span>
+                        <span className="text-sm font-semibold text-gray-900 tabular-nums">{courseDetailData.codigo_materia} / G-{courseDetailData.grupo}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] text-gray-500 uppercase font-bold block">Profesor</span>
+                        <span className="text-[10px] text-gray-500 uppercase font-semibold block">Profesor</span>
                         <span className="text-sm font-semibold text-gray-900">{courseDetailData.docente}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] text-gray-500 uppercase font-bold block">Total Estudiantes</span>
+                        <span className="text-[10px] text-gray-500 uppercase font-semibold block">Total Estudiantes</span>
                         <span className="text-sm font-semibold text-gray-900">{courseDetailData.estudiantes.length} inscritos</span>
                       </div>
                     </div>
 
                     {/* Table of Enrolled Students */}
                     <div className="flex flex-col flex-1">
-                      <h3 className="text-sm font-bold text-gray-700 mb-2">Listado de Estudiantes</h3>
-                      <div className="overflow-x-auto border border-gray-200 rounded-lg max-h-[350px] overflow-y-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-[#C8102E] text-white sticky top-0 z-10">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-2">Listado de Estudiantes</h3>
+                      <div className="overflow-x-auto border border-gray-200 rounded-[10px] max-h-[350px] overflow-y-auto">
+                        <table className="tabular-nums w-full text-sm">
+                          <thead className="bg-paper text-ink-soft border-b border-line sticky top-0 z-10">
                             <tr>
                               <th className="px-4 py-3 text-left font-medium uppercase tracking-wider">Estudiante</th>
                               <th className="px-4 py-3 text-left font-medium uppercase tracking-wider">Código</th>
@@ -733,12 +693,12 @@ export default function CourseList() {
                               </tr>
                             ) : (
                               courseDetailData.estudiantes.map((est, idx) => (
-                                <tr key={`${est.codigo}-${idx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F5F5F5] hover:bg-red-50 transition-colors'}>
+                                <tr key={`${est.codigo}-${idx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-paper hover:bg-red-50 transition-colors'}>
                                   <td className="px-4 py-2.5 font-medium text-gray-900">{est.nombre}</td>
-                                  <td className="px-4 py-2.5 text-gray-600 font-mono">{est.codigo}</td>
+                                  <td className="px-4 py-2.5 text-gray-600 tabular-nums">{est.codigo}</td>
                                   <td className="px-4 py-2.5 text-center text-gray-600 font-semibold">{est.periodo}</td>
                                   <td className="px-4 py-2.5 text-center">
-                                    <span className={`font-mono font-bold ${est.definitiva === null ? 'text-gray-400' : est.definitiva < 3.0 ? 'text-red-600' : 'text-green-600'}`}>
+                                    <span className={`tabular-nums font-semibold ${est.definitiva === null ? 'text-gray-400' : est.definitiva < 3.0 ? 'text-red-600' : 'text-green-600'}`}>
                                       {est.definitiva !== null ? est.definitiva.toFixed(2) : '—'}
                                     </span>
                                   </td>

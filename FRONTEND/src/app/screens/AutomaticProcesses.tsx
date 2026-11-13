@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { BellRing, CalendarClock, ChevronDown, ChevronUp, Play, RefreshCw, Save } from 'lucide-react';
+import { CintaIndicadores, EncabezadoPagina, Seccion } from '../components/Panel';
 import { Button } from '../components/ui/Button';
 import { apiFetch } from '../../services/apiFetch';
 
+import { CargandoFilas } from '../components/Estados';
 // ─── HU-29: re-evaluación periódica del riesgo ──────────────────────────────
 
 interface Ejecucion {
@@ -84,7 +86,7 @@ const ESTADO_RECORDATORIO: Record<Recordatorio['estado'], { label: string; class
   ENVIADO:   { label: 'Enviado',   className: 'bg-green-100 text-green-700' },
   PARCIAL:   { label: 'Parcial',   className: 'bg-amber-100 text-amber-700' },
   FALLIDO:   { label: 'Fallido',   className: 'bg-red-100 text-red-700' },
-  CANCELADO: { label: 'Cancelado', className: 'bg-gray-100 text-gray-600' },
+  CANCELADO: { label: 'Cancelado', className: 'bg-gray-100 text-ink-muted' },
 };
 
 const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -108,7 +110,7 @@ function rolActual(): string[] {
 function Aviso({ tipo, texto }: { tipo: 'ok' | 'error'; texto: string }) {
   return (
     <div
-      className={`rounded-lg border px-4 py-3 text-sm ${
+      className={`rounded-[10px] border px-4 py-3 text-sm ${
         tipo === 'ok' ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800'
       }`}
     >
@@ -167,18 +169,11 @@ function ReevaluacionPeriodica({ puedeEjecutar }: { puedeEjecutar: boolean }) {
   const ultima = ejecuciones[0];
 
   return (
-    <section className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-      <div className="bg-gray-700 px-6 py-4 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-          <CalendarClock className="w-4 h-4 text-white" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-white">Re-evaluación periódica del riesgo</h2>
-          <p className="text-xs text-gray-400">
-            Recalcula indicadores, riesgo y alertas sin una nueva importación (HU-29)
-          </p>
-        </div>
-        <div className="ml-auto flex gap-2">
+    <Seccion
+      titulo="Re-evaluación periódica del riesgo"
+      detalle="Recalcula indicadores, riesgo y alertas sin una nueva importación (HU-29)"
+      accion={
+        <div className="flex gap-2">
           <Button variant="secondary" size="sm" onClick={cargar}>
             <RefreshCw className={`w-4 h-4 inline mr-1 ${loading ? 'animate-spin' : ''}`} />
             Actualizar
@@ -190,79 +185,69 @@ function ReevaluacionPeriodica({ puedeEjecutar }: { puedeEjecutar: boolean }) {
             </Button>
           )}
         </div>
-      </div>
-
-      <div className="p-6 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="rounded-lg border border-gray-200 p-4">
-            <p className="text-[10px] uppercase font-bold text-gray-400">Programación</p>
-            <p className="text-sm font-semibold text-gray-800 mt-1">Diaria a las 02:00 (hora de Colombia)</p>
-            <p className="text-xs text-gray-500 mt-1">Con reintentos automáticos ante fallos.</p>
-          </div>
-          <div className="rounded-lg border border-gray-200 p-4">
-            <p className="text-[10px] uppercase font-bold text-gray-400">Última ejecución</p>
-            <p className="text-sm font-semibold text-gray-800 mt-1">{ultima ? formatDate(ultima.fecha_inicio) : 'Sin ejecuciones'}</p>
-            {ultima && (
-              <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${ESTADO_EJECUCION[ultima.estado].className}`}>
-                {ESTADO_EJECUCION[ultima.estado].label}
-              </span>
-            )}
-          </div>
-          <div className="rounded-lg border border-gray-200 p-4">
-            <p className="text-[10px] uppercase font-bold text-gray-400">Resultado de la última</p>
-            <p className="text-sm text-gray-800 mt-1">
-              {ultima
-                ? `${ultima.procesados}/${ultima.total_estudiantes} estudiantes, ${ultima.cambios_riesgo} cambios de riesgo`
-                : '—'}
-            </p>
-            {ultima && (
-              <p className="text-xs text-gray-500 mt-1">
-                Alertas: {ultima.alertas_generadas} nuevas, {ultima.alertas_actualizadas} actualizadas, {ultima.alertas_cerradas} cerradas
-              </p>
-            )}
-          </div>
-        </div>
+      }
+    >
+      <div className="space-y-4">
+        <CintaIndicadores
+          cargando={loading && ejecuciones.length === 0}
+          indicadores={[
+            { etiqueta: 'Programación', valor: <span className="text-base leading-tight">Diaria, 02:00</span>, detalle: 'Hora de Colombia, con reintentos ante fallos' },
+            {
+              etiqueta: 'Última ejecución',
+              valor: <span className="text-base leading-tight">{ultima ? formatDate(ultima.fecha_inicio) : 'Sin ejecuciones'}</span>,
+              detalle: ultima ? ESTADO_EJECUCION[ultima.estado].label : undefined,
+              tono: ultima?.estado === 'FALLIDA' ? 'alerta' : undefined,
+            },
+            { etiqueta: 'Estudiantes procesados', valor: ultima ? `${ultima.procesados}/${ultima.total_estudiantes}` : '—' },
+            { etiqueta: 'Cambios de riesgo', valor: ultima ? ultima.cambios_riesgo : '—' },
+            {
+              etiqueta: 'Alertas nuevas / cerradas',
+              valor: ultima ? `${ultima.alertas_generadas} / ${ultima.alertas_cerradas}` : '—',
+              detalle: ultima ? `${ultima.alertas_actualizadas} actualizadas` : undefined,
+            },
+          ]}
+        />
 
         {mensaje && <Aviso tipo={mensaje.tipo} texto={mensaje.texto} />}
 
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-100">
+          <table className="tabular-nums w-full">
+            <thead className="bg-paper text-ink-soft border-b border-line">
               <tr>
                 {['', 'Inicio', 'Origen', 'Estado', 'Intento', 'Procesados', 'Cambios de riesgo', 'Alertas (nuevas / cerradas)', 'Errores'].map(col => (
-                  <th key={col} className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">{col}</th>
+                  <th key={col} className="px-4 py-3 text-left text-xs font-semibold">{col}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-line">
               {loading ? (
-                <tr><td colSpan={9} className="px-4 py-6 text-center text-sm text-gray-400 animate-pulse">Cargando ejecuciones...</td></tr>
+                <CargandoFilas columnas={9} texto="Cargando ejecuciones..." filas={3} />
               ) : ejecuciones.length === 0 ? (
-                <tr><td colSpan={9} className="px-4 py-6 text-center text-sm text-gray-400">Aún no hay ejecuciones registradas.</td></tr>
+                <tr><td colSpan={9} className="px-4 py-6 text-center text-sm text-ink-muted">Aún no hay ejecuciones registradas.</td></tr>
               ) : (
                 ejecuciones.map(ej => [
-                  <tr key={ej.id} onClick={() => verDetalle(ej.id)} className="cursor-pointer hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-400">
+                  <tr key={ej.id} onClick={() => verDetalle(ej.id)} className="cursor-pointer hover:bg-paper">
+                    <td className="px-4 py-3 text-ink-muted">
                       {detalle?.id === ej.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{formatDate(ej.fecha_inicio)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500">
+                    <td className="px-4 py-3 text-sm text-ink">{formatDate(ej.fecha_inicio)}</td>
+                    <td className="px-4 py-3 text-sm text-ink-muted">
                       {ej.origen === 'PROGRAMADA' ? 'Programada' : `Manual${ej.usuario ? ` (${ej.usuario})` : ''}`}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${ESTADO_EJECUCION[ej.estado].className}`}>
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${ESTADO_EJECUCION[ej.estado].className}`}>
                         {ESTADO_EJECUCION[ej.estado].label}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">{ej.intento}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{ej.procesados}/{ej.total_estudiantes}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{ej.cambios_riesgo}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{ej.alertas_generadas} / {ej.alertas_cerradas}</td>
-                    <td className={`px-4 py-3 text-sm ${ej.total_errores > 0 ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>{ej.total_errores}</td>
+                    <td className="px-4 py-3 text-sm text-ink-muted">{ej.intento}</td>
+                    <td className="px-4 py-3 text-sm text-ink">{ej.procesados}/{ej.total_estudiantes}</td>
+                    <td className="px-4 py-3 text-sm text-ink">{ej.cambios_riesgo}</td>
+                    <td className="px-4 py-3 text-sm text-ink">{ej.alertas_generadas} / {ej.alertas_cerradas}</td>
+                    <td className={`px-4 py-3 text-sm ${ej.total_errores > 0 ? 'text-red-600 font-semibold' : 'text-ink-muted'}`}>{ej.total_errores}</td>
                   </tr>,
                   detalle?.id === ej.id && (
-                    <tr key={`${ej.id}-detalle`} className="bg-gray-50/60">
-                      <td colSpan={9} className="px-8 py-4 text-sm text-gray-600 space-y-2">
+                    <tr key={`${ej.id}-detalle`} className="bg-paper">
+                      <td colSpan={9} className="px-8 py-4 text-sm text-ink-muted space-y-2">
                         {detalle.mensaje_error && <p className="text-red-600">{detalle.mensaje_error}</p>}
                         <p>
                           <strong>Estudiantes por nivel:</strong>{' '}
@@ -288,7 +273,7 @@ function ReevaluacionPeriodica({ puedeEjecutar }: { puedeEjecutar: boolean }) {
           </table>
         </div>
       </div>
-    </section>
+    </Seccion>
   );
 }
 
@@ -362,7 +347,7 @@ function RecordatoriosSeguimiento() {
   };
 
   const campoNumero = (campo: keyof ConfigRecordatorios, label: string, max = 365) => (
-    <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">
+    <label className="flex flex-col gap-1 text-xs font-medium text-ink-muted">
       {label}
       <input
         type="number"
@@ -370,39 +355,30 @@ function RecordatoriosSeguimiento() {
         max={max}
         value={form ? String(form[campo]) : ''}
         onChange={e => form && setForm({ ...form, [campo]: e.target.value === '' ? '' : Number(e.target.value) } as ConfigRecordatorios)}
-        className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-800 w-full"
+        className="px-3 py-2 text-sm border border-line-strong rounded-[10px] bg-white text-ink w-full"
       />
     </label>
   );
 
   return (
-    <section className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-      <div className="bg-gray-700 px-6 py-4 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-          <BellRing className="w-4 h-4 text-white" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-white">Recordatorios de casos sin seguimiento</h2>
-          <p className="text-xs text-gray-400">
-            Avisa sobre alertas e intervenciones inactivas; se cancelan al registrar seguimiento (HU-30)
-          </p>
-        </div>
-        <div className="ml-auto">
-          <Button size="sm" onClick={enviarAhora}>
-            <Play className="w-4 h-4 inline mr-1" />
-            Enviar ahora
-          </Button>
-        </div>
-      </div>
-
-      <div className="p-6 space-y-6">
+    <Seccion
+      titulo="Recordatorios de casos sin seguimiento"
+      detalle="Avisa sobre alertas e intervenciones inactivas; se cancelan al registrar seguimiento (HU-30)"
+      accion={
+        <Button size="sm" onClick={enviarAhora}>
+          <Play className="w-4 h-4 inline mr-1" />
+          Enviar ahora
+        </Button>
+      }
+    >
+      <div className="space-y-6">
         {mensaje && <Aviso tipo={mensaje.tipo} texto={mensaje.texto} />}
 
         {form && (
-          <div className="rounded-lg border border-gray-200 p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-gray-800">Configuración</p>
-              <p className="text-xs text-gray-400">
+          <div className="rounded-[10px] bg-paper border border-line p-4 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-ink">Configuración</p>
+              <p className="text-xs text-ink-muted">
                 Última actualización: {formatDate(config?.fecha_actualizacion ?? null)}
                 {config?.actualizado_por ? ` por ${config.actualizado_por}` : ''}
               </p>
@@ -413,7 +389,7 @@ function RecordatoriosSeguimiento() {
               {campoNumero('dias_entre_recordatorios', 'Días entre recordatorios')}
               {campoNumero('max_intentos', 'Máximo de reintentos', 10)}
             </div>
-            <div className="flex flex-wrap items-center gap-6 text-sm text-gray-700">
+            <div className="flex flex-wrap items-center gap-6 text-sm text-ink">
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={form.activo} onChange={e => setForm({ ...form, activo: e.target.checked })} />
                 Recordatorios activos
@@ -426,7 +402,7 @@ function RecordatoriosSeguimiento() {
                 />
                 Notificar al responsable de la intervención
               </label>
-              <span className="text-xs text-gray-500">Roles destinatarios:</span>
+              <span className="text-xs text-ink-muted">Roles destinatarios:</span>
               {ROLES.map(rol => (
                 <label key={rol} className="flex items-center gap-1 text-xs">
                   <input
@@ -453,26 +429,26 @@ function RecordatoriosSeguimiento() {
         )}
 
         <div>
-          <p className="text-sm font-semibold text-gray-800 mb-2">Casos sin seguimiento ({casos.length})</p>
+          <p className="text-sm font-semibold text-ink mb-2">Casos sin seguimiento ({casos.length})</p>
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-100">
+            <table className="tabular-nums w-full">
+              <thead className="bg-paper text-ink-soft border-b border-line">
                 <tr>
                   {['Tipo', 'Estudiante', 'Regla', 'Responsable', 'Días inactivo'].map(col => (
-                    <th key={col} className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">{col}</th>
+                    <th key={col} className="px-4 py-2.5 text-left text-xs font-semibold">{col}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-line">
                 {casos.length === 0 ? (
-                  <tr><td colSpan={5} className="px-4 py-4 text-center text-sm text-gray-400">No hay casos sin seguimiento.</td></tr>
+                  <tr><td colSpan={5} className="px-4 py-4 text-center text-sm text-ink-muted">No hay casos sin seguimiento.</td></tr>
                 ) : casos.slice(0, 20).map(c => (
                   <tr key={`${c.tipo_caso}-${c.alerta_id}`}>
-                    <td className="px-4 py-2 text-sm text-gray-500">{c.tipo_caso === 'ALERTA' ? 'Alerta' : 'Intervención'}</td>
-                    <td className="px-4 py-2 text-sm text-gray-800">{c.estudiante.nombre} <span className="text-xs text-gray-400">{c.estudiante.codigo}</span></td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{c.regla}</td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{c.responsable ?? '—'}</td>
-                    <td className="px-4 py-2 text-sm font-semibold text-gray-800">{c.dias_inactivo}</td>
+                    <td className="px-4 py-2 text-sm text-ink-muted">{c.tipo_caso === 'ALERTA' ? 'Alerta' : 'Intervención'}</td>
+                    <td className="px-4 py-2 text-sm text-ink">{c.estudiante.nombre} <span className="text-xs text-ink-muted">{c.estudiante.codigo}</span></td>
+                    <td className="px-4 py-2 text-sm text-ink-muted">{c.regla}</td>
+                    <td className="px-4 py-2 text-sm text-ink-muted">{c.responsable ?? '—'}</td>
+                    <td className="px-4 py-2 text-sm font-semibold text-ink">{c.dias_inactivo}</td>
                   </tr>
                 ))}
               </tbody>
@@ -482,11 +458,11 @@ function RecordatoriosSeguimiento() {
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-semibold text-gray-800">Recordatorios enviados</p>
+            <p className="text-sm font-semibold text-ink">Recordatorios enviados</p>
             <select
               value={estadoFiltro}
               onChange={e => setEstadoFiltro(e.target.value)}
-              className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-800"
+              className="px-3 py-1.5 text-sm border border-line-strong rounded-[10px] bg-white text-ink"
             >
               <option value="">Todos los estados</option>
               {Object.entries(ESTADO_RECORDATORIO).map(([k, v]) => (
@@ -495,30 +471,30 @@ function RecordatoriosSeguimiento() {
             </select>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-100">
+            <table className="tabular-nums w-full">
+              <thead className="bg-paper text-ink-soft border-b border-line">
                 <tr>
                   {['Fecha', 'Tipo', 'Estudiante', 'Destinatario', 'Estado', 'Intentos', 'Detalle'].map(col => (
-                    <th key={col} className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">{col}</th>
+                    <th key={col} className="px-4 py-2.5 text-left text-xs font-semibold">{col}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-line">
                 {recordatorios.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-4 text-center text-sm text-gray-400">No hay recordatorios registrados.</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-4 text-center text-sm text-ink-muted">No hay recordatorios registrados.</td></tr>
                 ) : recordatorios.map(r => (
                   <tr key={r.id}>
-                    <td className="px-4 py-2 text-sm text-gray-600">{formatDate(r.fecha_creacion)}</td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{r.tipo_caso === 'ALERTA' ? 'Alerta' : 'Intervención'}</td>
-                    <td className="px-4 py-2 text-sm text-gray-800">{r.estudiante.nombre}</td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{r.destinatario.nombre} ({r.destinatario.rol})</td>
+                    <td className="px-4 py-2 text-sm text-ink-muted">{formatDate(r.fecha_creacion)}</td>
+                    <td className="px-4 py-2 text-sm text-ink-muted">{r.tipo_caso === 'ALERTA' ? 'Alerta' : 'Intervención'}</td>
+                    <td className="px-4 py-2 text-sm text-ink">{r.estudiante.nombre}</td>
+                    <td className="px-4 py-2 text-sm text-ink-muted">{r.destinatario.nombre} ({r.destinatario.rol})</td>
                     <td className="px-4 py-2">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${ESTADO_RECORDATORIO[r.estado].className}`}>
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${ESTADO_RECORDATORIO[r.estado].className}`}>
                         {ESTADO_RECORDATORIO[r.estado].label}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{r.intentos}/{r.max_intentos}</td>
-                    <td className="px-4 py-2 text-xs text-gray-500">{r.motivo_cancelacion || r.ultimo_error || `${r.dias_inactivo} días sin seguimiento`}</td>
+                    <td className="px-4 py-2 text-sm text-ink-muted">{r.intentos}/{r.max_intentos}</td>
+                    <td className="px-4 py-2 text-xs text-ink-muted">{r.motivo_cancelacion || r.ultimo_error || `${r.dias_inactivo} días sin seguimiento`}</td>
                   </tr>
                 ))}
               </tbody>
@@ -526,7 +502,7 @@ function RecordatoriosSeguimiento() {
           </div>
         </div>
       </div>
-    </section>
+    </Seccion>
   );
 }
 
@@ -534,13 +510,11 @@ export default function AutomaticProcesses() {
   const puedeEjecutarReevaluacion = rolActual().includes('ADMINISTRADOR');
 
   return (
-    <div className="space-y-6">
-      <div className="border-l-4 border-[#C8102E] pl-4">
-        <h1 className="text-2xl font-bold text-gray-900">Procesos automáticos</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Re-evaluación periódica del riesgo y recordatorios de casos sin seguimiento
-        </p>
-      </div>
+    <div className="space-y-5">
+      <EncabezadoPagina
+        titulo="Procesos automáticos"
+        detalle="Re-evaluación periódica del riesgo y recordatorios de casos sin seguimiento."
+      />
       <ReevaluacionPeriodica puedeEjecutar={puedeEjecutarReevaluacion} />
       <RecordatoriosSeguimiento />
     </div>

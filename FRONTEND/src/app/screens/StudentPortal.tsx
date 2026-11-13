@@ -4,8 +4,8 @@ import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'rec
 import {
   AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, BookOpen, CalendarCheck, CheckCircle2, ChevronRight,
   Clock,
-  GraduationCap, HeartHandshake, Info, Lightbulb, LineChart as IconoLinea, MessageSquarePlus, SearchX, Send,
-  TrendingUp, XCircle,
+  GraduationCap, HeartHandshake, Info, Lightbulb, LineChart as IconoLinea, Loader2, MessageSquarePlus, SearchX, Send,
+  TrendingUp, X, XCircle,
 } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 import { type ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '../components/ui/chart';
@@ -176,24 +176,39 @@ interface AsistenciaPropia {
 
 const NOTA_APROBATORIA = 3.0;
 
-const ESTILO_NIVEL: Record<Nivel, { tarjeta: string; texto: string; icono: string; consejo: string }> = {
+const ESTILO_NIVEL: Record<Nivel, { tarjeta: string; texto: string; icono: string; consejo: string; fondo: string; insignia: string; paso: string | null; pasoRuta: string; pasoBoton: string }> = {
   high: {
     tarjeta: 'bg-red-50 border-red-200',
     texto: 'text-red-700',
     icono: 'text-red-500',
     consejo: 'Tu situación académica necesita atención. Te recomendamos acercarte a Bienestar Universitario o a la dirección de tu programa para recibir acompañamiento.',
+    fondo: 'from-[#FEF3F4] via-white to-white border-primary-tint',
+    insignia: 'bg-primary text-white',
+    paso: 'Tu siguiente paso: pide acompañamiento. Es gratis, confidencial y toma un minuto.',
+    pasoRuta: '/dashboard/portal/acompanamiento',
+    pasoBoton: 'Solicitar acompañamiento',
   },
   medium: {
-    tarjeta: 'bg-yellow-50 border-yellow-200',
-    texto: 'text-yellow-700',
-    icono: 'text-yellow-500',
+    tarjeta: 'bg-amber-50 border-amber-200',
+    texto: 'text-amber-700',
+    icono: 'text-amber-500',
     consejo: 'Hay aspectos de tu rendimiento que conviene revisar. Estás a tiempo de mejorar: organiza tu semestre y busca apoyo si lo necesitas.',
+    fondo: 'from-amber-50 via-white to-white border-amber-200',
+    insignia: 'bg-amber-500 text-white',
+    paso: 'Tu siguiente paso: revisa tus alertas y decide si te conviene pedir apoyo.',
+    pasoRuta: '/dashboard/portal/alertas',
+    pasoBoton: 'Ver mis alertas',
   },
   low: {
     tarjeta: 'bg-green-50 border-green-200',
     texto: 'text-green-700',
     icono: 'text-green-500',
     consejo: 'Vas por buen camino. Sigue así y revisa tu situación periódicamente.',
+    fondo: 'from-green-50 via-white to-white border-green-200',
+    insignia: 'bg-green-500 text-white',
+    paso: null,
+    pasoRuta: '/dashboard/portal/alertas',
+    pasoBoton: 'Ver mis alertas',
   },
 };
 
@@ -229,13 +244,51 @@ function explicarCausa(causa: Causa): string {
   }
 }
 
+const ESCALA_RIESGO: { nivel: Nivel; texto: string; activo: string }[] = [
+  { nivel: 'low', texto: 'Bajo', activo: 'bg-green-500' },
+  { nivel: 'medium', texto: 'Medio', activo: 'bg-amber-500' },
+  { nivel: 'high', texto: 'Alto', activo: 'bg-riesgo-critico' },
+];
+
+/** Esqueleto de carga: mantiene la forma de la pantalla mientras llegan los datos. */
+function Esqueleto({ className = '' }: { className?: string }) {
+  return <div className={`animate-pulse rounded-[10px] bg-wash ${className}`} aria-hidden="true" />;
+}
+
+function CargandoLista({ etiqueta }: { etiqueta: string }) {
+  return (
+    <div role="status" aria-label={etiqueta} className="space-y-3">
+      <Esqueleto className="h-16" /><Esqueleto className="h-16" /><Esqueleto className="h-16 opacity-60" />
+      <span className="sr-only">{etiqueta}</span>
+    </div>
+  );
+}
+
+function CargandoInicio() {
+  return (
+    <div className="space-y-6" role="status" aria-live="polite" aria-label="Cargando tu información">
+      <div className="space-y-2">
+        <Esqueleto className="h-8 w-64" />
+        <Esqueleto className="h-4 w-48" />
+      </div>
+      <Esqueleto className="h-52 w-full !rounded-[14px]" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Esqueleto className="h-28" /><Esqueleto className="h-28" /><Esqueleto className="h-28" />
+      </div>
+      <span className="sr-only">Cargando tu información…</span>
+    </div>
+  );
+}
+
 function TarjetaRiesgo({ datos }: { datos: RiesgoPropio }) {
   const { riesgo } = datos;
 
   if (!riesgo.nivel) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex items-start gap-4">
-        <Info className="w-8 h-8 text-gray-400 shrink-0" />
+      <div className="bg-white rounded-[14px] border border-line shadow-sm p-6 flex items-start gap-4">
+        <div className="w-12 h-12 rounded-[14px] bg-wash flex items-center justify-center shrink-0">
+          <Info className="w-6 h-6 text-gray-500" />
+        </div>
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Nivel de riesgo académico</h2>
           <p className="text-sm text-gray-600 mt-1">{riesgo.mensaje}</p>
@@ -245,28 +298,62 @@ function TarjetaRiesgo({ datos }: { datos: RiesgoPropio }) {
   }
 
   const estilo = ESTILO_NIVEL[riesgo.nivel];
+  const Icono = riesgo.nivel === 'low' ? CheckCircle2 : AlertTriangle;
+  const posicion = ESCALA_RIESGO.findIndex((e) => e.nivel === riesgo.nivel);
   return (
-    <div className={`rounded-xl border shadow-sm p-6 ${estilo.tarjeta}`}>
-      <div className="flex items-start gap-4">
-        <AlertTriangle className={`w-10 h-10 shrink-0 ${estilo.icono}`} />
-        <div className="flex-1">
-          <p className="text-sm font-medium text-gray-600">Tu nivel de riesgo académico actual</p>
-          <p className={`text-3xl font-bold mt-1 ${estilo.texto}`}>{riesgo.nivel_texto?.toUpperCase()}</p>
-          <p className="text-xs text-gray-500 mt-2">
-            {riesgo.periodo && <>Periodo {riesgo.periodo} · </>}
-            {riesgo.fecha_calculo && <>Calculado el {new Date(riesgo.fecha_calculo).toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short' })}</>}
-          </p>
-          <p className="text-sm text-gray-700 mt-4">{estilo.consejo}</p>
+    <section className="bg-white rounded-[20px] border border-line overflow-hidden grid md:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]" aria-label="Tu nivel de riesgo académico">
+      {/* Cómo estás: el nivel, dicho con palabras y con la escala */}
+      <div className={`p-6 sm:p-7 border-b md:border-b-0 md:border-r ${estilo.tarjeta}`}>
+        <p className="text-sm font-medium text-ink-soft">Tu nivel de riesgo académico actual</p>
+        <p className={`mt-2 flex items-center gap-2.5 text-4xl font-semibold tracking-[-0.03em] leading-none ${estilo.texto}`}>
+          <Icono className="w-7 h-7 shrink-0" aria-hidden="true" />
+          {riesgo.nivel_texto?.toUpperCase()}
+        </p>
+
+        <div className="mt-6" role="img" aria-label={`Nivel ${riesgo.nivel_texto} en una escala de bajo, medio y alto`}>
+          <div className="grid grid-cols-3 gap-1">
+            {ESCALA_RIESGO.map((e, i) => (
+              <div key={e.nivel} className={`h-2 rounded-full ${i <= posicion ? e.activo : 'bg-white/80'}`} />
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-1 mt-1.5 text-xs text-ink-muted">
+            {ESCALA_RIESGO.map((e, i) => (
+              <span key={e.nivel} className={i === posicion ? 'font-semibold text-ink' : ''}>{e.texto}</span>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Qué significa y qué puedes hacer ahora */}
+      <div className="p-6 sm:p-7 flex flex-col">
+        <p className="text-base sm:text-lg text-ink leading-relaxed max-w-[58ch]">{estilo.consejo}</p>
+
+        {estilo.paso && (
+          <div className="mt-5 flex flex-col sm:flex-row sm:items-center gap-3">
+            <Link
+              to={estilo.pasoRuta}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-strong shrink-0"
+            >
+              {estilo.pasoBoton}
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </Link>
+            <p className="text-sm text-ink-muted">{estilo.paso}</p>
+          </div>
+        )}
+
+        <p className="text-xs text-ink-muted mt-auto pt-5">
+          {riesgo.periodo && <>Periodo {riesgo.periodo} · </>}
+          {riesgo.fecha_calculo && <>Calculado el {new Date(riesgo.fecha_calculo).toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short' })}</>}
+        </p>
+      </div>
+    </section>
   );
 }
 
 function Causas({ causas, nivel }: { causas: Causa[]; nivel: Nivel | null }) {
   if (!nivel) return null;
   return (
-    <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+    <section className="bg-white rounded-[14px] border border-line p-6">
       <h2 className="text-lg font-semibold text-gray-900">¿Por qué tengo este nivel?</h2>
       {causas.length === 0 ? (
         <p className="text-sm text-gray-600 mt-3 flex items-center gap-2">
@@ -276,10 +363,10 @@ function Causas({ causas, nivel }: { causas: Causa[]; nivel: Nivel | null }) {
       ) : (
         <ul className="mt-4 space-y-4">
           {causas.map((causa, i) => (
-            <li key={`${causa.regla}-${i}`} className="border border-gray-100 rounded-lg p-4">
+            <li key={`${causa.regla}-${i}`} className={`border border-line rounded-[10px] p-4 border-l-4 transition-shadow duration-150 hover:shadow-md ${causa.nivel === 'high' ? 'border-l-primary' : causa.nivel === 'medium' ? 'border-l-amber-400' : 'border-l-emerald-400'}`}>
               <div className="flex items-center justify-between gap-3">
                 <p className="font-medium text-gray-900">{causa.regla}</p>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ESTILO_NIVEL[causa.nivel]?.tarjeta ?? ''} ${ESTILO_NIVEL[causa.nivel]?.texto ?? ''}`}>
+                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${ESTILO_NIVEL[causa.nivel]?.tarjeta ?? ''} ${ESTILO_NIVEL[causa.nivel]?.texto ?? ''}`}>
                   Riesgo {causa.nivel === 'high' ? 'alto' : causa.nivel === 'medium' ? 'medio' : 'bajo'}
                 </span>
               </div>
@@ -308,29 +395,41 @@ function Indicadores({ indicadores }: { indicadores: RiesgoPropio['indicadores']
       valor: numero(indicadores.pps),
       detalle: indicadores.periodo_pps ? `Periodo ${indicadores.periodo_pps}` : 'Sin notas definitivas',
       icono: TrendingUp,
+      escala: indicadores.pps ?? null,
     },
-    { titulo: 'Promedio acumulado (PPA)', valor: numero(indicadores.ppa), detalle: 'Toda tu carrera', icono: GraduationCap },
+    { titulo: 'Promedio acumulado (PPA)', valor: numero(indicadores.ppa), detalle: 'Toda tu carrera', icono: GraduationCap, escala: indicadores.ppa ?? null },
     {
       titulo: 'Materias perdidas por aprobar',
       valor: indicadores.materias_reprobadas ?? '—',
       detalle: indicadores.lista_materias_reprobadas.join(', ') || 'Ninguna',
       icono: XCircle,
+      escala: null,
     },
-    { titulo: 'Créditos aprobados', valor: indicadores.creditos_aprobados, detalle: 'Materias aprobadas', icono: BookOpen },
+    { titulo: 'Créditos aprobados', valor: indicadores.creditos_aprobados, detalle: 'Materias aprobadas', icono: BookOpen, escala: null },
   ];
 
   return (
     <section>
       <h2 className="text-lg font-semibold text-gray-900 mb-3">Mis indicadores</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {tarjetas.map(({ titulo, valor, detalle, icono: Icono }) => (
-          <div key={titulo} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-            <div className="flex items-center gap-2 text-gray-500">
-              <Icono className="w-4 h-4" />
-              <p className="text-xs font-medium">{titulo}</p>
+        {tarjetas.map(({ titulo, valor, detalle, icono: Icono, escala }) => (
+          <div key={titulo} className="bg-white rounded-[14px] border border-line p-4 transition-all duration-200 hover:">
+            <div className="flex items-center gap-2.5 text-gray-500">
+              <span className="w-8 h-8 rounded-[10px] bg-primary-tint flex items-center justify-center shrink-0">
+                <Icono className="w-4 h-4 text-primary" aria-hidden="true" />
+              </span>
+              <p className="text-xs font-medium leading-snug">{titulo}</p>
             </div>
-            <p className="text-2xl font-bold text-gray-900 mt-2">{valor}</p>
-            <p className="text-xs text-gray-500 mt-1 truncate" title={detalle}>{detalle}</p>
+            <p className="text-3xl font-semibold text-ink mt-3 tabular-nums">{valor}</p>
+            {escala !== null && (
+              <div className="mt-2 h-1.5 w-full rounded-full bg-wash overflow-hidden" aria-hidden="true">
+                <div
+                  className={`h-full rounded-full transition-[width] duration-700 ease-out ${escala >= NOTA_APROBATORIA ? 'bg-green-500' : 'bg-riesgo-critico'}`}
+                  style={{ width: `${Math.min(100, (escala / 5) * 100)}%` }}
+                />
+              </div>
+            )}
+            <p className="text-xs text-gray-500 mt-2 truncate" title={detalle}>{detalle}</p>
           </div>
         ))}
       </div>
@@ -357,7 +456,7 @@ function FraseTendencia({ evolucion }: { evolucion: Evolucion }) {
     ? ''
     : ` ${Math.abs(valor).toFixed(2)} puntos (${porcentaje.toFixed(1)} %)`;
   return (
-    <p className={`flex items-center gap-2 text-sm border rounded-lg px-3 py-2 ${color}`}>
+    <p className={`flex items-center gap-2 text-sm border rounded-[10px] px-3 py-2 ${color}`}>
       <Icono className="w-4 h-4 shrink-0" />
       Tu promedio acumulado {verbo}{cambio} respecto al periodo anterior y hoy es {numero(evolucion.promedio_actual)}.
     </p>
@@ -414,10 +513,10 @@ function EvolucionAcademica() {
   if (error) {
     contenido = <p role="alert" className="text-sm text-red-700">{error}</p>;
   } else if (!evolucion) {
-    contenido = <p className="text-sm text-gray-500">Cargando tu evolución…</p>;
+    contenido = <CargandoLista etiqueta="Cargando tu evolución…" />;
   } else if (evolucion.serie.length === 0) {
     contenido = (
-      <div className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-gray-100 rounded-xl text-gray-500">
+      <div className="flex flex-col items-center justify-center text-center py-12 border-2 border-dashed border-line rounded-[14px] text-gray-500 bg-paper">
         <IconoLinea className="w-8 h-8 mb-2 opacity-40" />
         <p className="text-sm">{evolucion.mensaje}</p>
       </div>
@@ -426,7 +525,7 @@ function EvolucionAcademica() {
     const [unico] = evolucion.serie;
     contenido = (
       <div className="space-y-4">
-        <p className="flex items-start gap-2 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+        <p className="flex items-start gap-2 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-[10px] px-3 py-2">
           <Info className="w-4 h-4 mt-0.5 shrink-0 text-gray-400" />
           {evolucion.mensaje}
         </p>
@@ -437,9 +536,9 @@ function EvolucionAcademica() {
             ['PPA', numero(unico.ppa)],
             ['Créditos aprobados', `${unico.creditos_aprobados} de ${unico.creditos_cursados}`],
           ].map(([titulo, valor]) => (
-            <div key={titulo} className="border border-gray-100 rounded-lg p-3">
+            <div key={titulo} className="border border-gray-100 rounded-[10px] p-3">
               <p className="text-xs text-gray-500">{titulo}</p>
-              <p className="text-lg font-bold text-gray-900">{valor}</p>
+              <p className="text-lg font-semibold text-gray-900">{valor}</p>
             </div>
           ))}
         </div>
@@ -457,7 +556,7 @@ function EvolucionAcademica() {
             <ChartLegend content={<ChartLegendContent />} />
             <ReferenceLine
               y={NOTA_APROBATORIA}
-              stroke="#9ca3af"
+              stroke="#9C8D8A"
               strokeDasharray="4 4"
               label={{ value: 'Nota aprobatoria (3.0)', position: 'insideBottomRight', fontSize: 11, fill: '#6b7280' }}
             />
@@ -472,7 +571,7 @@ function EvolucionAcademica() {
   }
 
   return (
-    <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+    <section className="bg-white rounded-[14px] border border-line p-6">
       <h2 className="text-lg font-semibold text-gray-900">Mi evolución académica</h2>
       <p className="text-sm text-gray-500 mb-4">
         Tu promedio de cada semestre (PPS) y tu promedio acumulado (PPA). Los semestres con materias aún en curso
@@ -522,6 +621,111 @@ function InsigniaEstado({ alerta }: { alerta: AlertaPortal }) {
   );
 }
 
+const CLASE_DIALOGO = 'bg-white sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-[14px] border-line p-0 gap-0 shadow-2xl';
+
+const TONO_SEVERIDAD: Record<Nivel, string> = {
+  high: 'bg-red-50 text-red-600',
+  medium: 'bg-amber-50 text-amber-700',
+  low: 'bg-green-50 text-green-700',
+};
+
+/** Cabecera común de los diálogos del portal: ícono en tinte, título, explicación breve y chips. */
+function CabeceraModal({ icono: Icono, tono, titulo, descripcion, children }: {
+  icono: React.ElementType;
+  tono: string;
+  titulo: string;
+  descripcion?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <DialogHeader className="px-6 pt-6 pb-4 border-b border-wash bg-gradient-to-b from-paper to-white text-left">
+      <div className="flex items-start gap-3.5 pr-7">
+        <span className={`shrink-0 w-11 h-11 rounded-[10px] flex items-center justify-center ${tono}`}>
+          <Icono className="w-5 h-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 space-y-1.5">
+          <DialogTitle className="text-xl leading-snug text-ink">{titulo}</DialogTitle>
+          <DialogDescription className="text-ink-muted leading-relaxed">
+            {descripcion ?? 'Aquí tienes el detalle, explicado paso a paso.'}
+          </DialogDescription>
+          {children && <div className="flex flex-wrap items-center gap-2 pt-1">{children}</div>}
+        </div>
+      </div>
+    </DialogHeader>
+  );
+}
+
+function CuerpoModal({ children }: { children: React.ReactNode }) {
+  return <div className="px-6 py-5 space-y-5">{children}</div>;
+}
+
+function PieModal({ onCerrar, children }: { onCerrar: () => void; children?: React.ReactNode }) {
+  return (
+    <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 px-6 py-4 border-t border-wash bg-paper">
+      {children}
+      <button type="button" onClick={onCerrar}
+        className="px-4 py-2.5 rounded-[10px] text-sm font-semibold text-ink-soft bg-wash hover:bg-line transition-colors">
+        Cerrar
+      </button>
+    </div>
+  );
+}
+
+function SeccionModal({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-1.5">
+      <h3 className="text-sm font-semibold text-ink">{titulo}</h3>
+      {children}
+    </section>
+  );
+}
+
+function FilasDetalle({ filas }: { filas: [string, string][] }) {
+  return (
+    <dl className="rounded-[10px] border border-line divide-y divide-wash text-sm overflow-hidden">
+      {filas.map(([etiqueta, valor]) => (
+        <div key={etiqueta} className="flex justify-between gap-4 px-3.5 py-2.5 bg-white">
+          <dt className="text-ink-muted">{etiqueta}</dt>
+          <dd className="text-ink font-medium text-right tabular-nums">{valor}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function CargandoModal({ titulo }: { titulo: string }) {
+  return (
+    <>
+      <DialogHeader className="px-6 pt-6 pb-4 border-b border-wash text-left">
+        <DialogTitle className="text-xl text-ink">{titulo}</DialogTitle>
+        <DialogDescription>Estamos buscando la información…</DialogDescription>
+      </DialogHeader>
+      <div role="status" aria-label="Cargando" className="px-6 py-5 space-y-3">
+        <Esqueleto className="h-5 w-2/3" /><Esqueleto className="h-20" /><Esqueleto className="h-14" />
+        <span className="sr-only">Cargando…</span>
+      </div>
+    </>
+  );
+}
+
+function ErrorModal({ titulo, mensaje, onCerrar }: { titulo: string; mensaje: string; onCerrar: () => void }) {
+  return (
+    <>
+      <CabeceraModal icono={AlertTriangle} tono="bg-amber-50 text-amber-700" titulo={titulo}
+        descripcion="No pudimos mostrar esta información." />
+      <CuerpoModal>
+        <p role="alert" className="text-sm text-red-800 bg-red-50 border border-red-200 rounded-[10px] px-3.5 py-2.5">{mensaje}</p>
+        <SeccionModal titulo="Qué puedes hacer">
+          <p className="text-sm text-ink-soft">
+            Revisa tu conexión y vuelve a abrir el detalle. Si el problema continúa, cierra sesión y entra de nuevo.
+          </p>
+        </SeccionModal>
+      </CuerpoModal>
+      <PieModal onCerrar={onCerrar} />
+    </>
+  );
+}
+
 function ModalAlerta({ alertaId, onCerrar }: { alertaId: number | null; onCerrar: () => void }) {
   const [detalle, setDetalle] = useState<DetalleAlerta | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -545,94 +749,92 @@ function ModalAlerta({ alertaId, onCerrar }: { alertaId: number | null; onCerrar
 
   let contenido: React.ReactNode;
   if (error) {
-    contenido = (
-      <>
-        <DialogHeader>
-          <DialogTitle>Detalle de la alerta</DialogTitle>
-        </DialogHeader>
-        <p role="alert" className="text-sm text-red-700">{error}</p>
-      </>
-    );
+    contenido = <ErrorModal titulo="Detalle de la alerta" mensaje={error} onCerrar={onCerrar} />;
   } else if (!detalle) {
-    contenido = (
-      <DialogHeader>
-        <DialogTitle>Detalle de la alerta</DialogTitle>
-        <DialogDescription>Cargando…</DialogDescription>
-      </DialogHeader>
-    );
+    contenido = <CargandoModal titulo="Detalle de la alerta" />;
   } else {
+    const cerrada = detalle.estado === 'cerrada';
     contenido = (
       <>
-        <DialogHeader>
-          <DialogTitle className="pr-6">{detalle.tipo}</DialogTitle>
-          <DialogDescription>{detalle.resumen}</DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-wrap items-center gap-2">
+        <CabeceraModal
+          icono={cerrada ? CheckCircle2 : AlertTriangle}
+          tono={cerrada ? 'bg-green-50 text-green-700' : TONO_SEVERIDAD[detalle.severidad] ?? 'bg-gray-100 text-gray-600'}
+          titulo={detalle.tipo}
+          descripcion={detalle.resumen}
+        >
           <InsigniaSeveridad alerta={detalle} />
           <InsigniaEstado alerta={detalle} />
-        </div>
-        <dl className="grid grid-cols-2 gap-3 text-sm">
-          <div>
-            <dt className="text-xs text-gray-500">Registrada el</dt>
-            <dd className="text-gray-900">{fecha(detalle.fecha_generacion)}</dd>
+        </CabeceraModal>
+
+        <CuerpoModal>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-[10px] bg-paper px-3.5 py-2.5">
+              <p className="text-xs text-ink-muted">Registrada el</p>
+              <p className="text-ink font-medium">{fecha(detalle.fecha_generacion)}</p>
+            </div>
+            {cerrada && (
+              <div className="rounded-[10px] bg-paper px-3.5 py-2.5">
+                <p className="text-xs text-ink-muted">Cerrada el</p>
+                <p className="text-ink font-medium">{detalle.fecha_cierre ? fecha(detalle.fecha_cierre) : 'Fecha no registrada'}</p>
+              </div>
+            )}
           </div>
-          {detalle.estado === 'cerrada' && (
-            <div>
-              <dt className="text-xs text-gray-500">Cerrada el</dt>
-              <dd className="text-gray-900">{detalle.fecha_cierre ? fecha(detalle.fecha_cierre) : 'Fecha no registrada'}</dd>
+
+          <SeccionModal titulo="¿Qué significa?">
+            <p className="text-sm text-ink-soft leading-relaxed">{detalle.explicacion.mensaje}</p>
+          </SeccionModal>
+
+          {detalle.explicacion.datos.length > 0 && (
+            <FilasDetalle filas={detalle.explicacion.datos.map((d) => [d.etiqueta, String(d.valor)])} />
+          )}
+
+          {detalle.intervenciones.length > 0 && (
+            <p className="flex items-start gap-2 text-sm text-ink-soft">
+              <HeartHandshake className="w-4 h-4 mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+              <span>
+                {detalle.intervenciones.length === 1
+                  ? 'Se ha registrado 1 acompañamiento sobre esta alerta.'
+                  : `Se han registrado ${detalle.intervenciones.length} acompañamientos sobre esta alerta.`}{' '}
+                Puedes verlos en{' '}
+                <Link to="/dashboard/portal/acompanamiento" onClick={onCerrar} className="font-medium text-primary hover:underline">
+                  Mi acompañamiento
+                </Link>.
+              </span>
+            </p>
+          )}
+
+          {detalle.cierre ? (
+            <p className="flex items-start gap-2.5 text-sm text-green-900 bg-green-50 border border-green-200 rounded-[10px] px-3.5 py-3">
+              <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+              <span>{detalle.cierre.mensaje} Los datos corresponden al último registro de la alerta.</span>
+            </p>
+          ) : (
+            <div className="rounded-[10px] bg-primary-tint/60 border border-primary/15 px-3.5 py-3">
+              <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+                <Lightbulb className="w-4 h-4 text-primary" aria-hidden="true" />
+                Qué puedes hacer
+              </p>
+              <p className="text-sm text-ink-soft mt-1 leading-relaxed">{detalle.explicacion.recomendacion}</p>
             </div>
           )}
-        </dl>
+        </CuerpoModal>
 
-        <section>
-          <h3 className="text-sm font-semibold text-gray-900 mb-1">¿Qué significa?</h3>
-          <p className="text-sm text-gray-700">{detalle.explicacion.mensaje}</p>
-        </section>
-
-        {detalle.explicacion.datos.length > 0 && (
-          <dl className="border border-gray-100 rounded-lg divide-y divide-gray-100 text-sm">
-            {detalle.explicacion.datos.map((d) => (
-              <div key={d.etiqueta} className="flex justify-between gap-4 px-3 py-2">
-                <dt className="text-gray-500">{d.etiqueta}</dt>
-                <dd className="text-gray-900 font-medium text-right">{d.valor}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-
-        {detalle.intervenciones.length > 0 && (
-          <p className="flex items-start gap-2 text-sm text-gray-700">
-            <HeartHandshake className="w-4 h-4 mt-0.5 shrink-0 text-[#C8102E]" />
-            <span>
-              {detalle.intervenciones.length === 1
-                ? 'Se ha registrado 1 acompañamiento sobre esta alerta.'
-                : `Se han registrado ${detalle.intervenciones.length} acompañamientos sobre esta alerta.`}{' '}
-              Puedes verlos en{' '}
-              <Link to="/dashboard/portal/acompanamiento" className="font-medium text-[#C8102E] hover:underline">
-                Mi acompañamiento
-              </Link>.
-            </span>
-          </p>
-        )}
-
-        {detalle.cierre ? (
-          <p className="flex items-start gap-2 text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-            <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
-            <span>{detalle.cierre.mensaje} Los datos corresponden al último registro de la alerta.</span>
-          </p>
-        ) : (
-          <p className="flex items-start gap-2 text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-            <Lightbulb className="w-4 h-4 mt-0.5 shrink-0" />
-            <span>{detalle.explicacion.recomendacion}</span>
-          </p>
-        )}
+        <PieModal onCerrar={onCerrar}>
+          {!cerrada && (
+            <Link to="/dashboard/portal/acompanamiento" onClick={onCerrar}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-semibold text-white bg-primary hover:bg-primary-strong transition-colors">
+              <MessageSquarePlus className="w-4 h-4" aria-hidden="true" />
+              Pedir acompañamiento
+            </Link>
+          )}
+        </PieModal>
       </>
     );
   }
 
   return (
     <Dialog open={alertaId !== null} onOpenChange={(abierto) => !abierto && onCerrar()}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">{contenido}</DialogContent>
+      <DialogContent className={CLASE_DIALOGO}>{contenido}</DialogContent>
     </Dialog>
   );
 }
@@ -668,16 +870,16 @@ function MisAlertas() {
     setEstado('');
     setPeriodo('');
   };
-  const claseSelect = 'px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm';
+  const claseSelect = 'h-10 px-3.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink';
 
   let contenido: React.ReactNode;
   if (error) {
     contenido = <p role="alert" className="text-sm text-red-700">{error}</p>;
   } else if (!listado) {
-    contenido = <p className="text-sm text-gray-500">Cargando tus alertas…</p>;
+    contenido = <CargandoLista etiqueta="Cargando tus alertas…" />;
   } else if (listado.conteos.total === 0) {
     contenido = (
-      <div className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-gray-100 rounded-xl text-gray-500">
+      <div className="flex flex-col items-center justify-center text-center py-12 border-2 border-dashed border-line rounded-[14px] text-gray-500 bg-paper">
         <CheckCircle2 className="w-8 h-8 mb-2 text-green-500 opacity-70" />
         <p className="text-sm">No tienes alertas registradas sobre tu situación académica.</p>
         <p className="text-xs mt-1">Si en algún momento se registra una, aquí verás qué la originó y cómo mejorar.</p>
@@ -685,23 +887,23 @@ function MisAlertas() {
     );
   } else if (listado.alertas.length === 0) {
     contenido = (
-      <div className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-gray-100 rounded-xl text-gray-500">
+      <div className="flex flex-col items-center justify-center text-center py-12 border-2 border-dashed border-line rounded-[14px] text-gray-500 bg-paper">
         <SearchX className="w-8 h-8 mb-2 opacity-40" />
         <p className="text-sm">Ninguna alerta coincide con los filtros seleccionados.</p>
-        <button type="button" onClick={quitarFiltros} className="mt-3 text-sm font-medium text-[#C8102E] hover:underline">
+        <button type="button" onClick={quitarFiltros} className="mt-3 text-sm font-medium text-primary hover:underline">
           Quitar filtros
         </button>
       </div>
     );
   } else {
     contenido = (
-      <ul className="divide-y divide-gray-100 border border-gray-100 rounded-lg">
+      <ul className="divide-y divide-wash border border-line rounded-[10px] overflow-hidden">
         {listado.alertas.map((alerta) => (
           <li key={alerta.id}>
             <button
               type="button"
               onClick={() => setSeleccionada(alerta.id)}
-              className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 focus:outline-none focus:bg-gray-50"
+              className="group w-full text-left px-4 py-3.5 flex items-center gap-3 transition-colors duration-150 hover:bg-paper focus:outline-none focus-visible:bg-paper focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
             >
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-gray-900 truncate">{alerta.tipo}</p>
@@ -713,7 +915,7 @@ function MisAlertas() {
                   <InsigniaEstado alerta={alerta} />
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+              <ChevronRight className="w-4 h-4 text-gray-400 shrink-0 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-primary" />
             </button>
           </li>
         ))}
@@ -722,14 +924,12 @@ function MisAlertas() {
   }
 
   return (
-    <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-      <div className="flex items-center gap-2">
-        <Bell className="w-5 h-5 text-gray-500" />
-        <h2 className="text-lg font-semibold text-gray-900">Mis alertas</h2>
-      </div>
-      <p className="text-sm text-gray-500 mb-4">
-        Avisos registrados sobre tu situación académica. Cada uno explica qué lo originó y qué puedes hacer para mejorar.
-      </p>
+    <div className="space-y-5">
+      <header>
+        <h1 className="text-3xl font-semibold text-ink">Mis alertas</h1>
+        <p className="mt-1 text-ink-muted max-w-[70ch]">Avisos registrados sobre tu situación académica. Cada uno explica qué lo originó y qué puedes hacer para mejorar.</p>
+      </header>
+    <section className="bg-white rounded-[14px] border border-line p-4 sm:p-5">
 
       {listado && listado.conteos.total > 0 && (
         <div className="flex flex-wrap items-end gap-3 mb-4">
@@ -757,7 +957,7 @@ function MisAlertas() {
             <p className="text-xs text-gray-500 pb-2">El periodo aplica a las alertas de una materia (cortes e inasistencia).</p>
           )}
           {(estado || periodo) && listado.alertas.length > 0 && (
-            <button type="button" onClick={quitarFiltros} className="text-sm font-medium text-[#C8102E] hover:underline pb-2">
+            <button type="button" onClick={quitarFiltros} className="text-sm font-medium text-primary hover:underline pb-2">
               Quitar filtros
             </button>
           )}
@@ -767,6 +967,7 @@ function MisAlertas() {
       {contenido}
       <ModalAlerta alertaId={seleccionada} onCerrar={() => setSeleccionada(null)} />
     </section>
+    </div>
   );
 }
 
@@ -815,63 +1016,53 @@ function ModalIntervencion({ intervencionId, onCerrar }: { intervencionId: numbe
 
   let contenido: React.ReactNode;
   if (error) {
-    contenido = (
-      <>
-        <DialogHeader>
-          <DialogTitle>Acompañamiento</DialogTitle>
-        </DialogHeader>
-        <p role="alert" className="text-sm text-red-700">{error}</p>
-      </>
-    );
+    contenido = <ErrorModal titulo="Acompañamiento" mensaje={error} onCerrar={onCerrar} />;
   } else if (!detalle) {
-    contenido = (
-      <DialogHeader>
-        <DialogTitle>Acompañamiento</DialogTitle>
-        <DialogDescription>Cargando…</DialogDescription>
-      </DialogHeader>
-    );
+    contenido = <CargandoModal titulo="Acompañamiento" />;
   } else {
+    const filas: [string, string][] = [
+      ['Fecha', fecha(detalle.fecha)],
+      ['Responsable', detalle.responsable ?? 'Equipo de acompañamiento'],
+      ['Alerta relacionada', alertaTexto(detalle.alerta)],
+      ...(detalle.alerta.periodo ? [['Periodo', detalle.alerta.periodo] as [string, string]] : []),
+    ];
     contenido = (
       <>
-        <DialogHeader>
-          <DialogTitle className="pr-6">{detalle.tipo_texto}</DialogTitle>
-          <DialogDescription>{DESCRIPCION_TIPO[detalle.tipo] ?? 'Acompañamiento registrado sobre tu caso.'}</DialogDescription>
-        </DialogHeader>
-        <div>
+        <CabeceraModal
+          icono={HeartHandshake}
+          tono="bg-primary-tint text-primary"
+          titulo={detalle.tipo_texto}
+          descripcion={DESCRIPCION_TIPO[detalle.tipo] ?? 'Acompañamiento registrado sobre tu caso.'}
+        >
           <InsigniaEstadoIntervencion intervencion={detalle} />
-        </div>
-        <dl className="border border-gray-100 rounded-lg divide-y divide-gray-100 text-sm">
-          {[
-            ['Fecha', fecha(detalle.fecha)],
-            ['Responsable', detalle.responsable ?? 'Equipo de acompañamiento'],
-            ['Alerta relacionada', alertaTexto(detalle.alerta)],
-            ...(detalle.alerta.periodo ? [['Periodo', detalle.alerta.periodo]] : []),
-          ].map(([etiqueta, valor]) => (
-            <div key={etiqueta} className="flex justify-between gap-4 px-3 py-2">
-              <dt className="text-gray-500">{etiqueta}</dt>
-              <dd className="text-gray-900 font-medium text-right">{valor}</dd>
-            </div>
-          ))}
-        </dl>
-        <section>
-          <h3 className="text-sm font-semibold text-gray-900 mb-1">Resultado</h3>
-          {detalle.resultado ? (
-            <p className="text-sm text-gray-700">{detalle.resultado}</p>
-          ) : (
-            <p className="text-sm text-gray-500">
-              {detalle.estado === 'concluida'
-                ? 'Este acompañamiento concluyó sin un resultado registrado.'
-                : 'Este acompañamiento sigue en curso. El resultado aparecerá cuando se registre.'}
-            </p>
-          )}
-        </section>
+        </CabeceraModal>
+
+        <CuerpoModal>
+          <FilasDetalle filas={filas} />
+          <SeccionModal titulo="Resultado">
+            {detalle.resultado ? (
+              <p className="text-sm text-green-900 bg-green-50 border border-green-200 rounded-[10px] px-3.5 py-3 leading-relaxed">
+                {detalle.resultado}
+              </p>
+            ) : (
+              <p className="flex items-start gap-2 text-sm text-ink-muted bg-paper rounded-[10px] px-3.5 py-3">
+                <Clock className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+                {detalle.estado === 'concluida'
+                  ? 'Este acompañamiento concluyó sin un resultado registrado.'
+                  : 'Este acompañamiento sigue en curso. El resultado aparecerá cuando se registre.'}
+              </p>
+            )}
+          </SeccionModal>
+        </CuerpoModal>
+
+        <PieModal onCerrar={onCerrar} />
       </>
     );
   }
 
   return (
     <Dialog open={intervencionId !== null} onOpenChange={(abierto) => !abierto && onCerrar()}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">{contenido}</DialogContent>
+      <DialogContent className={CLASE_DIALOGO}>{contenido}</DialogContent>
     </Dialog>
   );
 }
@@ -907,16 +1098,16 @@ function MiAcompanamiento() {
     setEstado('');
     setPeriodo('');
   };
-  const claseSelect = 'px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm';
+  const claseSelect = 'h-10 px-3.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink';
 
   let contenido: React.ReactNode;
   if (error) {
     contenido = <p role="alert" className="text-sm text-red-700">{error}</p>;
   } else if (!listado) {
-    contenido = <p className="text-sm text-gray-500">Cargando tu acompañamiento…</p>;
+    contenido = <CargandoLista etiqueta="Cargando tu acompañamiento…" />;
   } else if (listado.conteos.total === 0) {
     contenido = (
-      <div className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-gray-100 rounded-xl text-gray-500">
+      <div className="flex flex-col items-center justify-center text-center py-12 border-2 border-dashed border-line rounded-[14px] text-gray-500 bg-paper">
         <HeartHandshake className="w-8 h-8 mb-2 opacity-40" />
         <p className="text-sm">Aún no hay acompañamientos registrados sobre tu caso.</p>
         <p className="text-xs mt-1">
@@ -926,28 +1117,28 @@ function MiAcompanamiento() {
     );
   } else if (listado.intervenciones.length === 0) {
     contenido = (
-      <div className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-gray-100 rounded-xl text-gray-500">
+      <div className="flex flex-col items-center justify-center text-center py-12 border-2 border-dashed border-line rounded-[14px] text-gray-500 bg-paper">
         <SearchX className="w-8 h-8 mb-2 opacity-40" />
         <p className="text-sm">Ningún acompañamiento coincide con los filtros seleccionados.</p>
-        <button type="button" onClick={quitarFiltros} className="mt-3 text-sm font-medium text-[#C8102E] hover:underline">
+        <button type="button" onClick={quitarFiltros} className="mt-3 text-sm font-medium text-primary hover:underline">
           Quitar filtros
         </button>
       </div>
     );
   } else {
     contenido = (
-      <ol className="relative border-l-2 border-gray-100 ml-3 space-y-4">
+      <ol className="relative border-l-2 border-line ml-3 space-y-4">
         {listado.intervenciones.map((intervencion) => (
           <li key={intervencion.id} className="ml-5">
             <span
-              className={`absolute -left-[9px] mt-4 w-4 h-4 rounded-full border-2 border-white ${
+              className={`absolute -left-[9px] mt-4 w-4 h-4 rounded-full border-2 border-white shadow-sm ${
                 intervencion.estado === 'concluida' ? 'bg-green-500' : 'bg-indigo-500'
               }`}
             />
             <button
               type="button"
               onClick={() => setSeleccionada(intervencion.id)}
-              className="w-full text-left border border-gray-100 rounded-lg px-4 py-3 flex items-center gap-3 hover:bg-gray-50 focus:outline-none focus:bg-gray-50"
+              className="group w-full text-left border border-line bg-white rounded-[10px] px-4 py-3.5 flex items-center gap-3 transition-all duration-150 hover:bg-paper hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -961,7 +1152,7 @@ function MiAcompanamiento() {
                 </p>
                 <p className="text-xs text-gray-500 truncate mt-0.5">Alerta: {alertaTexto(intervencion.alerta)}</p>
               </div>
-              <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+              <ChevronRight className="w-4 h-4 text-gray-400 shrink-0 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-primary" />
             </button>
           </li>
         ))}
@@ -970,15 +1161,12 @@ function MiAcompanamiento() {
   }
 
   return (
-    <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-      <div className="flex items-center gap-2">
-        <HeartHandshake className="w-5 h-5 text-gray-500" />
-        <h2 className="text-lg font-semibold text-gray-900">Mi acompañamiento</h2>
-      </div>
-      <p className="text-sm text-gray-500 mb-4">
-        El seguimiento que la universidad ha dado a tu caso: tutorías, citaciones y remisiones registradas sobre tus
-        alertas, con su responsable y su resultado.
-      </p>
+    <div className="space-y-5">
+      <header>
+        <h1 className="text-3xl font-semibold text-ink">Mi acompañamiento</h1>
+        <p className="mt-1 text-ink-muted max-w-[70ch]">El seguimiento que la universidad ha dado a tu caso: tutorías, citaciones y remisiones registradas sobre tus alertas, con su responsable y su resultado.</p>
+      </header>
+    <section className="bg-white rounded-[14px] border border-line p-4 sm:p-5">
 
       {listado && listado.conteos.total > 0 && (
         <div className="flex flex-wrap items-end gap-3 mb-4">
@@ -1003,7 +1191,7 @@ function MiAcompanamiento() {
             <p className="text-xs text-gray-500 pb-2">El periodo aplica a los acompañamientos de alertas de una materia.</p>
           )}
           {(estado || periodo) && listado.intervenciones.length > 0 && (
-            <button type="button" onClick={quitarFiltros} className="text-sm font-medium text-[#C8102E] hover:underline pb-2">
+            <button type="button" onClick={quitarFiltros} className="text-sm font-medium text-primary hover:underline pb-2">
               Quitar filtros
             </button>
           )}
@@ -1013,6 +1201,7 @@ function MiAcompanamiento() {
       {contenido}
       <ModalIntervencion intervencionId={seleccionada} onCerrar={() => setSeleccionada(null)} />
     </section>
+    </div>
   );
 }
 
@@ -1035,6 +1224,7 @@ function SolicitarAcompanamiento() {
   const [mensajeEnvio, setMensajeEnvio] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [recarga, setRecarga] = useState(0);
+  const [confirmandoId, setConfirmandoId] = useState<number | null>(null);
 
   useEffect(() => {
     let activo = true;
@@ -1062,9 +1252,9 @@ function SolicitarAcompanamiento() {
     e.preventDefault();
     if (!listado) return;
     const nuevos: Record<string, string> = {};
-    if (!motivo) nuevos.motivo = 'Selecciona el motivo de tu solicitud.';
+    if (!motivo) nuevos.motivo = 'Elige en la lista el motivo que mejor describe lo que necesitas.';
     if (descripcion.trim().length < listado.descripcion_minima) {
-      nuevos.descripcion = `Cuéntanos un poco más: escribe al menos ${listado.descripcion_minima} caracteres.`;
+      nuevos.descripcion = `Cuéntanos un poco más: escribe al menos ${listado.descripcion_minima} caracteres para que Bienestar entienda tu situación.`;
     }
     setErrores(nuevos);
     setMensajeEnvio(null);
@@ -1095,7 +1285,7 @@ function SolicitarAcompanamiento() {
   };
 
   const cancelar = async (id: number) => {
-    if (!window.confirm('¿Quieres cancelar esta solicitud de acompañamiento?')) return;
+    setConfirmandoId(null);
     try {
       const res = await apiFetch(`${baseUrl}/api/portal/solicitudes/${id}/cancelar/`, { method: 'PATCH' });
       const json = await res.json();
@@ -1108,21 +1298,33 @@ function SolicitarAcompanamiento() {
     setRecarga((n) => n + 1);
   };
 
-  const claseCampo = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm disabled:bg-gray-50 disabled:text-gray-400';
+  const claseCampo = 'w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink placeholder:text-ink-faint transition-shadow focus:outline-none focus:ring-4 focus:ring-primary/15 focus:border-primary aria-[invalid=true]:border-red-400 aria-[invalid=true]:bg-red-50/40 disabled:bg-paper disabled:text-gray-400';
+  const minimo = listado?.descripcion_minima ?? 20;
+  const escritos = descripcion.trim().length;
+  const progreso = Math.min(100, Math.round((escritos / minimo) * 100));
   const bloqueado = !listado?.puede_solicitar;
 
   let historial: React.ReactNode;
   if (error) {
     historial = <p role="alert" className="text-sm text-red-700">{error}</p>;
   } else if (!listado) {
-    historial = <p className="text-sm text-gray-500">Cargando tus solicitudes…</p>;
+    historial = <CargandoLista etiqueta="Cargando tus solicitudes…" />;
   } else if (listado.solicitudes.length === 0) {
-    historial = <p className="text-sm text-gray-500">Aún no has enviado solicitudes de acompañamiento.</p>;
+    historial = (
+      <div className="flex items-center gap-3 rounded-[10px] border border-dashed border-line-strong bg-paper px-4 py-5">
+        <span className="w-10 h-10 rounded-full bg-wash text-ink-muted flex items-center justify-center shrink-0">
+          <MessageSquarePlus className="w-5 h-5" aria-hidden="true" />
+        </span>
+        <p className="text-sm text-ink-muted">
+          Aún no has enviado solicitudes de acompañamiento. Cuando envíes una, la verás aquí con su estado y la respuesta.
+        </p>
+      </div>
+    );
   } else {
     historial = (
       <ul className="space-y-3">
         {listado.solicitudes.map((s) => (
-          <li key={s.id} className="border border-gray-100 rounded-lg p-4">
+          <li key={s.id} className="border border-line rounded-[10px] p-4 bg-white transition-shadow duration-150 hover:shadow-md">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-medium text-gray-900">{s.motivo_texto}</p>
@@ -1130,8 +1332,8 @@ function SolicitarAcompanamiento() {
                   {s.estado_texto}
                 </span>
               </div>
-              {s.puede_cancelar && (
-                <button type="button" onClick={() => cancelar(s.id)} className="text-sm font-medium text-[#C8102E] hover:underline">
+              {s.puede_cancelar && confirmandoId !== s.id && (
+                <button type="button" onClick={() => setConfirmandoId(s.id)} className="text-sm font-medium text-primary hover:underline">
                   Cancelar solicitud
                 </button>
               )}
@@ -1142,9 +1344,23 @@ function SolicitarAcompanamiento() {
               {s.responsable && <> · Responsable: {s.responsable}</>}
             </p>
             {s.alerta && <p className="text-xs text-gray-500 mt-0.5">Alerta relacionada: {alertaTexto(s.alerta)}</p>}
+            {confirmandoId === s.id && (
+              <div role="alertdialog" aria-label="Confirmar cancelación"
+                className="mt-3 flex flex-wrap items-center gap-2 rounded-[10px] border border-amber-200 bg-amber-50 px-3.5 py-2.5 ">
+                <p className="text-sm text-amber-900 flex-1 min-w-[14rem]">¿Quieres cancelar esta solicitud de acompañamiento?</p>
+                <button type="button" onClick={() => cancelar(s.id)}
+                  className="px-3 py-1.5 rounded-[10px] text-sm font-semibold text-white bg-primary hover:bg-primary-strong transition-colors">
+                  Sí, cancelar
+                </button>
+                <button type="button" onClick={() => setConfirmandoId(null)}
+                  className="px-3 py-1.5 rounded-[10px] text-sm font-semibold text-ink-soft bg-white border border-line-strong hover:bg-paper transition-colors">
+                  No, mantenerla
+                </button>
+              </div>
+            )}
             <p className="text-sm text-gray-700 mt-2 whitespace-pre-line">{s.descripcion}</p>
             {s.respuesta ? (
-              <div className="mt-3 text-sm bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-green-900">
+              <div className="mt-3 text-sm bg-green-50 border border-green-200 rounded-[10px] px-3 py-2 text-green-900">
                 <p className="text-xs font-semibold mb-0.5">
                   Respuesta{s.fecha_atencion ? ` · ${fecha(s.fecha_atencion)}` : ''}
                 </p>
@@ -1166,73 +1382,96 @@ function SolicitarAcompanamiento() {
   }
 
   return (
-    <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-      <div className="flex items-center gap-2">
-        <MessageSquarePlus className="w-5 h-5 text-gray-500" />
-        <h2 className="text-lg font-semibold text-gray-900">Solicitar acompañamiento</h2>
+    <section className="bg-white rounded-[14px] border border-line p-6">
+      <div className="flex items-start gap-3">
+        <span className="w-10 h-10 rounded-[10px] bg-primary-tint text-primary flex items-center justify-center shrink-0">
+          <MessageSquarePlus className="w-5 h-5" aria-hidden="true" />
+        </span>
+        <div>
+          <h2 className="text-lg font-semibold text-ink">Solicitar acompañamiento</h2>
+          <p className="text-sm text-ink-muted mt-0.5 mb-5 leading-relaxed">
+            Si necesitas apoyo, cuéntanos qué está pasando. Bienestar Universitario recibirá tu solicitud y te responderá por
+            este medio y por correo.
+          </p>
+        </div>
       </div>
-      <p className="text-sm text-gray-500 mb-4">
-        Si necesitas apoyo, cuéntanos qué está pasando. Bienestar Universitario recibirá tu solicitud y te responderá por
-        este medio y por correo.
-      </p>
+
+      {mensajeEnvio && (
+        <div role={mensajeEnvio.tipo === 'error' ? 'alert' : 'status'}
+          className={`mb-5 flex items-start gap-2.5 text-sm rounded-[10px] px-3.5 py-3 border ${mensajeEnvio.tipo === 'ok'
+            ? 'text-green-900 bg-green-50 border-green-200' : 'text-red-800 bg-red-50 border-red-200'}`}>
+          {mensajeEnvio.tipo === 'ok'
+            ? <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+            : <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />}
+          <p className="flex-1">{mensajeEnvio.texto}</p>
+          <button type="button" onClick={() => setMensajeEnvio(null)} aria-label="Cerrar aviso" className="opacity-60 hover:opacity-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {listado && bloqueado && listado.mensaje_bloqueo && (
-        <p className="flex items-start gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+        <p className="flex items-start gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-[10px] px-3.5 py-3 mb-4">
           <Info className="w-4 h-4 mt-0.5 shrink-0" />
           {listado.mensaje_bloqueo}
         </p>
       )}
 
-      <form onSubmit={enviar} noValidate className="space-y-4">
-        <fieldset disabled={bloqueado || enviando} className="space-y-4">
+      <form onSubmit={enviar} noValidate className="space-y-5">
+        <fieldset disabled={bloqueado || enviando} className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="text-sm text-gray-700">
-              <span className="block mb-1 font-medium">Motivo *</span>
+            <label className="text-sm text-ink-soft">
+              <span className="block mb-1.5 font-semibold">Motivo <span className="text-red-600" aria-hidden="true">*</span></span>
               <select value={motivo} onChange={(e) => setMotivo(e.target.value)} className={claseCampo}
-                aria-invalid={!!errores.motivo}>
+                aria-invalid={!!errores.motivo} aria-describedby="ayuda-motivo">
                 <option value="">Selecciona un motivo</option>
                 {listado?.motivos.map((m) => (
                   <option key={m.valor} value={m.valor}>{m.texto}</option>
                 ))}
               </select>
-              {errores.motivo && <span className="block text-xs text-red-600 mt-1">{errores.motivo}</span>}
+              <span id="ayuda-motivo" className={`block text-xs mt-1.5 ${errores.motivo ? 'text-red-700 font-medium' : 'text-ink-muted'}`}>
+                {errores.motivo || 'Elige el tema que más se parece a lo que necesitas.'}
+              </span>
             </label>
-            <label className="text-sm text-gray-700">
-              <span className="block mb-1 font-medium">Alerta relacionada (opcional)</span>
-              <select value={alerta} onChange={(e) => setAlerta(e.target.value)} className={claseCampo}>
+            <label className="text-sm text-ink-soft">
+              <span className="block mb-1.5 font-semibold">Alerta relacionada <span className="font-normal text-ink-muted">(opcional)</span></span>
+              <select value={alerta} onChange={(e) => setAlerta(e.target.value)} className={claseCampo}
+                aria-invalid={!!errores.alerta} aria-describedby="ayuda-alerta">
                 <option value="">Ninguna</option>
                 {alertas.map((a) => (
                   <option key={a.id} value={a.id}>{a.materia ? `${a.tipo} · ${a.materia}` : a.tipo}</option>
                 ))}
               </select>
-              {errores.alerta && <span className="block text-xs text-red-600 mt-1">{errores.alerta}</span>}
+              <span id="ayuda-alerta" className={`block text-xs mt-1.5 ${errores.alerta ? 'text-red-700 font-medium' : 'text-ink-muted'}`}>
+                {errores.alerta || 'Si tu solicitud se debe a una alerta, selecciónala para dar más contexto.'}
+              </span>
             </label>
           </div>
-          <label className="block text-sm text-gray-700">
-            <span className="block mb-1 font-medium">Descripción *</span>
+          <label className="block text-sm text-ink-soft">
+            <span className="block mb-1.5 font-semibold">Descripción <span className="text-red-600" aria-hidden="true">*</span></span>
             <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} rows={4} maxLength={2000}
               placeholder="Describe brevemente tu situación y el tipo de apoyo que necesitas."
-              className={claseCampo} aria-invalid={!!errores.descripcion} />
-            <span className="flex justify-between text-xs mt-1">
-              <span className="text-red-600">{errores.descripcion}</span>
-              <span className="text-gray-400">{descripcion.trim().length} / mínimo {listado?.descripcion_minima ?? 20}</span>
+              className={`${claseCampo} resize-y min-h-[7rem]`} aria-invalid={!!errores.descripcion} aria-describedby="ayuda-descripcion" />
+            <span id="ayuda-descripcion" className="block mt-2">
+              <span className="block h-1 rounded-full bg-wash overflow-hidden" aria-hidden="true">
+                <span className={`block h-full rounded-full transition-all duration-300 ${progreso >= 100 ? 'bg-green-500' : 'bg-primary/70'}`}
+                  style={{ width: `${progreso}%` }} />
+              </span>
+              <span className="flex justify-between gap-3 text-xs mt-1.5">
+                <span className={errores.descripcion ? 'text-red-700 font-medium' : 'text-ink-muted'}>
+                  {errores.descripcion || (progreso >= 100 ? 'Listo, ya puedes enviarla.' : 'Cuéntanos qué pasa y cómo podemos ayudarte.')}
+                </span>
+                <span className="text-ink-muted tabular-nums shrink-0">{escritos} / mínimo {minimo}</span>
+              </span>
             </span>
           </label>
           <button type="submit"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#C8102E] text-white text-sm font-medium hover:bg-[#a50d26] disabled:opacity-50">
-            <Send className="w-4 h-4" />
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-[10px] bg-primary text-white text-sm font-semibold transition-all duration-150 hover:bg-primary-strong disabled:opacity-60 disabled:hover:translate-y-0 w-full sm:w-auto">
+            {enviando ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Send className="w-4 h-4" aria-hidden="true" />}
             {enviando ? 'Enviando…' : 'Enviar solicitud'}
           </button>
         </fieldset>
       </form>
-
-      {mensajeEnvio && (
-        <p role={mensajeEnvio.tipo === 'error' ? 'alert' : 'status'}
-          className={`mt-4 text-sm rounded-lg px-3 py-2 border ${mensajeEnvio.tipo === 'ok'
-            ? 'text-green-800 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>
-          {mensajeEnvio.texto}
-        </p>
-      )}
 
       <h3 className="text-sm font-semibold text-gray-900 mt-6 mb-3">Mis solicitudes</h3>
       {historial}
@@ -1258,14 +1497,14 @@ function TarjetaAsistencia({ curso }: { curso: CursoAsistencia }) {
   const ancho = Math.min(100, ((curso.porcentaje ?? 0) / escala) * 100);
 
   return (
-    <li className={`border rounded-lg p-4 ${colorBorde}`}>
+    <li className={`border rounded-[10px] p-4 bg-white transition-shadow duration-150 hover:shadow-md ${colorBorde}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-medium text-gray-900 truncate">{curso.materia}</p>
           <p className="text-xs text-gray-500">{curso.codigo_materia} · Grupo {curso.grupo}</p>
         </div>
         <div className="text-right shrink-0">
-          <p className={`text-2xl font-bold ${curso.supera_umbral ? 'text-red-700' : curso.cerca_del_limite ? 'text-amber-700' : 'text-gray-900'}`}>
+          <p className={`text-2xl font-semibold tabular-nums ${curso.supera_umbral ? 'text-red-700' : curso.cerca_del_limite ? 'text-amber-700' : 'text-gray-900'}`}>
             {sinClases ? '—' : `${numero(curso.porcentaje)} %`}
           </p>
           <p className="text-xs text-gray-500">de inasistencia</p>
@@ -1284,7 +1523,7 @@ function TarjetaAsistencia({ curso }: { curso: CursoAsistencia }) {
             <div className="h-2.5 w-full bg-gray-100 rounded-full overflow-hidden" role="progressbar"
               aria-valuemin={0} aria-valuemax={escala} aria-valuenow={curso.porcentaje ?? 0}
               aria-label={`Inasistencia de ${curso.materia}`}>
-              <div className={`h-full rounded-full ${colorBarra}`} style={{ width: `${ancho}%` }} />
+              <div className={`h-full rounded-full transition-[width] duration-700 ease-out ${colorBarra}`} style={{ width: `${ancho}%` }} />
             </div>
             <p className="flex justify-between text-xs text-gray-500 mt-1">
               <span>0 %</span>
@@ -1295,13 +1534,13 @@ function TarjetaAsistencia({ curso }: { curso: CursoAsistencia }) {
       )}
 
       {curso.supera_umbral && (
-        <p role="alert" className="flex items-start gap-2 text-sm text-red-800 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-3">
+        <p role="alert" className="flex items-start gap-2 text-sm text-red-800 bg-red-50 border border-red-200 rounded-[10px] px-3 py-2 mt-3">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
           Superaste el límite de inasistencia permitido en esta materia. Habla con tu docente o con Bienestar Universitario.
         </p>
       )}
       {curso.cerca_del_limite && (
-        <p className="flex items-start gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+        <p className="flex items-start gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-[10px] px-3 py-2 mt-3">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
           Estás cerca del límite de inasistencia{curso.umbral !== null ? ` (${numero(curso.umbral, 1)} %)` : ''}. Procura no faltar a
           las próximas clases.
@@ -1311,12 +1550,12 @@ function TarjetaAsistencia({ curso }: { curso: CursoAsistencia }) {
       {curso.detalle.length > 0 && (
         <div className="mt-3">
           <button type="button" onClick={() => setAbierta((v) => !v)} aria-expanded={abierta}
-            className="text-sm font-medium text-[#C8102E] hover:underline flex items-center gap-1">
+            className="text-sm font-medium text-primary hover:underline flex items-center gap-1">
             <ChevronRight className={`w-4 h-4 transition-transform ${abierta ? 'rotate-90' : ''}`} />
             {abierta ? 'Ocultar detalle por fecha' : 'Ver detalle por fecha'}
           </button>
           {abierta && (
-            <ul className="mt-2 divide-y divide-gray-100 border border-gray-100 rounded-lg text-sm">
+            <ul className="mt-2 divide-y divide-gray-100 border border-gray-100 rounded-[10px] text-sm">
               {curso.detalle.map((d) => (
                 <li key={d.fecha} className="flex items-center justify-between px-3 py-1.5">
                   <span className="text-gray-700">
@@ -1360,11 +1599,18 @@ function MiAsistencia() {
   if (error) {
     contenido = <p role="alert" className="text-sm text-red-700">{error}</p>;
   } else if (!datos) {
-    contenido = <p className="text-sm text-gray-500">Cargando tu asistencia…</p>;
+    contenido = (
+      <div role="status" aria-label="Cargando tu asistencia" className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Esqueleto className="h-40" /><Esqueleto className="h-40" />
+        <span className="sr-only">Cargando tu asistencia…</span>
+      </div>
+    );
   } else if (!datos.hay_registros) {
     contenido = (
-      <div className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-gray-100 rounded-xl text-gray-500">
-        <CalendarCheck className="w-8 h-8 mb-2 opacity-40" />
+      <div className="flex flex-col items-center justify-center text-center py-12 border-2 border-dashed border-line rounded-[14px] text-gray-500 bg-paper">
+        <span className="w-12 h-12 rounded-full bg-wash flex items-center justify-center mb-3">
+          <CalendarCheck className="w-6 h-6 text-gray-400" />
+        </span>
         <p className="text-sm">{datos.mensaje ?? 'Aún no hay registros de asistencia.'}</p>
         <p className="text-xs mt-1">Cuando tus docentes registren la asistencia, verás aquí tu porcentaje por materia.</p>
       </div>
@@ -1380,14 +1626,11 @@ function MiAsistencia() {
   }
 
   return (
-    <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="space-y-5">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
-            <CalendarCheck className="w-5 h-5 text-gray-500" />
-            <h2 className="text-lg font-semibold text-gray-900">Mi asistencia</h2>
-          </div>
-          <p className="text-sm text-gray-500 mb-4">
+          <h1 className="text-3xl font-semibold text-ink">Mi asistencia</h1>
+          <p className="mt-1 text-ink-muted max-w-[70ch]">
             Tu porcentaje de inasistencia en cada materia frente al límite permitido. Las faltas justificadas cuentan como
             clase pero no como falta.
           </p>
@@ -1396,16 +1639,16 @@ function MiAsistencia() {
           <label className="text-xs text-gray-600">
             <span className="block mb-1">Periodo</span>
             <select value={periodo || datos.periodo || ''} onChange={(e) => setPeriodo(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] bg-white text-sm">
+              className="h-10 px-3.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink">
               {datos.periodos.map((p) => (
                 <option key={p} value={p}>{p}</option>
               ))}
             </select>
           </label>
         )}
-      </div>
+      </header>
       {contenido}
-    </section>
+    </div>
   );
 }
 
@@ -1472,15 +1715,15 @@ function AccesosPortal() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {tarjetas.map(({ ruta, titulo, icono: Icono, valor, detalle, destacar }) => (
           <Link key={ruta} to={ruta}
-            className="group bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:border-[#C8102E] transition-colors">
+            className="group bg-white rounded-[14px] border border-line p-4 transition-all duration-200 hover:border-primary/60">
             <div className="flex items-center justify-between text-gray-500">
               <span className="flex items-center gap-2">
                 <Icono className="w-4 h-4" />
                 <span className="text-xs font-medium">{titulo}</span>
               </span>
-              <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-[#C8102E]" />
+              <ChevronRight className="w-4 h-4 text-gray-300 transition-transform duration-200 group-hover:text-primary group-hover:translate-x-0.5" />
             </div>
-            <p className={`text-2xl font-bold mt-2 ${destacar ? 'text-[#C8102E]' : 'text-gray-900'}`}>{valor ?? '…'}</p>
+            <p className={`text-3xl font-semibold mt-2 tabular-nums ${destacar ? 'text-riesgo-critico' : 'text-ink'}`}>{valor ?? '…'}</p>
             <p className="text-xs text-gray-500 mt-1">{valor === null ? 'Cargando…' : detalle}</p>
           </Link>
         ))}
@@ -1515,21 +1758,21 @@ export default function StudentPortal() {
 
   if (error) {
     return (
-      <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
+      <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded-[10px] p-4 text-sm">
         {error}
       </div>
     );
   }
 
   if (!datos) {
-    return <div className="text-sm text-gray-500">Cargando tu información…</div>;
+    return <CargandoInicio />;
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 ">
       <header>
-        <h1 className="text-2xl font-bold text-gray-900">Hola, {datos.estudiante.nombre}</h1>
-        <p className="text-sm text-gray-500">Código {datos.estudiante.codigo} · Semestre {datos.estudiante.semestre}</p>
+        <h1 className="text-3xl font-semibold text-ink">Hola, {datos.estudiante.nombre}</h1>
+        <p className="text-sm text-gray-500 tabular-nums">Código {datos.estudiante.codigo} · Semestre {datos.estudiante.semestre}</p>
       </header>
 
       <TarjetaRiesgo datos={datos} />
