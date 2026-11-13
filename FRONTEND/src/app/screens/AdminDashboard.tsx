@@ -1,10 +1,20 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router';
 import { Upload, FileText, AlertCircle, CheckCircle, Database, RefreshCw } from 'lucide-react';
+import { EncabezadoPagina, Seccion } from '../components/Panel';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { apiFetch } from '../../services/apiFetch';
 
+
+const ORDEN_CARGA = [
+  { valor: 'pensum', etiqueta: 'Pensum' },
+  { valor: 'teachers', etiqueta: 'Docentes' },
+  { valor: 'courses', etiqueta: 'Oferta académica (cursos)' },
+  { valor: 'general', etiqueta: 'Estudiantes (reporte general)' },
+  { valor: 'individual', etiqueta: 'Historiales individuales' },
+  { valor: 'attendance', etiqueta: 'Asistencia' },
+];
 
 export default function AdminDashboard() {
   const [dragActive, setDragActive] = useState(false);
@@ -160,28 +170,25 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Page header with red accent */}
-      <div className="border-l-4 border-[#C8102E] pl-4">
-        <h1 className="text-2xl font-bold text-gray-900">Módulo de Importación de Datos</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Importar datos académicos de la fuente institucional DIRPLAN
-        </p>
-      </div>
+    <div className="space-y-5">
+      <EncabezadoPagina
+        titulo="Importar Módulo"
+        detalle="Carga los datos académicos de la fuente institucional DIRPLAN. Cada archivo se valida completo antes de guardarse."
+      />
 
       {/* Upload area */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-6">Proceso de Importación y Validación</h2>
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
+      <Seccion titulo="Archivo a importar" detalle="Elige el tipo de información y sube el archivo." className="xl:col-span-7">
 
         {/* Formulario de configuración de importación */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            1. Seleccionar Tipo de Información
+        <div className="mb-5">
+          <label className="block text-sm font-medium text-ink-muted mb-1.5">
+            Tipo de información
           </label>
           <select
             value={importType}
             onChange={(e) => setImportType(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-[#C8102E] focus:border-[#C8102E] outline-none transition-colors"
+            className="w-full h-10 px-3.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink"
           >
             <option value="pensum">Pensum</option>
             <option value="general">Reporte General de Estudiantes (DIRPLAN)</option>
@@ -190,7 +197,141 @@ export default function AdminDashboard() {
             <option value="teachers">Listado de Docentes</option>
             <option value="attendance">Asistencia de Estudiantes</option>
           </select>
-          <div className="text-sm text-gray-500 mt-2">
+        </div>
+
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-ink-muted mb-1.5">
+            Archivo
+          </label>
+          {validationStatus === 'validating' ? (
+            <div className="border border-blue-200 bg-blue-50 rounded-[10px] p-12 text-center flex flex-col items-center justify-center">
+              <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+              <h3 className="text-lg font-medium text-blue-900">Validando calidad de los datos...</h3>
+              <p className="text-sm text-blue-700 mt-1">Verificando formatos, integridad referencial y detectando valores nulos o inconsistentes.</p>
+            </div>
+          ) : validationStatus === 'success' ? (
+            <div className="border border-green-200 bg-green-50 rounded-[10px] p-12 text-center flex flex-col items-center justify-center">
+              <CheckCircle className="w-14 h-14 text-green-600 mb-4" />
+              <h3 className="text-xl font-medium text-green-900">¡Importación Exitosa!</h3>
+              <p className="text-sm text-green-700 mt-1">{responseMessage}</p>
+              {responseAdvertencias.length > 0 && (
+                <div className="mt-4 w-full max-h-48 overflow-y-auto border border-amber-300 rounded-[10px] bg-amber-50 text-left">
+                  <p className="px-3 py-2 text-xs font-semibold text-amber-800 bg-amber-100">Advertencias ({responseAdvertencias.length})</p>
+                  {responseAdvertencias.map((adv: any, i: number) => (
+                    <div key={i} className="px-3 py-1 text-xs text-amber-800 border-t border-amber-200">
+                      <span className="font-medium">Fila {adv.fila} – {adv.campo}:</span> {adv.mensaje}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => { setValidationStatus('idle'); setResponseMessage(''); setResponseErrors([]); setResponseAdvertencias([]); }}
+                className="mt-4 px-4 py-2 text-sm font-medium text-green-700 bg-green-100 rounded-[10px] hover:bg-green-200 transition-colors"
+              >
+                Importar otro archivo
+              </button>
+            </div>
+          ) : validationStatus === 'error' ? (
+            <div className="border border-red-200 bg-red-50 rounded-[10px] p-8 flex flex-col items-center justify-center">
+              <AlertCircle className="w-14 h-14 text-primary mb-4" />
+              <h3 className="text-xl font-medium text-red-900">Error en la Importación</h3>
+              <p className="text-sm text-red-700 mt-1 mb-4">{responseMessage}</p>
+              {responseErrors.length > 0 && (
+                <div className="w-full max-h-60 overflow-y-auto border border-red-200 rounded-[10px] bg-white">
+                  <table className="tabular-nums w-full text-sm">
+                    <thead className="bg-red-100 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Fila</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Campo</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Valor</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Detalle</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-red-100">
+                      {responseErrors.map((err: any, i: number) => (
+                        <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-red-50'}>
+                          <td className="px-3 py-2 text-red-700">{err.fila}</td>
+                          <td className="px-3 py-2 text-red-700">{err.campo}</td>
+                          <td className="px-3 py-2 text-red-700 tabular-nums">{err.valor}</td>
+                          <td className="px-3 py-2 text-red-600">{err.mensaje}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <button
+                onClick={() => { setValidationStatus('idle'); setResponseMessage(''); setResponseErrors([]); }}
+                className="mt-4 px-4 py-2 text-sm font-medium text-red-700 bg-red-100 rounded-[10px] hover:bg-red-200 transition-colors"
+              >
+                Intentar de nuevo
+              </button>
+            </div>
+          ) : (
+            <div
+              className={`border-2 border-dashed rounded-[10px] p-12 text-center transition-colors ${dragActive
+                ? 'border-primary bg-primary-tint'
+                : 'border-gray-300 hover:border-primary hover:bg-gray-50'
+                }`}
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+            >
+              <div className="flex flex-col items-center">
+                <div className="w-16 h-16 bg-primary-tint rounded-full flex items-center justify-center mb-4">
+                  <Upload className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="text-lg font-medium text-ink mb-2">
+                  Arrastra y suelta tu archivo aquí
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Formatos soportados: CSV, Excel (.xlsx, .xls)
+                </p>
+                <label className="cursor-pointer">
+                  <span className="inline-flex items-center px-4 py-2 border border-primary rounded-[10px] text-sm font-medium text-primary bg-white hover:bg-primary-tint transition-colors">
+                    Seleccionar Archivo
+                  </span>
+                  <input ref={fileInputRef} type="file" className="hidden" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} />
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {validationStatus === 'idle' && (
+          <div className="flex items-start gap-2 text-sm text-ink bg-paper p-4 rounded-[10px] border border-line">
+            <AlertCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold block mb-1">Nota sobre Validación de Calidad</span>
+              <p className="text-ink-muted">
+                El sistema aplicará reglas de calidad automáticas antes de consolidar la información.
+                Cualquier inconsistencia será reportada en el historial de importación para su corrección. Tamaño máximo: {import.meta.env.VITE_MAX_IMPORT_FILE_SIZE_MB ?? 10}MB.
+              </p>
+            </div>
+          </div>
+        )}
+      </Seccion>
+
+      <Seccion titulo="Orden de carga" detalle="Cada tipo depende de los anteriores. Selecciona uno para prepararlo." className="xl:col-span-5">
+        <ol className="space-y-1">
+          {ORDEN_CARGA.map(({ valor, etiqueta }, i) => (
+            <li key={valor}>
+              <button
+                type="button"
+                onClick={() => setImportType(valor)}
+                aria-current={importType === valor ? 'step' : undefined}
+                className={`w-full flex items-center gap-3 text-left px-3 py-2 rounded-[10px] text-sm ${importType === valor ? 'bg-primary-tint text-primary font-semibold' : 'text-ink hover:bg-paper'}`}
+              >
+                <span className="cifra w-5 text-ink-muted">{i + 1}</span>
+                {etiqueta}
+              </button>
+            </li>
+          ))}
+        </ol>
+        <div className="mt-4 pt-4 border-t border-line">
+          <div className="text-sm text-ink-muted">
             {importType === 'pensum' && 'Importa la definición del pensum (Código, Nombre, Créditos, Semestre, Tipo y Equivalencias). Carga el pensum antes de importar historiales.'}
             {importType === 'general' && 'Permite consolidar la información académica básica de los estudiantes desde la fuente DIRPLAN.'}
             {importType === 'individual' && (
@@ -226,184 +367,70 @@ export default function AdminDashboard() {
             )}
           </div>
         </div>
-
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            2. Carga y Validación Automática
-          </label>
-          {validationStatus === 'validating' ? (
-            <div className="border border-blue-200 bg-blue-50 rounded-lg p-12 text-center flex flex-col items-center justify-center">
-              <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-              <h3 className="text-lg font-medium text-blue-900">Validando calidad de los datos...</h3>
-              <p className="text-sm text-blue-700 mt-1">Verificando formatos, integridad referencial y detectando valores nulos o inconsistentes.</p>
-            </div>
-          ) : validationStatus === 'success' ? (
-            <div className="border border-green-200 bg-green-50 rounded-lg p-12 text-center flex flex-col items-center justify-center">
-              <CheckCircle className="w-14 h-14 text-green-600 mb-4" />
-              <h3 className="text-xl font-medium text-green-900">¡Importación Exitosa!</h3>
-              <p className="text-sm text-green-700 mt-1">{responseMessage}</p>
-              {responseAdvertencias.length > 0 && (
-                <div className="mt-4 w-full max-h-48 overflow-y-auto border border-yellow-300 rounded-lg bg-yellow-50 text-left">
-                  <p className="px-3 py-2 text-xs font-semibold text-yellow-800 bg-yellow-100">Advertencias ({responseAdvertencias.length})</p>
-                  {responseAdvertencias.map((adv: any, i: number) => (
-                    <div key={i} className="px-3 py-1 text-xs text-yellow-800 border-t border-yellow-200">
-                      <span className="font-medium">Fila {adv.fila} – {adv.campo}:</span> {adv.mensaje}
-                    </div>
-                  ))}
-                </div>
-              )}
-              <button
-                onClick={() => { setValidationStatus('idle'); setResponseMessage(''); setResponseErrors([]); setResponseAdvertencias([]); }}
-                className="mt-4 px-4 py-2 text-sm font-medium text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition-colors"
-              >
-                Importar otro archivo
-              </button>
-            </div>
-          ) : validationStatus === 'error' ? (
-            <div className="border border-red-200 bg-red-50 rounded-lg p-8 flex flex-col items-center justify-center">
-              <AlertCircle className="w-14 h-14 text-[#C8102E] mb-4" />
-              <h3 className="text-xl font-medium text-red-900">Error en la Importación</h3>
-              <p className="text-sm text-red-700 mt-1 mb-4">{responseMessage}</p>
-              {responseErrors.length > 0 && (
-                <div className="w-full max-h-60 overflow-y-auto border border-red-200 rounded-lg bg-white">
-                  <table className="w-full text-sm">
-                    <thead className="bg-red-100 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Fila</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Campo</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Valor</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-red-800">Detalle</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-red-100">
-                      {responseErrors.map((err: any, i: number) => (
-                        <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-red-50'}>
-                          <td className="px-3 py-2 text-red-700">{err.fila}</td>
-                          <td className="px-3 py-2 text-red-700">{err.campo}</td>
-                          <td className="px-3 py-2 text-red-700 font-mono">{err.valor}</td>
-                          <td className="px-3 py-2 text-red-600">{err.mensaje}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <button
-                onClick={() => { setValidationStatus('idle'); setResponseMessage(''); setResponseErrors([]); }}
-                className="mt-4 px-4 py-2 text-sm font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition-colors"
-              >
-                Intentar de nuevo
-              </button>
-            </div>
-          ) : (
-            <div
-              className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${dragActive
-                ? 'border-[#C8102E] bg-red-50'
-                : 'border-gray-300 hover:border-[#C8102E] hover:bg-gray-50'
-                }`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-            >
-              <div className="flex flex-col items-center">
-                <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4">
-                  <Upload className="w-8 h-8 text-[#C8102E]" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Arrastra y suelta tu archivo aquí
-                </h3>
-                <p className="text-sm text-gray-500 mb-4">
-                  Formatos soportados: CSV, Excel (.xlsx, .xls)
-                </p>
-                <label className="cursor-pointer">
-                  <span className="inline-flex items-center px-4 py-2 border border-[#C8102E] rounded-lg text-sm font-medium text-[#C8102E] bg-white hover:bg-red-50 transition-colors">
-                    Seleccionar Archivo
-                  </span>
-                  <input ref={fileInputRef} type="file" className="hidden" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} />
-                </label>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {validationStatus === 'idle' && (
-          <div className="flex items-start gap-2 text-sm text-gray-800 bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <AlertCircle className="w-5 h-5 text-[#C8102E] flex-shrink-0 mt-0.5" />
-            <div>
-              <span className="font-semibold block mb-1">Nota sobre Validación de Calidad</span>
-              <p className="text-gray-600">
-                El sistema aplicará reglas de calidad automáticas antes de consolidar la información.
-                Cualquier inconsistencia será reportada en el historial de importación para su corrección. Tamaño máximo: {import.meta.env.VITE_MAX_IMPORT_FILE_SIZE_MB ?? 10}MB.
-              </p>
-            </div>
-          </div>
-        )}
+      </Seccion>
       </div>
-      
 
       {/* Import history */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="border-b border-gray-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">Historial de Importación</h2>
+      <div className="bg-white rounded-[14px] border border-line overflow-hidden">
+        <div className="border-b border-line px-5 py-4">
+          <h2 className="text-base font-semibold text-ink">Historial de importación</h2>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-[#C8102E] text-white">
+          <table className="tabular-nums w-full">
+            <thead className="bg-paper text-ink-soft border-b border-line">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                <th className="px-5 py-3 text-left text-xs font-semibold">
                   Fecha y Hora
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                <th className="px-5 py-3 text-left text-xs font-semibold">
                   Archivo
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                <th className="px-5 py-3 text-left text-xs font-semibold">
                   Tipo
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                <th className="px-5 py-3 text-left text-xs font-semibold">
                   Registros
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                <th className="px-5 py-3 text-left text-xs font-semibold">
                   Errores
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                <th className="px-5 py-3 text-left text-xs font-semibold">
                   Realizado por
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                <th className="px-5 py-3 text-left text-xs font-semibold">
                   Estado
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                <th className="px-5 py-3 text-left text-xs font-semibold">
                   Acciones
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-line">
               {importHistory.map((record, index) => (
                 <tr
                   key={record.id}
-                  className={index % 2 === 0 ? 'bg-white' : 'bg-[#F5F5F5]'}
+                  className={'hover:bg-paper'}
                 >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-5 py-3.5 whitespace-nowrap text-sm text-ink">
                     {record.fecha}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-900 truncate max-w-[200px]" title={record.archivo_nombre}>
+                  <td className="px-5 py-3.5 text-sm text-ink truncate max-w-[200px]" title={record.archivo_nombre}>
                     {record.archivo_nombre}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
+                  <td className="px-5 py-3.5 text-sm text-ink">
                     <Badge variant="gray" size="sm">{record.tipo}</Badge>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-5 py-3.5 whitespace-nowrap text-sm text-ink">
                     {record.total_procesados.toLocaleString()}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-5 py-3.5 whitespace-nowrap text-sm text-ink">
                     {record.total_errores}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
+                  <td className="px-5 py-3.5 whitespace-nowrap text-sm text-ink-muted font-medium">
                     {record.usuario || 'Desconocido'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-5 py-3.5 whitespace-nowrap">
                     {record.exitoso ? (
                       <Badge variant="success" size="sm">
                         <CheckCircle className="w-3 h-3 mr-1" />
@@ -416,7 +443,7 @@ export default function AdminDashboard() {
                       </Badge>
                     )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-5 py-3.5 whitespace-nowrap">
                     <Link to={`/dashboard/admin/import-log/${record.id}`}>
                       <Button variant="outline" size="sm">
                         Ver Log

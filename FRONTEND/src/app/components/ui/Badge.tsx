@@ -5,26 +5,37 @@ type BadgeProps = {
   className?: string;
 };
 
+/**
+ * Etiqueta de estado. Cada variante lleva un punto del color del nivel, así el
+ * nivel no depende solo del color de fondo.
+ */
 export function Badge({ variant, children, size = 'md', className = '' }: BadgeProps) {
   const variants = {
-    low: 'bg-gray-100 text-gray-700 border-gray-300',
-    medium: 'bg-amber-100 text-amber-700 border-amber-300',
-    high: 'bg-[#C8102E] text-white border-[#C8102E]',
-    success: 'bg-green-100 text-green-700 border-green-300',
-    error: 'bg-red-100 text-red-700 border-red-300',
-    gray: 'bg-gray-100 text-gray-600 border-gray-300',
+    low: 'bg-green-50 text-green-800 border-green-200',
+    medium: 'bg-amber-50 text-amber-800 border-amber-200',
+    high: 'bg-red-50 text-red-800 border-red-200',
+    success: 'bg-green-50 text-green-800 border-green-200',
+    error: 'bg-red-50 text-red-800 border-red-200',
+    gray: 'bg-wash text-ink-soft border-line',
+  };
+  const puntos = {
+    low: 'bg-riesgo-bajo',
+    medium: 'bg-riesgo-medio',
+    high: 'bg-riesgo-critico',
+    success: 'bg-riesgo-bajo',
+    error: 'bg-riesgo-critico',
+    gray: 'bg-ink-faint',
   };
 
   const sizes = {
-    xs: 'px-1.5 py-0.5 text-[10px]',
-    sm: 'px-2 py-0.5 text-xs',
-    md: 'px-3 py-1 text-sm',
+    xs: 'px-1.5 py-0.5 text-xs gap-1',
+    sm: 'px-2 py-0.5 text-xs gap-1.5',
+    md: 'px-2.5 py-1 text-sm gap-1.5',
   };
 
   return (
-    <span
-      className={`inline-flex items-center rounded-full border ${variants[variant]} ${sizes[size]} font-medium ${className}`}
-    >
+    <span className={`inline-flex items-center rounded-md border ${variants[variant]} ${sizes[size]} font-medium ${className}`}>
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${puntos[variant]}`} aria-hidden="true" />
       {children}
     </span>
   );

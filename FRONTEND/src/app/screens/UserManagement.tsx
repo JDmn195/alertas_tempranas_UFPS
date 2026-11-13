@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, X, RefreshCw, AlertTriangle, Edit2, Search } from 'lucide-react';
+import { CintaIndicadores, EncabezadoPagina } from '../components/Panel';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { apiFetch } from '../../services/apiFetch';
 
+import { CargandoBloque, EstadoVacio } from '../components/Estados';
 interface User {
   id: string;
   nombre: string;
@@ -132,33 +134,34 @@ export default function UserManagement() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Page header */}
-      <div className="border-l-4 border-[#C8102E] pl-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gestión de Usuarios</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Gestionar usuarios, roles y permisos del sistema
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchUsers}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </Button>
-          <Button onClick={handleOpenCreate}>
-            <Plus className="w-4 h-4 mr-2" />
-            Nuevo Usuario
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <EncabezadoPagina titulo="Gestión de Usuarios" detalle="Administra quién accede al sistema, con qué rol y si su cuenta está activa.">
+        <Button variant="outline" onClick={fetchUsers}>
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Actualizar
+        </Button>
+        <Button onClick={handleOpenCreate}>
+          <Plus className="w-4 h-4 mr-2" />
+          Nuevo Usuario
+        </Button>
+      </EncabezadoPagina>
+
+      <CintaIndicadores
+        cargando={loading && users.length === 0}
+        indicadores={[
+          { etiqueta: 'Usuarios', valor: users.length },
+          { etiqueta: 'Activos', valor: users.filter((u) => u.activo).length, tono: 'bien' },
+          { etiqueta: 'Inactivos', valor: users.filter((u) => !u.activo).length, tono: users.some((u) => !u.activo) ? 'aviso' : undefined },
+          { etiqueta: 'Roles en uso', valor: new Set(users.map((u) => u.rol)).size },
+        ]}
+      />
 
       {credencialesNuevas && (
-        <div className="p-4 bg-green-50 text-green-800 rounded-lg border border-green-200 flex items-start justify-between gap-4">
+        <div className="p-4 bg-green-50 text-green-800 rounded-[10px] border border-green-200 flex items-start justify-between gap-4">
           <div className="text-sm">
             <p className="font-semibold">Usuario creado. Entrégale estas credenciales; la contraseña no se volverá a mostrar.</p>
-            <p className="mt-1">Correo: <span className="font-mono">{credencialesNuevas.correo}</span></p>
-            <p>Contraseña temporal: <span className="font-mono select-all">{credencialesNuevas.contrasena}</span></p>
+            <p className="mt-1">Correo: <span className="tabular-nums">{credencialesNuevas.correo}</span></p>
+            <p>Contraseña temporal: <span className="tabular-nums select-all">{credencialesNuevas.contrasena}</span></p>
             <p className="mt-1 text-green-700">Deberá cambiarla en su primer inicio de sesión.</p>
           </div>
           <button onClick={() => setCredencialesNuevas(null)} className="text-green-700 hover:text-green-900" aria-label="Cerrar">
@@ -168,89 +171,79 @@ export default function UserManagement() {
       )}
 
       {error && (
-        <div className="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 flex items-center gap-2">
+        <div className="p-4 bg-red-50 text-red-700 rounded-[10px] border border-red-200 flex items-center gap-2">
           <AlertTriangle className="w-5 h-5" />
           {error}
         </div>
       )}
 
       {/* Users table */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="border-b border-gray-200 px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Usuarios Registrados ({filteredUsers.length})
+      <div className="bg-white rounded-[14px] border border-line overflow-hidden">
+        <div className="border-b border-line px-5 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <h2 className="text-base font-semibold text-ink">
+            {filteredUsers.length} usuario{filteredUsers.length !== 1 ? 's' : ''}
           </h2>
           <div className="w-full md:w-72 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint" />
             <input
               type="text"
               placeholder="Buscar por nombre, correo..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
+              className="w-full h-10 pl-9 pr-3 border border-line-strong rounded-[10px] bg-white text-sm text-ink"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-[#C8102E] text-white">
+          <table className="tabular-nums w-full">
+            <thead className="bg-paper text-ink-soft border-b border-line">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                <th className="px-5 py-3 text-left text-xs font-semibold">
                   Nombre Completo
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                <th className="px-5 py-3 text-left text-xs font-semibold">
                   Correo Electrónico
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                <th className="px-5 py-3 text-left text-xs font-semibold">
                   Rol
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                <th className="px-5 py-3 text-left text-xs font-semibold">
                   Estado
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                <th className="px-5 py-3 text-left text-xs font-semibold">
                   Acciones
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-line">
               {loading && users.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                    Cargando usuarios...
-                  </td>
+                  <td colSpan={5} className="px-6 py-6"><CargandoBloque texto="Cargando usuarios..." filas={5} /></td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                    No se encontraron usuarios.
-                  </td>
+                  <td colSpan={5}><EstadoVacio titulo="No se encontraron usuarios." detalle="Revisa la búsqueda o crea un usuario con «Nuevo Usuario»." /></td>
                 </tr>
               ) : (
-                filteredUsers.map((user, index) => (
+                filteredUsers.map((user) => (
                   <tr
                     key={user.id}
-                    className={index % 2 === 0 ? 'bg-white' : 'bg-[#F5F5F5] hover:bg-gray-50 transition-colors'}
+                    className="hover:bg-paper transition-colors"
                   >
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                    <td className="px-5 py-3.5 text-sm font-medium text-ink">
                       {user.nombre}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{user.correo}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-5 py-3.5 text-sm text-ink-muted">{user.correo}</td>
+                    <td className="px-5 py-3.5 whitespace-nowrap">
                       <Badge
-                        variant={
-                          user.rol === 'ADMINISTRADOR'
-                            ? 'high'
-                            : user.rol === 'DIRECTOR'
-                            ? 'medium'
-                            : 'gray'
-                        }
+                        variant="gray"
                         size="sm"
                       >
                         {user.rol}
                       </Badge>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-5 py-3.5 whitespace-nowrap">
                       <label className="relative inline-flex items-center cursor-pointer" title={user.activo ? 'Activo' : 'Inactivo'}>
                         <input
                           type="checkbox"
@@ -258,10 +251,10 @@ export default function UserManagement() {
                           className="sr-only peer"
                           onChange={() => handleToggleStatus(user)}
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#C8102E]"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
                       </label>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-5 py-3.5 whitespace-nowrap">
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" onClick={() => handleOpenEdit(user)}>
                           <Edit2 className="w-3 h-3 mr-1" /> Editar
@@ -280,16 +273,16 @@ export default function UserManagement() {
       {showDrawer && (
         <>
           <div
-            className="fixed inset-0 z-40 transition-opacity"
-            style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+            className="fixed inset-0 animate-in fade-in duration-150 z-40 transition-opacity"
+            style={{ backgroundColor: 'rgba(36, 26, 25, 0.5)' }}
             onClick={() => !formLoading && setShowDrawer(false)}
           />
           <div className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-white shadow-2xl z-50 overflow-y-auto transform transition-transform">
-            <div className="bg-[#C8102E] text-white px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-              <h2 className="text-xl font-bold">{editingUser ? 'Editar Usuario' : 'Crear Nuevo Usuario'}</h2>
+            <div className="bg-white text-ink border-b border-line px-5 py-3.5 flex items-center justify-between sticky top-0 z-10">
+              <h2 className="text-xl font-semibold">{editingUser ? 'Editar Usuario' : 'Crear Nuevo Usuario'}</h2>
               <button
                 onClick={() => !formLoading && setShowDrawer(false)}
-                className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-1"
+                className="text-ink-muted hover:text-ink hover:bg-wash rounded-[10px] p-1"
                 disabled={formLoading}
               >
                 <X className="w-6 h-6" />
@@ -298,7 +291,7 @@ export default function UserManagement() {
 
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               {formError && (
-                <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
+                <div className="p-3 bg-red-50 text-red-700 text-sm rounded-[10px] border border-red-200">
                   {formError}
                 </div>
               )}
@@ -312,7 +305,7 @@ export default function UserManagement() {
                   required
                   value={formData.nombre}
                   onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
+                  className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary"
                   placeholder="e.g., Juan Carlos Pérez"
                 />
               </div>
@@ -327,7 +320,7 @@ export default function UserManagement() {
                   disabled={!!editingUser}
                   value={formData.correo}
                   onChange={(e) => setFormData({ ...formData, correo: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500"
+                  className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary disabled:bg-gray-100 disabled:text-gray-500"
                   placeholder="usuario@ufps.edu.co"
                 />
                 {editingUser && (
@@ -345,7 +338,7 @@ export default function UserManagement() {
                   // HU-37: las cuentas de estudiante no cambian de rol
                   disabled={formData.rol === 'ESTUDIANTE'}
                   onChange={(e) => setFormData({ ...formData, rol: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent bg-white"
+                  className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary bg-white"
                 >
                   <option value="DOCENTE">Docente</option>
                   <option value="DIRECTOR">Director Académico</option>
@@ -356,10 +349,10 @@ export default function UserManagement() {
               </div>
 
               {!editingUser && (
-                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
-                  <p className="text-sm text-yellow-800 font-medium">Información sobre la contraseña</p>
-                  <p className="text-xs text-yellow-700 mt-1">
-                    Al crear el usuario, la contraseña inicial será igual al correo electrónico. El usuario deberá cambiarla en su primer inicio de sesión.
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-[10px]">
+                  <p className="text-sm text-amber-800 font-medium">Información sobre la contraseña</p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    Al crear el usuario se genera una contraseña temporal que verás una sola vez. El usuario deberá cambiarla en su primer inicio de sesión.
                   </p>
                 </div>
               )}

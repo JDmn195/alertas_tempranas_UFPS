@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Plus, Settings, X, Trash2, AlertTriangle, Play, CheckCircle, CalendarX } from 'lucide-react';
+import { CintaIndicadores, EncabezadoPagina, Seccion } from '../components/Panel';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { ruleService, Rule } from '../../services/ruleService';
 
+import { CargandoBloque } from '../components/Estados';
 const CORTE_CLAVE_LABEL: Record<string, string> = {
   C1: 'Corte 1 — Alerta temprana',
   C2A: 'Corte 2 — Sostenido bajo',
@@ -205,36 +207,35 @@ export default function RiskRules() {
   const rulesInasistencia = rules.filter(r => r.tipo === 'INASISTENCIA');
 
   return (
-    <div className="space-y-8">
-      {/* Page header */}
-      <div className="border-l-4 border-[#C8102E] pl-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Configuración de Reglas de Riesgo</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Definir y gestionar reglas para la detección de riesgo estudiantil
-          </p>
-        </div>
+    <div className="animate-in fade-in duration-300 space-y-5">
+      <EncabezadoPagina
+        titulo="Reglas de Riesgo"
+        detalle="Define cuándo un estudiante entra en riesgo y qué alertas se generan."
+      >
         <Button onClick={() => { resetForm(); setShowModal(true); }}>
           <Plus className="w-4 h-4 mr-2" />
           Añadir Regla
         </Button>
-      </div>
+      </EncabezadoPagina>
+
+      <CintaIndicadores
+        cargando={loading}
+        indicadores={[
+          { etiqueta: 'Reglas activas', valor: rules.filter(r => r.activo).length, detalle: `de ${rules.length} configuradas` },
+          { etiqueta: 'Alertas por corte', valor: rulesCorte.filter(r => r.activo).length, detalle: `de ${rulesCorte.length}` },
+          { etiqueta: 'Inasistencia', valor: rulesInasistencia.filter(r => r.activo).length, detalle: `de ${rulesInasistencia.length}` },
+          { etiqueta: 'Riesgo general', valor: rulesGeneral.filter(r => r.activo).length, detalle: `de ${rulesGeneral.length}` },
+        ]}
+      />
 
       {/* ── SECCIÓN HU-32: Alertas por Corte ── */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-500" />
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800">Alertas Tempranas por Corte</h2>
-              <p className="text-xs text-gray-500">
-                Reglas automáticas administradas por el sistema. Solo se puede editar el umbral y el estado.
-              </p>
-            </div>
-          </div>
+      <Seccion
+        titulo="Alertas tempranas por corte"
+        detalle="Reglas automáticas administradas por el sistema. Solo se puede editar el umbral y el estado."
+        accion={
           <div className="flex items-center gap-2">
             {evaluacionOk && (
-              <span className="flex items-center gap-1 text-green-600 text-sm font-medium">
+              <span className="flex items-center gap-1 text-green-700 text-sm font-medium">
                 <CheckCircle className="w-4 h-4" /> Evaluación iniciada
               </span>
             )}
@@ -248,16 +249,16 @@ export default function RiskRules() {
               {evaluandoCortes ? 'Evaluando…' : 'Evaluar ahora'}
             </Button>
           </div>
-        </div>
-
+        }
+      >
         {loading ? (
-          <div className="text-center py-8 text-gray-500">Cargando reglas de corte…</div>
+          <CargandoBloque texto="Cargando reglas de corte…" filas={3} />
         ) : rulesCorte.length === 0 ? (
-          <div className="text-center py-8 bg-amber-50 rounded-lg border border-dashed border-amber-300 text-amber-700 text-sm">
+          <div className="text-center py-8 text-ink-muted text-sm">
             No hay reglas de corte configuradas.
           </div>
         ) : (
-          <div className="grid gap-3">
+          <div className="divide-y divide-line border-t border-line">
             {rulesCorte.map((rule) => {
               const params = rule.parametros || {};
               const clave = params.clave || '—';
@@ -269,13 +270,13 @@ export default function RiskRules() {
               return (
                 <div
                   key={rule.id}
-                  className={`bg-white rounded-lg border border-amber-200 p-5 hover:shadow-sm transition-shadow ${!rule.activo ? 'opacity-60' : ''}`}
+                  className={`py-4 ${!rule.activo ? 'opacity-60' : ''}`}
                 >
                   <div className="flex items-start justify-between gap-4">
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="text-xs font-mono font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                        <span className="text-xs tabular-nums font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
                           {clave}
                         </span>
                         <h3 className="text-base font-semibold text-gray-900 truncate">
@@ -307,7 +308,7 @@ export default function RiskRules() {
                           onChange={() => handleToggleActive(rule)}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
                         <span className="ml-2 text-xs font-medium text-gray-600">
                           {rule.activo ? 'Activa' : 'Inactiva'}
                         </span>
@@ -319,22 +320,17 @@ export default function RiskRules() {
             })}
           </div>
         )}
-      </section>
+      </Seccion>
 
       {/* ── SECCIÓN HU-35: Umbral general de inasistencia ── */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-3">
-          <CalendarX className="w-5 h-5 text-[#C8102E]" />
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800">Umbral de Inasistencia</h2>
-            <p className="text-xs text-gray-500">
-              Porcentaje máximo de faltas sin justificar permitido en un curso. Cada curso puede tener su propio umbral desde la lista de cursos; si no lo tiene, se usa este valor general.
-            </p>
-          </div>
-        </div>
+      <Seccion
+        titulo="Umbral de inasistencia"
+        detalle="Porcentaje máximo de faltas sin justificar permitido en un curso. Cada curso puede tener su propio umbral desde la lista de cursos; si no lo tiene, se usa este valor general."
+      >
+        <div className="space-y-4">
 
         {errorInasistencia && (
-          <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3" role="alert">
+          <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-[10px] px-4 py-3" role="alert">
             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
             <span className="flex-1">{errorInasistencia}</span>
             <button type="button" onClick={() => setErrorInasistencia(null)} className="text-red-500 hover:text-red-700">
@@ -344,9 +340,9 @@ export default function RiskRules() {
         )}
 
         {loading ? (
-          <div className="text-center py-8 text-gray-500">Cargando umbral de inasistencia…</div>
+          <div className="text-center py-8 text-ink-muted">Cargando umbral de inasistencia…</div>
         ) : rulesInasistencia.length === 0 ? (
-          <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-gray-600 text-sm">
+          <div className="text-center py-8 text-ink-muted text-sm">
             No hay una regla de inasistencia configurada. Créala con "Añadir Regla" y la métrica "Porcentaje de Inasistencia".
           </div>
         ) : (
@@ -361,26 +357,23 @@ export default function RiskRules() {
             ))}
           </div>
         )}
-      </section>
+        </div>
+      </Seccion>
 
       {/* ── Reglas Generales ── */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-3">
-          <Settings className="w-5 h-5 text-gray-500" />
-          <h2 className="text-lg font-semibold text-gray-800">Reglas de Riesgo General</h2>
-        </div>
-
+      <Seccion titulo="Reglas de riesgo general" detalle="Condiciones sobre el promedio, las materias perdidas y el atraso que definen el nivel de riesgo.">
         {loading ? (
-          <div className="text-center py-12 text-gray-500">Cargando reglas…</div>
+          <CargandoBloque texto="Cargando reglas…" filas={4} />
         ) : rulesGeneral.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300 text-gray-500">
+          <div className="text-center py-10 text-ink-muted">
             No hay reglas configuradas. Haz clic en "Añadir Regla" para empezar.
           </div>
         ) : (
-          rulesGeneral.map((rule) => (
+          <div className="divide-y divide-line border-t border-line">
+          {rulesGeneral.map((rule) => (
             <div
               key={rule.id}
-              className={`bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow ${!rule.activo ? 'opacity-60' : ''}`}
+              className={`py-4 ${!rule.activo ? 'opacity-60' : ''}`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -393,7 +386,7 @@ export default function RiskRules() {
                   </div>
                   <p className="text-sm text-gray-600 mb-2">
                     <span className="font-medium">Condición:</span>{' '}
-                    <code className="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
+                    <code className="px-2 py-1 bg-gray-100 rounded text-xs tabular-nums">
                       {rule.tipo} {rule.operador} {rule.valor_umbral}
                     </code>
                   </p>
@@ -411,7 +404,7 @@ export default function RiskRules() {
                       onChange={() => handleToggleActive(rule)}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#C8102E]"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
                     <span className="ml-3 text-sm font-medium text-gray-700">
                       {rule.activo ? 'Activa' : 'Inactiva'}
                     </span>
@@ -428,25 +421,26 @@ export default function RiskRules() {
                 </div>
               </div>
             </div>
-          ))
+          ))}
+          </div>
         )}
-      </section>
+      </Seccion>
 
       {/* Add/Edit Rule Modal */}
       {showModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-20 flex items-center justify-center z-50 p-6"
-          style={{ backgroundColor: 'rgba(0, 0, 0, 0.2)' }}
+          className="fixed inset-0 animate-in fade-in duration-150 bg-black bg-opacity-20 flex items-center justify-center z-50 p-6"
+          style={{ backgroundColor: 'rgba(36, 26, 25, 0.45)' }}
         >
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-[14px] shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <form onSubmit={handleSubmit}>
               {/* Modal header */}
-              <div className="bg-[#C8102E] text-white px-6 py-4 flex items-center justify-between sticky top-0">
-                <h2 className="text-xl font-bold">{editingId ? 'Editar Regla' : 'Añadir Nueva Regla'}</h2>
+              <div className="bg-white text-ink border-b border-line px-6 py-4 flex items-center justify-between sticky top-0">
+                <h2 className="text-xl font-semibold">{editingId ? 'Editar Regla' : 'Añadir Nueva Regla'}</h2>
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-1"
+                  className="text-ink-muted hover:text-ink hover:bg-wash rounded-[10px] p-1"
                 >
                   <X className="w-6 h-6" />
                 </button>
@@ -455,7 +449,7 @@ export default function RiskRules() {
               {/* Modal content */}
               <div className="p-6 space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-ink-muted mb-1.5">
                     Nombre de la Regla
                   </label>
                   <input
@@ -463,14 +457,14 @@ export default function RiskRules() {
                     required
                     value={formData.nombre}
                     onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
+                    className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary"
                     placeholder="e.g., Bajo Promedio - Crítico"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-ink-muted mb-1.5">
                       Métrica a Evaluar
                     </label>
                     <select
@@ -481,7 +475,7 @@ export default function RiskRules() {
                           ? { ...formData, tipo, operador: '>', valor_umbral: 20, parametros: { min_clases: 4 } }
                           : { ...formData, tipo, parametros: undefined });
                       }}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
+                      className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary"
                     >
                       <option value="PROMEDIO">Promedio Acumulado</option>
                       <option value="REPROBACION">Materias Reprobadas</option>
@@ -490,13 +484,13 @@ export default function RiskRules() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-ink-muted mb-1.5">
                       Operador
                     </label>
                     <select
                       value={formData.operador}
                       onChange={(e) => setFormData({ ...formData, operador: e.target.value as any })}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
+                      className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary"
                     >
                       <option value="<">Menor que</option>
                       <option value=">">Mayor que</option>
@@ -508,7 +502,7 @@ export default function RiskRules() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-ink-muted mb-1.5">
                     Valor Umbral
                   </label>
                   <input
@@ -517,7 +511,7 @@ export default function RiskRules() {
                     required
                     value={formData.valor_umbral}
                     onChange={(e) => setFormData({ ...formData, valor_umbral: parseFloat(e.target.value) })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
+                    className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary"
                     placeholder="e.g., 3.0"
                   />
                   {formData.tipo === 'INASISTENCIA' && (
@@ -527,7 +521,7 @@ export default function RiskRules() {
 
                 {formData.tipo === 'INASISTENCIA' && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-ink-muted mb-1.5">
                       Mínimo de clases registradas
                     </label>
                     <input
@@ -541,7 +535,7 @@ export default function RiskRules() {
                         ...formData,
                         parametros: { ...(formData.parametros || {}), min_clases: parseInt(e.target.value, 10) },
                       })}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
+                      className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary"
                     />
                     <p className="text-xs text-gray-500 mt-1">
                       Clases que deben estar registradas antes de evaluar a un estudiante (entre 1 y 50).
@@ -550,7 +544,7 @@ export default function RiskRules() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-ink-muted mb-1.5">
                     Nivel de Severidad
                   </label>
                   <div className="flex gap-3">
@@ -559,9 +553,9 @@ export default function RiskRules() {
                         key={n}
                         type="button"
                         onClick={() => setFormData({ ...formData, nivel: n as any })}
-                        className={`flex-1 px-4 py-3 rounded-lg border-2 transition-all flex items-center justify-center ${
+                        className={`flex-1 px-4 py-3 rounded-[10px] border-2 transition-all flex items-center justify-center ${
                           formData.nivel === n
-                            ? n === 'high' ? 'border-[#C8102E] bg-red-50' : n === 'medium' ? 'border-amber-400 bg-amber-50' : 'border-gray-400 bg-gray-50'
+                            ? n === 'high' ? 'border-primary bg-primary-tint' : n === 'medium' ? 'border-amber-400 bg-amber-50' : 'border-gray-400 bg-gray-50'
                             : 'border-gray-200 bg-white'
                         }`}
                       >
@@ -572,13 +566,13 @@ export default function RiskRules() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-ink-muted mb-1.5">
                     Descripción (Opcional)
                   </label>
                   <textarea
                     value={formData.descripcion}
                     onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent"
+                    className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary"
                     rows={3}
                     placeholder="Explica el motivo de esta regla..."
                   />
@@ -586,7 +580,7 @@ export default function RiskRules() {
               </div>
 
               {/* Modal footer */}
-              <div className="border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+              <div className="border-t border-line px-6 py-4 flex items-center justify-end gap-3">
                 <Button variant="secondary" type="button" onClick={() => setShowModal(false)}>
                   Cancelar
                 </Button>
@@ -601,22 +595,22 @@ export default function RiskRules() {
       {/* Error Modal */}
       {errorModal.show && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-20 flex items-center justify-center z-[60] p-6"
-          style={{ backgroundColor: 'rgba(0, 0, 0, 0.2)' }}
+          className="fixed inset-0 animate-in fade-in duration-150 bg-black bg-opacity-20 flex items-center justify-center z-[60] p-6"
+          style={{ backgroundColor: 'rgba(36, 26, 25, 0.45)' }}
         >
-          <div className="bg-white rounded-lg max-w-md w-full shadow-2xl">
+          <div className="bg-white rounded-[14px] max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-150">
             <div className="p-6">
               <div className="flex items-center gap-4 text-amber-600 mb-4">
                 <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
                   <Settings className="w-6 h-6" />
                 </div>
-                <h3 className="text-xl font-bold text-gray-900">Acción Protegida</h3>
+                <h3 className="text-xl font-semibold text-gray-900">Acción Protegida</h3>
               </div>
               <p className="text-gray-600 leading-relaxed">
                 {errorModal.message}
               </p>
             </div>
-            <div className="bg-gray-50 px-6 py-4 rounded-b-lg flex justify-end">
+            <div className="bg-gray-50 px-6 py-4 rounded-b-[14px] flex justify-end">
               <Button onClick={() => setErrorModal({ show: false, message: '' })}>
                 Entendido
               </Button>
@@ -641,7 +635,7 @@ function UmbralInline({ rule, onSave }: { rule: Rule; onSave: (r: Rule) => void 
   if (!editing) {
     return (
       <button
-        className="text-sm font-mono font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 hover:bg-amber-100 transition-colors"
+        className="text-sm tabular-nums font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 hover:bg-amber-100 transition-colors"
         title="Haz clic para editar el umbral"
         onClick={() => setEditing(true)}
       >
@@ -705,7 +699,7 @@ function InasistenciaRuleCard({ rule, onSave, onToggle }: {
   };
 
   return (
-    <div className={`bg-white rounded-lg border border-red-200 p-5 ${!rule.activo ? 'opacity-60' : ''}`}>
+    <div className={`bg-paper rounded-[10px] border border-line p-4 ${!rule.activo ? 'opacity-60' : ''}`}>
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -724,7 +718,7 @@ function InasistenciaRuleCard({ rule, onSave, onToggle }: {
             onChange={() => onToggle(rule)}
             className="sr-only peer"
           />
-          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#C8102E]"></div>
+          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
           <span className="ml-2 text-xs font-medium text-gray-600">
             {rule.activo ? 'Activa' : 'Inactiva'}
           </span>
@@ -744,7 +738,7 @@ function InasistenciaRuleCard({ rule, onSave, onToggle }: {
                 value={umbral}
                 autoFocus
                 onChange={(e) => setUmbral(e.target.value)}
-                className="w-28 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#C8102E]"
+                className="w-28 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
             <div>
@@ -756,7 +750,7 @@ function InasistenciaRuleCard({ rule, onSave, onToggle }: {
                 max="50"
                 value={minClases}
                 onChange={(e) => setMinClases(e.target.value)}
-                className="w-24 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#C8102E]"
+                className="w-24 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
             <div className="flex gap-2">

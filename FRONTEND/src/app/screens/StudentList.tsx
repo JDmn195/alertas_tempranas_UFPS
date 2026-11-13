@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { Search, AlertTriangle, CheckCircle, Activity, RefreshCw, ChevronLeft, ChevronRight, Bell, UserMinus } from 'lucide-react';
+import { EncabezadoPagina } from '../components/Panel';
+import { MedidorRiesgo, NivelRiesgoChip } from '../components/Riesgo';
 import { Button } from '../components/ui/Button';
-import { Badge } from '../components/ui/Badge';
 import { apiFetch } from '../../services/apiFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -37,8 +38,26 @@ const RISK_LABEL: Record<string, string> = {
 
 const SEMESTRES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
+// Chip de riesgo local: punto de color + texto, mismo lenguaje en toda la lista
+const CHIP_RIESGO: Record<'high' | 'medium' | 'low', { texto: string; clase: string; punto: string }> = {
+  high:   { texto: 'ALTO',  clase: 'bg-primary-tint text-[#9B0B22] ring-primary-tint', punto: 'bg-primary' },
+  medium: { texto: 'MEDIO', clase: 'bg-amber-50 text-amber-800 ring-amber-200',   punto: 'bg-amber-500' },
+  low:    { texto: 'BAJO',  clase: 'bg-green-50 text-green-800 ring-green-200', punto: 'bg-green-500' },
+};
+
+function ChipRiesgo({ nivel }: { nivel: 'high' | 'medium' | 'low' }) {
+  const c = CHIP_RIESGO[nivel];
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${c.clase}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${c.punto}`} aria-hidden="true" />
+      {c.texto}
+    </span>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function StudentList() {
+  const navigate = useNavigate();
   const [students, setStudents] = useState<Student[]>([]);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
@@ -112,90 +131,76 @@ export default function StudentList() {
   const handleSemesterChange = (v: string) => { setSemesterFilter(v); setCurrentPage(1); };
   const handleRiskChange     = (v: string) => { setRiskFilter(v);     setCurrentPage(1); };
 
+  const hayFiltros = Boolean(searchTerm || semesterFilter || riskFilter);
+  const limpiarFiltros = () => { setSearchTerm(''); setSemesterFilter(''); setRiskFilter(''); setCurrentPage(1); };
+  const alternarRiesgo = (nivel: string) => handleRiskChange(riskFilter === nivel ? '' : nivel);
+
+  const campo = 'h-10 px-3.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink';
+
+  // Tarjetas de riesgo: también filtran la lista al hacer clic
+  const tarjetasRiesgo = [
+    { nivel: 'high',   etiqueta: 'Riesgo Alto',  valor: countHigh,   icono: AlertTriangle, tono: 'border-red-200 bg-red-50 text-red-700 hover:border-red-300',          circulo: 'bg-red-100 text-red-600' },
+    { nivel: 'medium', etiqueta: 'Riesgo Medio', valor: countMedium, icono: Activity,      tono: 'border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-300',  circulo: 'bg-amber-100 text-amber-600' },
+    { nivel: 'low',    etiqueta: 'Riesgo Bajo',  valor: countLow,    icono: CheckCircle,   tono: 'border-green-200 bg-green-50 text-green-800 hover:border-green-300', circulo: 'bg-green-100 text-green-600' },
+  ] as const;
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
 
-      {/* Page header */}
-      <div className="border-l-4 border-[#C8102E] pl-4">
-        <h1 className="text-2xl font-bold text-gray-900">Directorio de Estudiantes</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Ver y filtrar registros de estudiantes registrados en el sistema
+      <EncabezadoPagina
+        titulo="Directorio de Estudiantes"
+        detalle="Busca un estudiante o filtra por nivel de riesgo para ver quién necesita seguimiento."
+      >
+        <p className="text-sm text-ink-muted">
+          <span className="font-semibold text-ink tabular-nums">{loading ? '—' : countAlerts}</span> alertas activas
+          <span className="mx-2 text-line-strong" aria-hidden="true">|</span>
+          <span className="font-semibold text-ink tabular-nums">{loading ? '—' : countInactive}</span> inactivos
         </p>
-      </div>
+      </EncabezadoPagina>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
-          </div>
-          <div>
-            <p className="text-[10px] sm:text-xs text-red-600 font-medium uppercase tracking-wide leading-tight">Riesgo Alto</p>
-            <p className="text-xl sm:text-2xl font-bold text-red-700">
-              {loading ? '—' : countHigh}
-            </p>
-          </div>
+      {/* Filtros: el nivel de riesgo es el filtro principal y muestra cuántos hay en cada uno */}
+      <div className="bg-white border border-line rounded-[14px]">
+        <div className="flex flex-wrap items-stretch gap-px bg-line border-b border-line rounded-t-[14px] overflow-hidden" role="group" aria-label="Filtrar por nivel de riesgo">
+          <button
+            type="button"
+            onClick={() => handleRiskChange('')}
+            aria-pressed={riskFilter === ''}
+            className={`flex-1 min-w-[8rem] text-left px-4 py-3 ${riskFilter === '' ? 'bg-primary-tint' : 'bg-white hover:bg-paper'}`}
+          >
+            <span className="block text-sm font-medium text-ink-muted">Todos</span>
+            <span className="block mt-1 text-xl font-semibold text-ink leading-none">{loading ? '—' : students.length}</span>
+          </button>
+          {tarjetasRiesgo.map(({ nivel, etiqueta, valor }) => (
+            <button
+              key={nivel}
+              type="button"
+              onClick={() => alternarRiesgo(nivel)}
+              aria-pressed={riskFilter === nivel}
+              title={riskFilter === nivel ? 'Quitar filtro' : `Ver solo ${etiqueta.toLowerCase()}`}
+              className={`flex-1 min-w-[8rem] text-left px-4 py-3 ${riskFilter === nivel ? 'bg-primary-tint' : 'bg-white hover:bg-paper'}`}
+            >
+              <span className="flex items-center justify-between gap-2 text-sm font-medium text-ink-muted">
+                {etiqueta}
+                <MedidorRiesgo nivel={nivel} />
+              </span>
+              <span className="block mt-1 text-xl font-semibold text-ink leading-none">{loading ? '—' : valor}</span>
+            </button>
+          ))}
         </div>
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
-            <Activity className="w-5 h-5 text-yellow-600" />
-          </div>
-          <div>
-            <p className="text-[10px] sm:text-xs text-yellow-600 font-medium uppercase tracking-wide leading-tight">Riesgo Medio</p>
-            <p className="text-xl sm:text-2xl font-bold text-yellow-700">
-              {loading ? '—' : countMedium}
-            </p>
-          </div>
-        </div>
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-            <CheckCircle className="w-5 h-5 text-green-600" />
-          </div>
-          <div>
-            <p className="text-[10px] sm:text-xs text-green-600 font-medium uppercase tracking-wide leading-tight">Riesgo Bajo</p>
-            <p className="text-xl sm:text-2xl font-bold text-green-700">
-              {loading ? '—' : countLow}
-            </p>
-          </div>
-        </div>
-        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
-            <Bell className="w-5 h-5 text-purple-600" />
-          </div>
-          <div>
-            <p className="text-[10px] sm:text-xs text-purple-600 font-medium uppercase tracking-wide leading-tight">Alertas Activas</p>
-            <p className="text-xl sm:text-2xl font-bold text-purple-700">
-              {loading ? '—' : countAlerts}
-            </p>
-          </div>
-        </div>
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-            <UserMinus className="w-5 h-5 text-gray-600" />
-          </div>
-          <div>
-            <p className="text-[10px] sm:text-xs text-gray-600 font-medium uppercase tracking-wide leading-tight">Inactivos</p>
-            <p className="text-xl sm:text-2xl font-bold text-gray-700">
-              {loading ? '—' : countInactive}
-            </p>
-          </div>
-        </div>
-      </div>
 
-      {/* Search and filters */}
-      <div className="bg-white rounded-lg border border-gray-200 p-5">
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="p-3 sm:p-4 flex items-center gap-3 flex-wrap">
           {/* Search bar */}
           <div className="flex-1 min-w-[220px] relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint" aria-hidden="true" />
             <input
               id="student-search"
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar por nombre o código..."
-              className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent text-sm"
+              aria-label="Buscar por nombre o código"
+              className={`${campo} w-full pl-10 pr-4`}
             />
           </div>
 
@@ -204,7 +209,8 @@ export default function StudentList() {
             id="semester-filter"
             value={semesterFilter}
             onChange={(e) => handleSemesterChange(e.target.value)}
-            className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent bg-white text-sm"
+            aria-label="Filtrar por semestre"
+            className={`${campo} flex-1 sm:flex-none min-w-[170px]`}
           >
             <option value="">Todos los Semestres</option>
             {SEMESTRES.map(s => (
@@ -217,7 +223,8 @@ export default function StudentList() {
             id="risk-filter"
             value={riskFilter}
             onChange={(e) => handleRiskChange(e.target.value)}
-            className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent bg-white text-sm"
+            aria-label="Filtrar por nivel de riesgo"
+            className={`${campo} flex-1 sm:flex-none min-w-[220px] lg:hidden`}
           >
             <option value="">Todos los Niveles de Riesgo</option>
             <option value="high">Riesgo Alto   (Promedio &lt; 3.0)</option>
@@ -225,12 +232,23 @@ export default function StudentList() {
             <option value="low">Riesgo Bajo   (Promedio ≥ 3.5)</option>
           </select>
 
+          {hayFiltros && (
+            <button
+              type="button"
+              onClick={limpiarFiltros}
+              className="h-10 px-3 text-sm font-medium text-primary rounded-[10px] hover:bg-primary-tint"
+            >
+              Limpiar filtros
+            </button>
+          )}
+
           {/* Refresh */}
           <button
             id="refresh-students"
             onClick={fetchStudents}
-            className="p-2.5 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-500 hover:text-[#C8102E] transition-colors"
+            className="h-10 w-10 flex items-center justify-center rounded-[10px] border border-line-strong text-ink-muted hover:text-ink hover:border-ink-faint"
             title="Actualizar"
+            aria-label="Actualizar lista"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -238,26 +256,26 @@ export default function StudentList() {
       </div>
 
       {/* Student table */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+      <div className="bg-white rounded-[14px] border border-gray-200 overflow-hidden">
+        <div className="border-b border-gray-200 px-5 sm:px-6 py-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-gray-900">
             {loading
               ? 'Cargando...'
               : `${total} estudiante${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`}
           </h2>
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-500 tabular-nums">
             Página {currentPage} de {pages}
           </span>
         </div>
 
         {/* Error state */}
         {error && (
-          <div className="p-8 text-center">
+          <div className="p-8 text-center" role="alert">
             <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
             <p className="text-sm text-red-600 font-medium">{error}</p>
             <button
               onClick={fetchStudents}
-              className="mt-3 text-sm text-[#C8102E] underline hover:no-underline"
+              className="mt-3 text-sm text-primary underline hover:no-underline"
             >
               Reintentar
             </button>
@@ -267,60 +285,62 @@ export default function StudentList() {
         {/* Empty state */}
         {!loading && !error && students.length === 0 && (
           <div className="p-12 text-center">
-            <Search className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm text-gray-500 font-medium">No se encontraron estudiantes</p>
-            <p className="text-xs text-gray-400 mt-1">Intenta con otros filtros o términos de búsqueda</p>
+            <div className="w-14 h-14 rounded-full bg-wash flex items-center justify-center mx-auto mb-4">
+              <Search className="w-6 h-6 text-gray-400" />
+            </div>
+            <p className="text-sm text-gray-700 font-semibold">No se encontraron estudiantes</p>
+            <p className="text-sm text-gray-500 mt-1">Intenta con otros filtros o términos de búsqueda</p>
+            {hayFiltros && (
+              <button type="button" onClick={limpiarFiltros} className="mt-4 text-sm font-medium text-primary hover:underline">
+                Quitar todos los filtros
+              </button>
+            )}
           </div>
         )}
 
         {/* Table */}
         {!error && students.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-[#C8102E] text-white">
+          <div className="overflow-x-auto animate-in fade-in duration-200">
+            <table className="w-full min-w-[720px]">
+              <thead className="bg-paper text-ink-soft border-b border-line">
                 <tr>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider">Código</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider">Nombre</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider">Semestre</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider">Promedio</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider">Nivel de Riesgo</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider">Alertas Activas</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider">Acciones</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold">Código</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold">Nombre</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold">Semestre</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold">Promedio</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold">Nivel de Riesgo</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold">Alertas Activas</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {students.map((student, index) => (
+                {students.map((student) => (
                   <tr
                     key={student.codigo}
-                    className={`
-                      ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-                      ${student.nivel_riesgo === 'high' ? '!bg-red-50' : ''}
-                      hover:bg-red-50 transition-colors duration-100
-                    `}
+                    onClick={() => navigate(`/dashboard/students/${student.codigo}`)}
+                    className="cursor-pointer"
                   >
-                    <td className="px-5 py-3.5 text-sm font-mono font-medium text-gray-800">
+                    <td className="px-5 py-3.5 text-sm tabular-nums font-medium text-gray-700 tabular-nums">
                       {student.codigo}
                     </td>
-                    <td className="px-5 py-3.5 text-sm text-gray-900 max-w-[240px] truncate">
+                    <td className="px-5 py-3.5 text-sm font-medium text-gray-900 max-w-[240px] truncate">
                       {student.nombre}
                     </td>
-                    <td className="px-5 py-3.5 text-sm text-gray-700">
+                    <td className="px-5 py-3.5 text-sm text-gray-700 tabular-nums">
                       {student.semestre}°
                     </td>
-                    <td className="px-5 py-3.5 text-sm font-semibold text-gray-900">
+                    <td className="px-5 py-3.5 text-sm font-semibold text-gray-900 tabular-nums">
                       {student.promedio !== null ? student.promedio.toFixed(2) : '—'}
                     </td>
                     <td className="px-5 py-3.5">
-                      {student.nivel_riesgo === 'high'    && <Badge variant="high">ALTO</Badge>}
-                      {student.nivel_riesgo === 'medium'  && <Badge variant="medium">MEDIO</Badge>}
-                      {student.nivel_riesgo === 'low'     && <Badge variant="low">BAJO</Badge>}
+                      {student.nivel_riesgo !== 'unknown' && <NivelRiesgoChip nivel={student.nivel_riesgo} texto={RISK_LABEL[student.nivel_riesgo]} />}
                       {student.nivel_riesgo === 'unknown' && (
-                        <span className="text-xs text-gray-400 italic">Sin dato</span>
+                        <span className="text-sm text-ink-muted">Sin dato</span>
                       )}
                     </td>
                     <td className="px-5 py-3.5">
                       {student.alertas_activas > 0 ? (
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#C8102E] text-white text-xs font-bold">
+                        <span className="inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-riesgo-critico text-white text-xs font-semibold">
                           {student.alertas_activas}
                         </span>
                       ) : (
@@ -328,7 +348,7 @@ export default function StudentList() {
                       )}
                     </td>
                     <td className="px-5 py-3.5">
-                      <Link to={`/dashboard/students/${student.codigo}`}>
+                      <Link to={`/dashboard/students/${student.codigo}`} onClick={(e) => e.stopPropagation()}>
                         <Button variant="outline" size="sm">Ver Perfil</Button>
                       </Link>
                     </td>
@@ -341,15 +361,15 @@ export default function StudentList() {
 
         {/* Loading skeleton */}
         {loading && !error && (
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-gray-100" aria-busy="true" aria-label="Cargando estudiantes">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="flex gap-4 px-5 py-4 animate-pulse">
-                <div className="h-4 bg-gray-200 rounded w-20 flex-shrink-0" />
-                <div className="h-4 bg-gray-200 rounded w-48" />
-                <div className="h-4 bg-gray-200 rounded w-10 flex-shrink-0" />
-                <div className="h-4 bg-gray-200 rounded w-12 flex-shrink-0" />
-                <div className="h-4 bg-gray-200 rounded w-16 flex-shrink-0" />
-                <div className="h-4 bg-gray-200 rounded w-10 flex-shrink-0" />
+              <div key={i} className="flex items-center gap-4 px-5 py-4 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded-md w-20 flex-shrink-0" />
+                <div className="h-4 bg-gray-200 rounded-md w-48" />
+                <div className="h-4 bg-gray-200 rounded-md w-10 flex-shrink-0" />
+                <div className="h-4 bg-gray-200 rounded-md w-12 flex-shrink-0" />
+                <div className="h-6 bg-gray-200 rounded-full w-16 flex-shrink-0" />
+                <div className="h-6 bg-gray-200 rounded-full w-6 flex-shrink-0" />
               </div>
             ))}
           </div>
@@ -357,8 +377,8 @@ export default function StudentList() {
 
         {/* Pagination */}
         {!error && pages > 1 && (
-          <div className="border-t border-gray-100 px-6 py-3 flex items-center justify-between">
-            <p className="text-xs text-gray-500">
+          <div className="border-t border-gray-100 px-5 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-xs text-gray-500 tabular-nums">
               Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, total)} de {total}
             </p>
             <div className="flex items-center gap-1">
@@ -366,7 +386,8 @@ export default function StudentList() {
                 id="prev-page"
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                aria-label="Página anterior"
+                className="p-2 rounded-[10px] hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft className="w-4 h-4 text-gray-600" />
               </button>
@@ -376,9 +397,10 @@ export default function StudentList() {
                   <button
                     key={p}
                     onClick={() => setCurrentPage(p)}
-                    className={`w-7 h-7 rounded text-xs font-medium transition-colors ${
+                    aria-current={p === currentPage ? 'page' : undefined}
+                    className={`w-8 h-8 rounded-[10px] text-xs font-medium tabular-nums transition-colors ${
                       p === currentPage
-                        ? 'bg-[#C8102E] text-white'
+                        ? 'bg-primary text-white'
                         : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
@@ -390,7 +412,8 @@ export default function StudentList() {
                 id="next-page"
                 onClick={() => setCurrentPage(p => Math.min(pages, p + 1))}
                 disabled={currentPage === pages}
-                className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                aria-label="Página siguiente"
+                className="p-2 rounded-[10px] hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronRight className="w-4 h-4 text-gray-600" />
               </button>

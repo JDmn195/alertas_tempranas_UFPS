@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { Check } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { AuthLayout, campoAcceso, etiquetaAcceso } from '../components/layouts/AuthLayout';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -78,91 +80,96 @@ export default function ResetPassword() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-[#F5F5F5] flex flex-col">
-        <div className="h-2 bg-[#C8102E]" />
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="w-full max-w-md bg-white rounded-lg border border-gray-200 p-8 shadow-sm text-center">
-            <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Contraseña actualizada!</h2>
-            <p className="text-gray-600 mb-6">Tu contraseña ha sido cambiada con éxito. Ya puedes iniciar sesión.</p>
-            <Button onClick={() => navigate('/login')} fullWidth size="lg">
-              Ir al inicio de sesión
-            </Button>
+      <AuthLayout>
+        <div role="status">
+          <div className="w-11 h-11 rounded-full bg-green-50 border border-green-200 text-green-700 flex items-center justify-center mb-4">
+            <Check className="w-5 h-5" aria-hidden="true" />
           </div>
+          <h1 className="text-2xl font-semibold text-ink">¡Contraseña actualizada!</h1>
+          <p className="mt-1.5 mb-6 text-ink-muted">Tu contraseña ha sido cambiada con éxito. Ya puedes iniciar sesión.</p>
+          <Button onClick={() => navigate('/login')} fullWidth size="lg">
+            Ir al inicio de sesión
+          </Button>
         </div>
-      </div>
+      </AuthLayout>
     );
   }
 
+  const largoOk = password.length >= 8;
+  const coinciden = confirmPassword.length > 0 && password === confirmPassword;
+
   return (
-    <div className="min-h-screen bg-[#F5F5F5] flex flex-col">
-      <div className="h-2 bg-[#C8102E]" />
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-[#C8102E] rounded-2xl mb-6">
-              <span className="text-white font-bold text-4xl">U</span>
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              {isForced ? 'Cambio de contraseña obligatorio' : 'Establecer nueva contraseña'}
-            </h1>
-            <p className="text-sm text-gray-600">
-              {isForced 
-                ? 'Por seguridad, debes cambiar tu contraseña inicial para continuar.'
-                : 'Ingresa tu nueva contraseña a continuación.'}
-            </p>
+    <AuthLayout>
+      <h1 className="text-2xl font-semibold text-ink">
+        {isForced ? 'Cambio de contraseña obligatorio' : 'Establecer nueva contraseña'}
+      </h1>
+      <p className="mt-1.5 mb-6 text-ink-muted">
+        {isForced
+          ? 'Por seguridad, debes cambiar tu contraseña inicial para continuar.'
+          : 'Ingresa tu nueva contraseña a continuación.'}
+      </p>
+
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <div role="alert" className="p-3 bg-red-100 border border-red-200 text-red-800 text-sm rounded-[10px]">
+            {error}
           </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-8 shadow-sm">
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {error && (
-                <div className="p-3 bg-red-100 border border-red-200 text-red-700 text-sm rounded-lg">
-                  {error}
-                </div>
-              )}
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                  Nueva contraseña
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent disabled:opacity-50"
-                  placeholder="••••••••"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
-                  Confirmar contraseña
-                </label>
-                <input
-                  id="confirmPassword"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-transparent disabled:opacity-50"
-                  placeholder="••••••••"
-                />
-              </div>
-
-              <Button type="submit" fullWidth size="lg" disabled={isLoading}>
-                {isLoading ? 'Actualizando...' : 'Cambiar contraseña'}
-              </Button>
-            </form>
-          </div>
+        )}
+        <div>
+          <label htmlFor="password" className={etiquetaAcceso}>
+            Nueva contraseña
+          </label>
+          <input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            disabled={isLoading}
+            autoComplete="new-password"
+            aria-describedby="requisitos-clave"
+            className={campoAcceso}
+            placeholder="••••••••"
+          />
         </div>
-      </div>
-    </div>
+
+        <div>
+          <label htmlFor="confirmPassword" className={etiquetaAcceso}>
+            Confirmar contraseña
+          </label>
+          <input
+            id="confirmPassword"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            disabled={isLoading}
+            autoComplete="new-password"
+            aria-describedby="requisitos-clave"
+            className={campoAcceso}
+            placeholder="••••••••"
+          />
+        </div>
+
+        {/* Los requisitos se marcan mientras se escribe; la validación al enviar no cambia */}
+        <ul id="requisitos-clave" className="space-y-1.5 text-sm">
+          {[
+            [largoOk, 'Al menos 8 caracteres'],
+            [coinciden, 'Las dos contraseñas coinciden'],
+          ].map(([ok, texto]) => (
+            <li key={texto as string} className={`flex items-center gap-2 ${ok ? 'text-green-700' : 'text-ink-muted'}`}>
+              <span className={`w-4 h-4 rounded-full border flex items-center justify-center ${ok ? 'bg-green-600 border-green-600 text-white' : 'border-line-strong'}`} aria-hidden="true">
+                {ok && <Check className="w-3 h-3" strokeWidth={3} />}
+              </span>
+              {texto}
+            </li>
+          ))}
+        </ul>
+
+        <Button type="submit" fullWidth size="lg" disabled={isLoading}>
+          {isLoading ? 'Actualizando...' : 'Cambiar contraseña'}
+        </Button>
+      </form>
+    </AuthLayout>
   );
 }
