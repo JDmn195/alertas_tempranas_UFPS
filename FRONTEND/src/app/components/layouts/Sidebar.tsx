@@ -18,6 +18,7 @@ import {
   Bell,
   CalendarCheck,
   HeartHandshake,
+  CircleHelp,
 } from 'lucide-react';
 import { cerrarSesionEnServidor } from '../../../services/session';
 import { toast } from 'sonner';
@@ -51,6 +52,7 @@ const navItems: NavItem[] = [
   { path: '/dashboard/portal/alertas', label: 'Mis alertas', icon: Bell, roles: ['ESTUDIANTE'], section: 'Mi Portal' },
   { path: '/dashboard/portal/asistencia', label: 'Mi asistencia', icon: CalendarCheck, roles: ['ESTUDIANTE'], section: 'Mi Portal' },
   { path: '/dashboard/portal/acompanamiento', label: 'Mi acompañamiento', icon: HeartHandshake, roles: ['ESTUDIANTE'], section: 'Mi Portal' },
+  { path: '/dashboard/ayuda', label: '¿Cómo funciona?', icon: CircleHelp, section: 'Ayuda' },
 ];
 
 export function Sidebar() {

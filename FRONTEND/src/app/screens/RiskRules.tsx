@@ -1,5 +1,6 @@
 import { toast } from 'sonner';
 import { confirmarAccion } from '../components/Confirmacion';
+import { Link } from 'react-router';
 import { useState, useEffect } from 'react';
 import { Plus, Settings, X, Trash2, AlertTriangle, Play, CheckCircle, CalendarX } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -212,6 +213,7 @@ export default function RiskRules() {
       <div className="border-l-4 border-[#C8102E] pl-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Configuración de Reglas de Riesgo</h1>
+          <Link to="/dashboard/ayuda#notas-ayuda" className="text-sm font-medium text-[#9B0C24] underline">Cómo se calculan las alertas de corte</Link>
           <p className="text-sm text-gray-600 mt-1">
             Definir y gestionar reglas para la detección de riesgo estudiantil
           </p>
