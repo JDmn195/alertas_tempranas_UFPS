@@ -8,9 +8,9 @@ type BadgeProps = {
 export function Badge({ variant, children, size = 'md', className = '' }: BadgeProps) {
   const variants = {
     low: 'bg-gray-100 text-gray-700 border-gray-300',
-    medium: 'bg-amber-100 text-amber-700 border-amber-300',
+    medium: 'bg-amber-100 text-amber-900 border-amber-300',
     high: 'bg-[#C8102E] text-white border-[#C8102E]',
-    success: 'bg-green-100 text-green-700 border-green-300',
+    success: 'bg-green-100 text-green-900 border-green-300',
     error: 'bg-red-100 text-red-700 border-red-300',
     gray: 'bg-gray-100 text-gray-600 border-gray-300',
   };

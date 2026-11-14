@@ -339,7 +339,7 @@ export default function RiskRules() {
           <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3" role="alert">
             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
             <span className="flex-1">{errorInasistencia}</span>
-            <button type="button" onClick={() => setErrorInasistencia(null)} className="text-red-500 hover:text-red-700">
+            <button aria-label="Cerrar aviso de inasistencia" type="button" onClick={() => setErrorInasistencia(null)} className="text-red-500 hover:text-red-700">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -445,7 +445,7 @@ export default function RiskRules() {
               {/* Modal header */}
               <div className="bg-[#C8102E] text-white px-6 py-4 flex items-center justify-between sticky top-0">
                 <h2 className="text-xl font-bold">{editingId ? 'Editar Regla' : 'Añadir Nueva Regla'}</h2>
-                <button
+                <button aria-label="Cerrar formulario de regla"
                   type="button"
                   onClick={() => setShowModal(false)}
                   className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-1"
