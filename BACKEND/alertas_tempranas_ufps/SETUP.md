@@ -17,7 +17,7 @@ Asegúrate de tener instalado en tu máquina:
 ## Paso 1 — Clonar el repositorio
 
 ```bash
-git clone https://github.com/tu-usuario/alertas_tempranas_UFPS.git
+git clone https://github.com/JDmn195/alertas_tempranas_UFPS.git
 cd alertas_tempranas_UFPS
 ```
 
@@ -264,5 +264,13 @@ alertas_tempranas_UFPS/
 ```
 
 ---
+
+## Documentación de usuario y validación local
+
+Consulta el [manual por rol](../../docs/Manual_Usuario_SAT.md) y el [README](../../README.md). El frontend utiliza npm y un único `package-lock.json`: ejecuta `npm ci`, `npm run dev` o `npm run build` desde `FRONTEND/`.
+
+La suite `npm run test:e2e` arranca sus servidores y recrea una base SQLite desechable, sin cargar `.env`. Incluye escenarios del personal y del portal del estudiante. Si Python no está en `env/`, configura `E2E_PYTHON` para tu sesión siguiendo las instrucciones de tu entorno; no apuntes la suite a producción. No ejecutes simultáneamente otro servidor en los puertos 8001/5174.
+
+La compilación carga las pantallas bajo demanda. Para validar fallos de Render, comprueba que una respuesta HTML de error muestre un aviso y permita reintentar. Las pruebas locales no reemplazan el humo sobre el despliegue final ni las mediciones de rendimiento en PostgreSQL.
 
 > **¿Tienes problemas?** Escríbele a Carlos Avendaño.
