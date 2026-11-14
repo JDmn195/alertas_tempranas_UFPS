@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { confirmarAccion } from '../components/Confirmacion';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
@@ -1096,7 +1097,7 @@ function SolicitarAcompanamiento() {
   };
 
   const cancelar = async (id: number) => {
-    if (!window.confirm('¿Quieres cancelar esta solicitud de acompañamiento?')) return;
+    if (!await confirmarAccion('¿Quieres cancelar esta solicitud de acompañamiento?')) return;
     try {
       const res = await apiFetch(`${baseUrl}/api/portal/solicitudes/${id}/cancelar/`, { method: 'PATCH' });
       const json = await res.json();

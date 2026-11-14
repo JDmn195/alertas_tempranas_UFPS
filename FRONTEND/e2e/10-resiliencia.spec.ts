@@ -3,6 +3,29 @@ import { sesion } from './datos';
 
 test.use({ storageState: sesion('admin') });
 
+test('cancelar una confirmación no envía el borrado; confirmar lo envía una vez', async ({ page }) => {
+  let borrados = 0;
+  await page.route('**/api/alertas/reglas/*/', async ruta => {
+    if (ruta.request().method() === 'DELETE') {
+      borrados++;
+      await ruta.fulfill({ status: 200, json: { mensaje: 'Regla eliminada.' } });
+    } else await ruta.continue();
+  });
+  page.on('dialog', () => { throw new Error('Se abrió un diálogo nativo del navegador.'); });
+  await page.goto('/dashboard/admin/risk-rules');
+  const eliminar = page.getByRole('button', { name: 'Eliminar regla Promedio Crítico', exact: true });
+  await eliminar.click();
+  const dialogo = page.getByRole('alertdialog');
+  await expect(dialogo).toBeVisible();
+  await dialogo.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await expect(dialogo).toHaveCount(0);
+  expect(borrados).toBe(0);
+  await eliminar.click();
+  await dialogo.getByRole('button', { name: 'Confirmar', exact: true }).click();
+  await expect.poll(() => borrados).toBe(1);
+  await expect(dialogo).toHaveCount(0);
+});
+
 test('una respuesta HTML del servidor muestra un error legible y permite recuperarse', async ({ page }) => {
   let fallar = true;
   await page.route('**/api/alertas/notificaciones/historial/**', async ruta => {

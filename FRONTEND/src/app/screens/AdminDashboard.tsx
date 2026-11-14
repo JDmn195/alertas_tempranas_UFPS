@@ -1,3 +1,4 @@
+import { confirmarAccion } from '../components/Confirmacion';
 import { API_BASE_URL } from '@/services/config';
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router';
@@ -128,7 +129,7 @@ export default function AdminDashboard() {
   };
 
   const handleMigrarRiesgo = async () => {
-    if (!window.confirm(
+    if (!await confirmarAccion(
       '¿Poblar RiesgoEstudiantePeriodo con los datos históricos?\n\n' +
       'Esto recalcula el nivel de riesgo por periodo para todos los estudiantes ' +
       'que no tienen registros de periodo. El proceso puede tardar unos minutos.'
