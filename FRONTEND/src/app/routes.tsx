@@ -1,30 +1,43 @@
 import { createBrowserRouter, Navigate } from "react-router";
+import { lazy, Suspense, type ComponentType } from "react";
 import { MainLayout } from "./components/layouts/MainLayout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import Login from "./screens/Login";
 import ForgotPassword from "./screens/ForgotPassword";
 import ResetPassword from "./screens/ResetPassword";
-import AdminDashboard from "./screens/AdminDashboard";
-import ImportLog from "./screens/ImportLog";
-import StudentProfile from "./screens/StudentProfile";
-import StudentList from "./screens/StudentList";
-import RiskRules from "./screens/RiskRules";
-import AlertManagement from "./screens/AlertManagement";
-import TeacherDashboard from "./screens/TeacherDashboard";
-import DirectorDashboard from "./screens/DirectorDashboard";
-import ExportReports from "./screens/ExportReports";
-import UserManagement from "./screens/UserManagement";
-import CourseList from './screens/CourseList'
-import EvidenceManagement from './screens/EvidenceManagement';
-import NotificationHistory from "./screens/NotificationHistory";
-import NotificationInbox from "./screens/NotificationInbox";
-import AuditLog from "./screens/AuditLog";
-import AutomaticProcesses from "./screens/AutomaticProcesses";
-import StudentPortal, { PortalAcompanamiento, PortalAlertas, PortalAsistencia } from "./screens/StudentPortal";
-import SolicitudesAcompanamiento from "./screens/SolicitudesAcompanamiento";
 import NotFound from "./screens/NotFound";
 import { PortalLayout } from "./components/layouts/PortalLayout";
 import { rutaInicio } from "../services/session";
+
+// SDAT-315: cada pantalla se descarga al abrir su ruta.
+function pantallaDiferida(cargar: () => Promise<{ default: ComponentType }>) {
+  const Pantalla = lazy(cargar);
+  return function PantallaConEspera() {
+    return <Suspense fallback={<p role="status" className="p-6">Cargando pantalla…</p>}><Pantalla /></Suspense>;
+  };
+}
+
+const AdminDashboard = pantallaDiferida(() => import('./screens/AdminDashboard'));
+const ImportLog = pantallaDiferida(() => import('./screens/ImportLog'));
+const StudentProfile = pantallaDiferida(() => import('./screens/StudentProfile'));
+const StudentList = pantallaDiferida(() => import('./screens/StudentList'));
+const RiskRules = pantallaDiferida(() => import('./screens/RiskRules'));
+const AlertManagement = pantallaDiferida(() => import('./screens/AlertManagement'));
+const TeacherDashboard = pantallaDiferida(() => import('./screens/TeacherDashboard'));
+const DirectorDashboard = pantallaDiferida(() => import('./screens/DirectorDashboard'));
+const ExportReports = pantallaDiferida(() => import('./screens/ExportReports'));
+const UserManagement = pantallaDiferida(() => import('./screens/UserManagement'));
+const CourseList = pantallaDiferida(() => import('./screens/CourseList'));
+const EvidenceManagement = pantallaDiferida(() => import('./screens/EvidenceManagement'));
+const NotificationHistory = pantallaDiferida(() => import('./screens/NotificationHistory'));
+const NotificationInbox = pantallaDiferida(() => import('./screens/NotificationInbox'));
+const AuditLog = pantallaDiferida(() => import('./screens/AuditLog'));
+const AutomaticProcesses = pantallaDiferida(() => import('./screens/AutomaticProcesses'));
+const SolicitudesAcompanamiento = pantallaDiferida(() => import('./screens/SolicitudesAcompanamiento'));
+const StudentPortal = pantallaDiferida(() => import('./screens/StudentPortal'));
+const PortalAcompanamiento = pantallaDiferida(() => import('./screens/StudentPortal').then(m => ({ default: m.PortalAcompanamiento })));
+const PortalAlertas = pantallaDiferida(() => import('./screens/StudentPortal').then(m => ({ default: m.PortalAlertas })));
+const PortalAsistencia = pantallaDiferida(() => import('./screens/StudentPortal').then(m => ({ default: m.PortalAsistencia })));
 
 // Pantalla inicial de /dashboard según el rol (el estudiante va a su portal)
 function InicioDashboard() {
