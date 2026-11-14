@@ -285,6 +285,9 @@ LOGGING = {
 
 # Email configuration
 EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+if EJECUTANDO_E2E:
+    # Los enlaces de recuperación no deben aparecer en la salida de las pruebas.
+    EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
 EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'

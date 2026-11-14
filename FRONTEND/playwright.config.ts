@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -9,8 +10,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND_PORT = 8001;
 const FRONTEND_PORT = 5174;
 const BACKEND_DIR = path.resolve(__dirname, '../BACKEND/alertas_tempranas_ufps');
-const PYTHON = process.env.E2E_PYTHON
-  ?? path.join(BACKEND_DIR, 'env', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+const PYTHON_VENV = path.join(BACKEND_DIR, 'env', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+const PYTHON = process.env.E2E_PYTHON ?? (existsSync(PYTHON_VENV) ? PYTHON_VENV : 'python');
 
 export default defineConfig({
   testDir: './e2e',
