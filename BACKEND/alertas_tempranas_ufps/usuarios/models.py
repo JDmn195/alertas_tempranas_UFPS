@@ -23,6 +23,8 @@ class Usuario(models.Model):
     debe_cambiar_contrasena = models.BooleanField(default=False)
     # Momento del último cambio de contraseña: los JWT emitidos antes dejan de valer
     contrasena_cambiada_en = models.DateTimeField(null=True, blank=True)
+    # SDAT-323: al cerrar sesión se invalidan todos los JWT de la versión anterior.
+    version_sesion = models.PositiveIntegerField(default=0)
 
     class Meta:
         db_table = 'usuario'
@@ -68,6 +70,7 @@ class Auditoria(models.Model):
         ('CONCLUIR_INTERVENCION', 'Concluir Intervención'),
         ('GENERAR_ALERTAS', 'Generar Alertas'),
         ('LOGIN', 'Inicio de Sesión'),
+        ('LOGOUT', 'Cierre de Sesión'),
         ('ACCESO_DENEGADO', 'Acceso Denegado (403)'),
         ('REGISTRO_ASISTENCIA', 'Registro de Asistencia'),  # HU-33
         ('ENVIO_RECORDATORIOS', 'Envío de Recordatorios'),  # HU-30

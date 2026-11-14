@@ -9,6 +9,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.password_validation import validate_password
 from django.core import signing
 from django.core.cache import cache
+from django.db.models import F
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.conf import settings
@@ -136,7 +137,8 @@ def login_view(request):
         # Lógica de JWT
         payload = {
             'user_id': usuario.id,
-            'exp': datetime.now(timezone.utc) + timedelta(days=1),
+            'exp': datetime.now(timezone.utc) + timedelta(hours=8),
+            'version_sesion': usuario.version_sesion,
             'iat': datetime.now(timezone.utc)
         }
         token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
@@ -159,6 +161,15 @@ def login_view(request):
     except Exception:
         logger.exception("Error inesperado en el inicio de sesión")
         return JsonResponse({'error': 'Error inesperado al iniciar sesión.'}, status=500)
+
+@csrf_exempt
+@require_http_methods(['POST'])
+@requiere_rol([rol for rol, _ in Usuario.ROL_CHOICES])
+def cerrar_sesion(request):
+    Usuario.objects.filter(pk=request.usuario.pk).update(version_sesion=F('version_sesion') + 1)
+    registrar_auditoria(request.usuario, 'LOGOUT', 'Cierre de sesión y revocación de las sesiones anteriores.')
+    return JsonResponse({'mensaje': 'Sesión cerrada.'})
+
 
 def _enviar_correo_recuperacion(usuario, link):
     """

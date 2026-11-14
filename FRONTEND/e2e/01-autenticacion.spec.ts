@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { CONTRASENA, USUARIOS, sesion } from './datos';
+import { CONTRASENA, CORREO_CIERRE, USUARIOS, sesion } from './datos';
 
 test.describe('Inicio de sesión', () => {
   test('credenciales incorrectas muestran el error y no dan acceso', async ({ page }) => {
@@ -52,8 +52,15 @@ test.describe('Sesión iniciada', () => {
     await expect(menu.getByRole('link', { name: 'Gestión de Usuarios' })).toHaveCount(0);
   });
 
+});
+
+test.describe('Cierre de sesión independiente', () => {
   test('cerrar sesión borra la sesión local', async ({ page }) => {
-    await page.goto('/dashboard/teacher');
+    await page.goto('/login');
+    await page.getByLabel('Correo electrónico').fill(CORREO_CIERRE);
+    await page.getByLabel('Contraseña').fill(CONTRASENA);
+    await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+    await expect(page).toHaveURL(/\/dashboard\/teacher$/, { timeout: 15_000 });
     await page.getByRole('button', { name: 'Cerrar Sesión' }).click();
     await expect(page).toHaveURL(/\/(login)?$/);
 

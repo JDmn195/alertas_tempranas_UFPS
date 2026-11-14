@@ -19,7 +19,8 @@ import {
   CalendarCheck,
   HeartHandshake,
 } from 'lucide-react';
-import { cerrarSesionLocal } from '../../../services/session';
+import { cerrarSesionEnServidor } from '../../../services/session';
+import { toast } from 'sonner';
 
 type NavItem = {
   path: string;
@@ -65,9 +66,13 @@ export function Sidebar() {
     return item.roles.some((role) => userRoles.includes(role));
   });
 
-  const handleLogout = () => {
-    cerrarSesionLocal();
-    window.location.href = '/login';
+  const handleLogout = async () => {
+    try {
+      await cerrarSesionEnServidor();
+      window.location.href = '/login';
+    } catch {
+      toast.error('No se pudo cerrar la sesión. Inténtalo de nuevo.');
+    }
   };
 
   return (
