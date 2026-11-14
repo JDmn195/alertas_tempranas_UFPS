@@ -1,9 +1,10 @@
+import { API_BASE_URL } from '@/services/config';
 import { useRef, useState } from 'react';
 import { Upload, CheckCircle, AlertCircle } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 import { Button } from './ui/Button';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const BASE_URL = API_BASE_URL;
 
 interface ErrorFila {
   fila: number;

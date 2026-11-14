@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect } from 'react';
 import { Badge } from '../components/ui/Badge';
 import { Mail, Check, Bell, Calendar, Filter } from 'lucide-react';
@@ -10,7 +11,7 @@ export default function NotificationInbox() {
 
   const fetchNotifications = async () => {
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseUrl = API_BASE_URL;
       // El backend devuelve las notificaciones del usuario del token
       const response = await apiFetch(`${baseUrl}/api/alertas/notificaciones/internas/`);
       const data = await response.json();
@@ -24,7 +25,7 @@ export default function NotificationInbox() {
 
   const markAsRead = async (id: number) => {
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseUrl = API_BASE_URL;
       await apiFetch(`${baseUrl}/api/alertas/notificaciones/internas/${id}/leer/`, {
         method: 'POST'
       });

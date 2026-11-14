@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, X, RefreshCw, AlertTriangle, Edit2, Search } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -30,7 +31,7 @@ export default function UserManagement() {
   // Contraseña temporal del usuario recién creado: el backend solo la devuelve una vez
   const [credencialesNuevas, setCredencialesNuevas] = useState<{ correo: string; contrasena: string } | null>(null);
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const baseUrl = API_BASE_URL;
 
   const fetchUsers = async () => {
     setLoading(true);

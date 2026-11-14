@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
@@ -16,7 +17,7 @@ import AttendanceModal from '../components/AttendanceModal';
 import AttendanceImport from '../components/AttendanceImport';
 
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const BASE_URL = API_BASE_URL;
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 

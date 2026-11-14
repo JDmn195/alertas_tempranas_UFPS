@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect, useCallback } from 'react';
 import { Users, TrendingUp, AlertCircle, BookX, RefreshCw } from 'lucide-react';
 import {
@@ -57,7 +58,7 @@ export default function DirectorDashboard() {
     else setLoading(true);
     setError(false);
     try {
-      const baseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+      const baseUrl = API_BASE_URL;
       const res = await apiFetch(`${baseUrl}/api/academico/indicadores/`);
       if (!res.ok) {
         const errBody = await res.text();

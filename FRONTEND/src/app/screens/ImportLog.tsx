@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useParams, Link } from 'react-router';
 import { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle, XCircle } from 'lucide-react';
@@ -13,7 +14,7 @@ export default function ImportLog() {
   useEffect(() => {
     const fetchLog = async () => {
       try {
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const baseUrl = API_BASE_URL;
         const response = await apiFetch(`${baseUrl}/api/academico/bitacora/${id}/`);
         const result = await response.json();
         if (result.status === 'success') {

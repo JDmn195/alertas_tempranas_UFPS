@@ -1,9 +1,10 @@
+import { API_BASE_URL } from '@/services/config';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Clock, HandHelping, Inbox, MessageSquareReply, UserCheck } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 
-const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const baseUrl = API_BASE_URL;
 
 type EstadoSolicitud = 'PENDIENTE' | 'EN_ATENCION' | 'ATENDIDA' | 'CANCELADA';
 

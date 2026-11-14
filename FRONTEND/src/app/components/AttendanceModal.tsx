@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect } from 'react';
 import { X, Save, AlertTriangle, Users, CheckSquare } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
@@ -46,7 +47,7 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const BASE_URL = API_BASE_URL;
 
   useEffect(() => {
     if (curso && selectedDate) {

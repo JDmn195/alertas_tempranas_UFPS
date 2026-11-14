@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Button } from '../components/ui/Button';
@@ -5,7 +6,7 @@ import { Badge } from '../components/ui/Badge';
 import { X, ClipboardList, CheckCircle2, AlertTriangle, Filter, ExternalLink, RefreshCw, ChevronRight, Search, ShieldCheck } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 
-const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas`;
+const API_BASE = `${API_BASE_URL}/api/alertas`;
 
 const RISK_CONFIG: Record<string, { label: string; variant: 'high' | 'medium' | 'low' }> = {
   high: { label: 'ALTO', variant: 'high' },
@@ -344,7 +345,7 @@ export default function AlertManagement() {
   const handleGenerateAlerts = async () => {
     setGenerating(true);
     try {
-      const res = await apiFetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas/generar/`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/alertas/generar/`, {
         method: 'POST'
       });
       const data = await res.json();
@@ -362,7 +363,7 @@ export default function AlertManagement() {
   const handleReevaluarAlertas = async () => {
     setReevaluating(true);
     try {
-      const res = await apiFetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas/reevaluar/`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/alertas/reevaluar/`, {
         method: 'POST'
       });
       const data = await res.json();

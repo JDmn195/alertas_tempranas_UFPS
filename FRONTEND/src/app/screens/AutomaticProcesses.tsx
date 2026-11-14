@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useEffect, useState } from 'react';
 import { BellRing, CalendarClock, ChevronDown, ChevronUp, Play, RefreshCw, Save } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -87,7 +88,7 @@ const ESTADO_RECORDATORIO: Record<Recordatorio['estado'], { label: string; class
   CANCELADO: { label: 'Cancelado', className: 'bg-gray-100 text-gray-600' },
 };
 
-const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const baseUrl = API_BASE_URL;
 
 const formatDate = (iso: string | null) =>
   iso
