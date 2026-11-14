@@ -382,7 +382,8 @@ def export_report_data(request):
         data = _get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids)
         return JsonResponse({'data': data})
     except ValueError as e:
-        return JsonResponse({'error': str(e)}, status=400)
+        logger.warning("Solicitud de reporte inválida: %s", e)
+        return JsonResponse({'error': 'Tipo de reporte no válido.'}, status=400)
     except Exception:
         logger.exception("Error al consultar los datos del reporte %s", tipo)
         return JsonResponse({'error': 'Error al consultar los datos del reporte.'}, status=500)
@@ -414,7 +415,8 @@ def exportar_reporte(request):
     try:
         data_list = _get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids)
     except ValueError as e:
-        return JsonResponse({'error': str(e)}, status=400)
+        logger.warning("Solicitud de exportación inválida: %s", e)
+        return JsonResponse({'error': 'Tipo de reporte no válido.'}, status=400)
     except Exception:
         logger.exception("Error al obtener los datos para exportar el reporte %s", tipo)
         return JsonResponse({'error': 'Error al obtener los datos del reporte.'}, status=500)
