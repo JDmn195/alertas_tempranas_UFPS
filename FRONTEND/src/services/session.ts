@@ -56,6 +56,9 @@ export async function cerrarSesionEnServidor(): Promise<void> {
     if (!respuesta.ok && respuesta.status !== 401) {
       throw new Error('No se pudo cerrar la sesión. Inténtalo de nuevo.');
     }
+    if (respuesta.ok && !respuesta.headers.get('Content-Type')?.includes('json')) {
+      throw new Error('No se pudo confirmar el cierre de sesión. Inténtalo de nuevo.');
+    }
   }
   cerrarSesionLocal();
 }
@@ -76,6 +79,7 @@ async function consultarServidor(token: string): Promise<ResultadoSesion> {
       return { estado: 'sin-sesion' };
     }
     if (!res.ok) throw new Error(`Error ${res.status}`);
+    if (!res.headers.get('Content-Type')?.includes('json')) throw new Error('Respuesta inválida del servidor.');
     const usuario: UsuarioSesion = await res.json();
     // Corrige cualquier dato alterado en localStorage con lo que dice el servidor
     const guardado = JSON.parse(localStorage.getItem('user') || '{}');

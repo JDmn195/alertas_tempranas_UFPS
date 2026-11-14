@@ -23,10 +23,13 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, { ...options, headers });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    throw new Error('No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.');
+  }
 
   // Token expirado o inválido: cerrar la sesión local y volver al login
   if (response.status === 401 && conToken) {
@@ -34,5 +37,19 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
     window.location.assign('/login');
   }
 
+  // SDAT-308: el proxy de Render puede responder HTML mientras despierta.
+  // Conservamos JSON y descargas; un error HTML nunca llega a response.json().
+  const tipo = response.headers.get('Content-Type') || '';
+  if ((!response.ok || tipo.includes('text/html')) && !tipo.includes('json') && response.status !== 204) {
+    const esperando = response.status >= 500 || response.status === 429 || response.ok;
+    return new Response(JSON.stringify({
+      error: esperando
+        ? 'El servidor está iniciando o no está disponible. Espera un momento e inténtalo de nuevo.'
+        : 'No se pudo completar la solicitud. Inténtalo de nuevo.',
+    }), {
+      status: response.ok ? 503 : response.status,
+      headers: { 'Content-Type': 'application/json', ...(response.headers.has('Retry-After') ? { 'Retry-After': response.headers.get('Retry-After')! } : {}) },
+    });
+  }
   return response;
 }

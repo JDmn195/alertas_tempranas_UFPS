@@ -7,6 +7,7 @@ import { apiFetch } from '../../services/apiFetch';
 export default function NotificationHistory() {
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
   const [filter, setFilter] = useState({
     resultado: '',
     canal: ''
@@ -14,6 +15,7 @@ export default function NotificationHistory() {
 
   const fetchHistory = async () => {
     setIsLoading(true);
+    setError('');
     try {
       const baseUrl = API_BASE_URL;
       const params = new URLSearchParams();
@@ -22,9 +24,10 @@ export default function NotificationHistory() {
       
       const response = await apiFetch(`${baseUrl}/api/alertas/notificaciones/historial/?${params.toString()}`);
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo cargar el historial.');
       setHistory(data.historial || []);
     } catch (error) {
-      console.error("Error fetching history:", error);
+      setError(error instanceof Error ? error.message : 'No se pudo cargar el historial.');
     } finally {
       setIsLoading(false);
     }
@@ -42,6 +45,10 @@ export default function NotificationHistory() {
           Auditoría de todas las comunicaciones enviadas por el sistema
         </p>
       </div>
+      {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <p>{error}</p>
+        <button type="button" className="mt-2 font-semibold underline" onClick={fetchHistory}>Reintentar</button>
+      </div>}
 
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <div className="flex gap-4 mb-6">
