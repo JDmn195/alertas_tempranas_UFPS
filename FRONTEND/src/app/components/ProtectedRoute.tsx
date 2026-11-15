@@ -36,7 +36,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
         <p>No se pudo verificar la sesión con el servidor.</p>
         <button
           onClick={() => { setSesion(undefined); setIntento((n) => n + 1); }}
-          className="px-4 py-2 rounded-lg bg-[#C8102E] text-white"
+          className="px-4 py-2 rounded-[10px] bg-primary text-white"
         >
           Reintentar
         </button>
