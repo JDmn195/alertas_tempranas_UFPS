@@ -1,7 +1,7 @@
 import os
 import uuid
 import logging
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 import httpx
 from django.http import JsonResponse
@@ -10,6 +10,7 @@ from django.views.decorators.http import require_http_methods
 from alertas.models import Intervencion, Evidencia
 from alertas.permisos import denegar_acceso_alerta, puede_acceder_alerta
 from usuarios.decorators import requiere_rol
+from alertas_tempranas_ufps.validacion_archivos import firma_valida
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,11 @@ BUCKET = os.environ.get("SUPABASE_BUCKET_NAME", "evidencias")
 # Formatos permitidos (los mismos que acepta el formulario: imágenes y PDF)
 EXTENSIONES_PERMITIDAS = {'.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp'}
 MAX_EVIDENCIA_MB = int(os.environ.get("MAX_EVIDENCIA_MB", 10))
+VIGENCIA_URL_SEGUNDOS = 300
+TIPOS_ARCHIVO = {
+    '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
+}
 
 # Valores de ejemplo de .env.example: si siguen así, la conexión falla con
 # "[Errno -2] Name or service not known" porque ese host no existe (INC-03).
@@ -78,6 +84,26 @@ def get_supabase():
         return None
 
 
+def _ruta_almacenamiento(url):
+    """Extrae la ruta de un registro existente sin confiar en otra ubicación."""
+    parsed = urlparse(url)
+    base = urlparse(os.environ.get('SUPABASE_URL', ''))
+    prefijo = f'/storage/v1/object/public/{BUCKET}/'
+    if parsed.netloc != base.netloc or not parsed.path.startswith(prefijo):
+        return None
+    ruta = unquote(parsed.path[len(prefijo):])
+    if not ruta or any(parte in ('', '.', '..') for parte in ruta.split('/')):
+        return None
+    return ruta
+
+
+def _url_firmada(supabase, url):
+    ruta = _ruta_almacenamiento(url)
+    if not ruta:
+        raise ValueError('Ruta de evidencia no reconocida')
+    return supabase.storage.from_(BUCKET).create_signed_url(ruta, VIGENCIA_URL_SEGUNDOS)['signedURL']
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 @requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
@@ -105,12 +131,16 @@ def upload_evidence(request, intervencion_id):
         }, status=400)
     if file_obj.size > MAX_EVIDENCIA_MB * 1024 * 1024:
         return JsonResponse({'error': f'El archivo supera el tamaño máximo de {MAX_EVIDENCIA_MB} MB.'}, status=413)
+    if not firma_valida(file_obj, ext):
+        return JsonResponse({'error': 'El contenido del archivo no corresponde a su formato.'}, status=400)
 
     supabase = get_supabase()
     if not supabase:
         return JsonResponse({'error': MSG_SIN_CONFIGURACION}, status=503)
 
     try:
+        if supabase.storage.get_bucket(BUCKET).public:
+            return JsonResponse({'error': 'El almacenamiento de evidencias debe ser privado.'}, status=503)
         # 1. Nombre único, en una carpeta por intervención
         filepath = f"intervencion_{intervencion_id}/{uuid.uuid4()}{ext}"
 
@@ -118,26 +148,26 @@ def upload_evidence(request, intervencion_id):
         supabase.storage.from_(BUCKET).upload(
             path=filepath,
             file=file_obj.read(),
-            file_options={"content-type": file_obj.content_type}
+            file_options={"content-type": TIPOS_ARCHIVO[ext]}
         )
 
-        # 3. URL pública (el bucket debe ser público o tener política de lectura).
-        # En versiones recientes de supabase-py es una cadena.
+        # 3. Referencia estable del objeto; el bucket privado no sirve esta URL directamente.
         public_url = supabase.storage.from_(BUCKET).get_public_url(filepath)
+        signed_url = _url_firmada(supabase, public_url)
 
         # 4. Guardar registro en la base de datos local
         evidencia = Evidencia.objects.create(
             intervencion=intervencion,
             archivo_url=public_url,
             nombre_archivo=file_obj.name,
-            tipo_archivo=file_obj.content_type
+            tipo_archivo=TIPOS_ARCHIVO[ext]
         )
 
         return JsonResponse({
             'mensaje': 'Evidencia subida correctamente',
             'evidencia': {
                 'id': evidencia.id,
-                'url': evidencia.archivo_url,
+                'url': signed_url,
                 'nombre': evidencia.nombre_archivo,
                 'tipo': evidencia.tipo_archivo,
                 'fecha': evidencia.fecha_subida.strftime('%Y-%m-%d %H:%M')
@@ -171,13 +201,23 @@ def list_evidence(request, intervencion_id):
 
     evidencias = Evidencia.objects.filter(intervencion_id=intervencion_id).order_by('-fecha_subida')
     
-    data = [{
-        'id': e.id,
-        'url': e.archivo_url,
-        'nombre': e.nombre_archivo,
-        'tipo': e.tipo_archivo,
-        'fecha': e.fecha_subida.strftime('%Y-%m-%d %H:%M')
-    } for e in evidencias]
+    data = []
+    if evidencias.exists():
+        supabase = get_supabase()
+        if not supabase:
+            return JsonResponse({'error': MSG_SIN_CONFIGURACION}, status=503)
+        try:
+            for e in evidencias:
+                data.append({
+                    'id': e.id,
+                    'url': _url_firmada(supabase, e.archivo_url),
+                    'nombre': e.nombre_archivo,
+                    'tipo': e.tipo_archivo,
+                    'fecha': e.fecha_subida.strftime('%Y-%m-%d %H:%M')
+                })
+        except (httpx.TransportError, OSError, ValueError, KeyError):
+            logger.exception('No se pudo firmar una evidencia de la intervención %s', intervencion_id)
+            return JsonResponse({'error': 'No se pudo acceder a las evidencias. Inténtelo más tarde.'}, status=503)
 
     return JsonResponse({
         'intervencion_id': intervencion_id,
@@ -212,10 +252,8 @@ def delete_evidence(request, evidencia_id):
 
     # Eliminar del Storage físicamente
     try:
-        # La URL es como: https://.../storage/v1/object/public/evidencias/intervencion_1/uuid.ext
-        # Necesitamos extraer: intervencion_1/uuid.ext
-        if f"/{BUCKET}/" in evidencia.archivo_url:
-            file_path = evidencia.archivo_url.split(f"/{BUCKET}/")[-1]
+        file_path = _ruta_almacenamiento(evidencia.archivo_url)
+        if file_path:
             supabase.storage.from_(BUCKET).remove([file_path])
     except Exception as e:
         logger.warning("Error al eliminar archivo de Supabase (path derivado de '%s'): %s",

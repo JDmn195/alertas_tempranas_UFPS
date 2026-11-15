@@ -38,7 +38,12 @@ class Command(BaseCommand):
         if cliente is None:
             raise CommandError('3. No se pudo crear el cliente de Supabase (revisa el log).')
         try:
+            bucket = cliente.storage.get_bucket(BUCKET)
+            if bucket.public:
+                raise CommandError(f"3. El bucket '{BUCKET}' es público. Cámbialo a privado antes de subir evidencias.")
             cliente.storage.from_(BUCKET).list(path='', options={'limit': 1})
+        except CommandError:
+            raise
         except Exception as e:
             raise CommandError(
                 f"3. Hay conexión, pero no se pudo acceder al bucket '{BUCKET}': {e}. Revisa que el bucket "

@@ -19,6 +19,7 @@ from usuarios.models import Usuario
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
 from academico.services.asistencia import normalizar_estado, estudiantes_del_curso, puede_gestionar_curso
+from alertas_tempranas_ufps.validacion_archivos import firma_valida
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ def calcular_definitiva(c1, c2, c3, examen):
 # Por defecto: 10 MB. Ajustar en settings.py con MAX_IMPORT_FILE_SIZE_MB.
 _MAX_MB = getattr(settings, 'MAX_IMPORT_FILE_SIZE_MB', 10)
 MAX_IMPORT_FILE_SIZE = _MAX_MB * 1024 * 1024  # bytes
+MAX_IMPORT_ROWS = getattr(settings, 'MAX_IMPORT_ROWS', 50000)
 
 # Porcentaje máximo de registros inválidos antes de cancelar una importación (INC-01)
 MAX_PORCENTAJE_INVALIDOS = getattr(settings, 'IMPORT_MAX_PORCENTAJE_INVALIDOS', 10)
@@ -86,6 +88,11 @@ def _validar_request_archivo(request, extensiones_permitidas=None):
                 {"error": f"Formato no soportado: '{extension}'. Se aceptan {ext_str}"},
                 status=400,
             )
+        if not firma_valida(archivo, extension):
+            return None, JsonResponse(
+                {'error': 'El contenido del archivo no corresponde a un Excel o CSV válido.'},
+                status=400,
+            )
 
     return archivo, None
 
@@ -98,9 +105,14 @@ def _leer_dataframe(archivo, dtype=None):
     extension = os.path.splitext(archivo.name)[1].lower()
     try:
         if extension == '.csv':
-            df = pd.read_csv(archivo, dtype=dtype or {})
+            df = pd.read_csv(archivo, dtype=dtype or {}, nrows=MAX_IMPORT_ROWS + 1)
         else:
-            df = pd.read_excel(archivo, dtype=dtype or {})
+            df = pd.read_excel(archivo, dtype=dtype or {}, nrows=MAX_IMPORT_ROWS + 1)
+        if len(df) > MAX_IMPORT_ROWS:
+            return None, JsonResponse(
+                {'error': f'El archivo supera el límite de {MAX_IMPORT_ROWS} filas.'},
+                status=413,
+            )
         df.columns = df.columns.str.strip()
         return df, None
     except Exception as e:
@@ -221,22 +233,27 @@ def importar_estudiantes_dirplan(request):
         error_tamano = _validar_tamano_archivo(file)
         if error_tamano:
             return error_tamano
+        extension = os.path.splitext(file.name)[1].lower()
+        if extension not in ('.xlsx', '.csv'):
+            return JsonResponse({"error": "Formato no soportado. Use .xlsx o .csv"}, status=400)
+        if not firma_valida(file, extension):
+            return JsonResponse({"error": "El contenido del archivo no corresponde a un Excel o CSV válido."}, status=400)
         try:
             # Leer archivo según extensión
-            if file.name.endswith('.xlsx'):
-                df = pd.read_excel(file)
-            elif file.name.endswith('.csv'):
+            if extension == '.xlsx':
+                df = pd.read_excel(file, nrows=MAX_IMPORT_ROWS + 1)
+            else:
                 try:
                     first_line = file.readline().decode('utf-8')
                     file.seek(0)
                     sep = ';' if ';' in first_line else ','
-                    df = pd.read_csv(file, sep=sep)
+                    df = pd.read_csv(file, sep=sep, nrows=MAX_IMPORT_ROWS + 1)
                 except (UnicodeDecodeError, ValueError):
                     # Fallback: intentar con encoding latin-1 o separador por defecto
                     file.seek(0)
-                    df = pd.read_csv(file, encoding='latin-1')
-            else:
-                return JsonResponse({"error": "Formato no soportado. Use .xlsx o .csv"}, status=400)
+                    df = pd.read_csv(file, encoding='latin-1', nrows=MAX_IMPORT_ROWS + 1)
+            if len(df) > MAX_IMPORT_ROWS:
+                return JsonResponse({'error': f'El archivo supera el límite de {MAX_IMPORT_ROWS} filas.'}, status=413)
 
             # Normalizar nombres de columnas
             def normalize_str(s):
@@ -581,6 +598,12 @@ def importar_historial_academico(request):
     if error_tamano:
         return error_tamano
 
+    extension = os.path.splitext(archivo.name)[1].lower()
+    if extension not in ('.xlsx', '.xls', '.csv'):
+        return JsonResponse({'error': 'Formato no soportado. Use .xlsx, .xls o .csv'}, status=400)
+    if not firma_valida(archivo, extension):
+        return JsonResponse({'error': 'El contenido del archivo no corresponde a un Excel o CSV válido.'}, status=400)
+
     nombre_archivo = archivo.name
     match = re.search(r'(\d{5,10})', nombre_archivo)
     if not match:
@@ -593,8 +616,12 @@ def importar_historial_academico(request):
         return JsonResponse({"error": f"Estudiante {codigo_estudiante} no existe"}, status=404)
 
     try:
-        extension = os.path.splitext(nombre_archivo)[1].lower()
-        df = pd.read_excel(archivo) if extension != '.csv' else pd.read_csv(archivo)
+        if extension == '.csv':
+            df = pd.read_csv(archivo, nrows=MAX_IMPORT_ROWS + 1)
+        else:
+            df = pd.read_excel(archivo, nrows=MAX_IMPORT_ROWS + 1)
+        if len(df) > MAX_IMPORT_ROWS:
+            return JsonResponse({'error': f'El archivo supera el límite de {MAX_IMPORT_ROWS} filas.'}, status=413)
         df.columns = df.columns.str.strip()
 
         # Validar que el archivo tenga las columnas esperadas.
