@@ -44,6 +44,21 @@ export function cerrarSesionLocal() {
   cache = null;
 }
 
+/** Revoca primero la sesión en el servidor; si falla, permite reintentar el cierre. */
+export async function cerrarSesionEnServidor(): Promise<void> {
+  const token = tokenGuardado();
+  if (token) {
+    const respuesta = await fetch(`${baseUrl}/api/usuarios/logout/`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!respuesta.ok && respuesta.status !== 401) {
+      throw new Error('No se pudo cerrar la sesión. Inténtalo de nuevo.');
+    }
+  }
+  cerrarSesionLocal();
+}
+
 /** Resultado ya verificado para el token actual, si lo hay (para no mostrar "cargando" de nuevo). */
 export function sesionVerificada(): ResultadoSesion | undefined {
   const token = tokenGuardado();
