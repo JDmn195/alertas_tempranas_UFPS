@@ -6,6 +6,7 @@ import Login from "./screens/Login";
 import ForgotPassword from "./screens/ForgotPassword";
 import ResetPassword from "./screens/ResetPassword";
 import NotFound from "./screens/NotFound";
+import ErrorRuta from "./screens/ErrorRuta";
 import { PortalLayout } from "./components/layouts/PortalLayout";
 import { rutaInicio } from "../services/session";
 
@@ -54,21 +55,26 @@ export const router = createBrowserRouter([
   {
     path: "/",
     Component: Login,
+    errorElement: <ErrorRuta />,
   },
   {
     path: "/login",
     Component: Login,
+    errorElement: <ErrorRuta />,
   },
   {
     path: "/forgot-password",
     Component: ForgotPassword,
+    errorElement: <ErrorRuta />,
   },
   {
     path: "/reset-password/:token?",
     Component: ResetPassword,
+    errorElement: <ErrorRuta />,
   },
   {
     path: "/dashboard",
+    errorElement: <ErrorRuta />,
     element: (
       <ProtectedRoute>
         <MainLayout />
@@ -160,5 +166,5 @@ export const router = createBrowserRouter([
       { path: "*", element: <NotFound /> },
     ],
   },
-  { path: "*", element: <NotFound /> },
+  { path: "*", element: <NotFound />, errorElement: <ErrorRuta /> },
 ]);
