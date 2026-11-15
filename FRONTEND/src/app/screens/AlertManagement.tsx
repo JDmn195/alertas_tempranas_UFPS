@@ -1,3 +1,5 @@
+import { toast } from 'sonner';
+import { confirmarAccion } from '../components/Confirmacion';
 import { API_BASE_URL } from '@/services/config';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -353,7 +355,7 @@ export default function AlertManagement() {
       fetchAlerts();
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err) {
-      alert('Error al conectar con el servicio de alertas');
+      toast.error('Error al conectar con el servicio de alertas');
     } finally {
       setGenerating(false);
     }
@@ -371,7 +373,7 @@ export default function AlertManagement() {
       fetchAlerts();
       setTimeout(() => setSuccessMsg(null), 6000);
     } catch (err) {
-      alert('Error al reevaluar alertas');
+      toast.error('Error al reevaluar alertas');
     } finally {
       setReevaluating(false);
     }
@@ -689,7 +691,7 @@ export default function AlertManagement() {
                                 variant="outline" 
                                 size="sm" 
                                 className="h-9 px-3 border-gray-200 text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-xl"
-                                onClick={() => { if(window.confirm('¿Seguro que deseas cerrar esta alerta?')) handleCerrarAlerta(alert.id); }}
+                                onClick={async () => { if(await confirmarAccion('¿Seguro que deseas cerrar esta alerta?')) handleCerrarAlerta(alert.id); }}
                               >
                                 <X className="w-4 h-4" />
                               </Button>
@@ -710,7 +712,7 @@ export default function AlertManagement() {
                                 variant="outline" 
                                 size="sm" 
                                 className="h-9 px-4 border-gray-200 text-gray-500 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-xl flex-1 lg:flex-none"
-                                onClick={() => { if(window.confirm('¿Cerrar esta alerta? Ya no se podrán registrar más intervenciones.')) handleCerrarAlerta(alert.id); }}
+                                onClick={async () => { if(await confirmarAccion('¿Cerrar esta alerta? Ya no se podrán registrar más intervenciones.')) handleCerrarAlerta(alert.id); }}
                               >
                                 <X className="w-3.5 h-3.5 mr-2" />
                                 <span className="text-[10px] font-extrabold uppercase tracking-widest">Cerrar Alerta</span>
