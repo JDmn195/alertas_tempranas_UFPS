@@ -26,6 +26,9 @@ export default function Login() {
         body: JSON.stringify({ email, password }),
       });
 
+      if (!response.headers.get('Content-Type')?.includes('json')) {
+        throw new Error('El servidor está iniciando o no está disponible. Espera un momento e inténtalo de nuevo.');
+      }
       const data = await response.json();
 
       if (response.ok) {
@@ -45,8 +48,8 @@ export default function Login() {
         setError(data.error || 'Error al iniciar sesión.');
       }
     } catch (err) {
-      console.error('Error de login:', err);
-      setError('Error de conexión con el servidor.');
+      setError(err instanceof Error && err.message.startsWith('El servidor está iniciando')
+        ? err.message : 'No se pudo conectar con el servidor. Inténtalo de nuevo.');
     } finally {
       setIsLoading(false);
     }
@@ -79,7 +82,7 @@ export default function Login() {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               {error && (
-                <div className="p-3 bg-red-100 border border-red-200 text-red-700 text-sm rounded-lg">
+                <div role="alert" className="p-3 bg-red-100 border border-red-200 text-red-700 text-sm rounded-lg">
                   {error}
                 </div>
               )}
