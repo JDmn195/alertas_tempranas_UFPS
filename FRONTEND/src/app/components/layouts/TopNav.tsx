@@ -1,15 +1,21 @@
-import { Bell } from 'lucide-react';
+import { Bell, Menu } from 'lucide-react';
 import { Link } from 'react-router';
+import { SheetTrigger } from '../ui/sheet';
 
 export function TopNav() {
   const userJson = localStorage.getItem('user');
   const esEstudiante = (userJson ? JSON.parse(userJson) : null)?.rol === 'ESTUDIANTE';
 
   return (
-    <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
-      <div>
+    <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 gap-3">
+      <SheetTrigger asChild>
+        <button type="button" aria-label="Abrir menú" className="lg:hidden rounded-lg p-2 text-gray-700 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C8102E]">
+          <Menu className="w-5 h-5" aria-hidden="true" />
+        </button>
+      </SheetTrigger>
+      <div className="min-w-0 flex-1">
         <h2 className="text-lg font-semibold text-gray-900">{esEstudiante ? 'Portal del Estudiante' : 'Panel de Control'}</h2>
-        <p className="text-sm text-gray-500">Universidad Francisco de Paula Santander</p>
+        <p className="hidden sm:block text-sm text-gray-500">Universidad Francisco de Paula Santander</p>
       </div>
 
       {/* Las notificaciones internas son del personal; el portal no tiene acceso a ellas */}

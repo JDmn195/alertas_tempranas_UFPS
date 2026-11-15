@@ -55,7 +55,7 @@ const navItems: NavItem[] = [
   { path: '/dashboard/ayuda', label: '¿Cómo funciona?', icon: CircleHelp, section: 'Ayuda' },
 ];
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const userJson = localStorage.getItem('user');
   const user = userJson ? JSON.parse(userJson) : null;
@@ -78,7 +78,7 @@ export function Sidebar() {
   };
 
   return (
-    <div className="w-64 bg-white border-r border-gray-200 h-screen flex flex-col">
+    <div className="w-64 bg-white border-r border-gray-200 h-full flex flex-col">
       {/* Logo */}
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center gap-3">
@@ -93,7 +93,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1" aria-label="Menú principal">
         {filteredItems.map((item, index) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path || (!item.exacta && location.pathname.startsWith(item.path + '/'));
@@ -106,6 +106,8 @@ export function Sidebar() {
             )}
             <Link
               to={item.path}
+              onClick={onNavigate}
+              aria-current={isActive ? 'page' : undefined}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors relative ${
                 isActive
                   ? 'text-[#C8102E] bg-red-50'
