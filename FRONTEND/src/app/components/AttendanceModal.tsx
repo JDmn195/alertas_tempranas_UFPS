@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect } from 'react';
 import { X, Save, AlertTriangle, Users, CheckSquare } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
@@ -47,7 +48,7 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const BASE_URL = API_BASE_URL;
 
   useEffect(() => {
     if (curso && selectedDate) {
@@ -148,7 +149,7 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
               <h2 className="text-xl font-semibold">Tomar Asistencia: {curso.materia}</h2>
               <p className="text-sm text-ink-muted">{curso.codigo} · Grupo {curso.grupo}</p>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-[10px] text-ink-muted hover:text-ink hover:bg-wash transition-colors">
+            <button aria-label="Cerrar ventana de asistencia" onClick={onClose} className="p-1.5 rounded-[10px] text-ink-muted hover:text-ink hover:bg-wash transition-colors">
               <X className="w-6 h-6" />
             </button>
           </div>

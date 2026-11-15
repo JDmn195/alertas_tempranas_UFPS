@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Search, RefreshCw, ChevronLeft, ChevronRight,
@@ -45,7 +46,7 @@ interface ApiResponse {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/academico`;
+const API_BASE = `${API_BASE_URL}/api/academico`;
 const PAGE_SIZE = 15;
 const UMBRAL_CRITICO = 30;
 
@@ -522,7 +523,7 @@ export default function CourseList() {
               Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, total)} de {total}
             </p>
             <div className="flex items-center gap-1">
-              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+              <button aria-label="Página anterior" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
                 className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
                 <ChevronLeft className="w-4 h-4 text-gray-600" />
               </button>
@@ -535,7 +536,7 @@ export default function CourseList() {
                   </button>
                 );
               })}
-              <button onClick={() => setCurrentPage(p => Math.min(pages, p + 1))} disabled={currentPage === pages}
+              <button aria-label="Página siguiente" onClick={() => setCurrentPage(p => Math.min(pages, p + 1))} disabled={currentPage === pages}
                 className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
                 <ChevronRight className="w-4 h-4 text-gray-600" />
               </button>
@@ -555,7 +556,7 @@ export default function CourseList() {
                   {umbralEditando.codigo_materia} G-{umbralEditando.grupo} · {umbralEditando.materia}
                 </p>
               </div>
-              <button onClick={cerrarEdicionUmbral} className="text-ink-muted hover:text-ink hover:bg-wash rounded-[10px] p-1.5">
+              <button aria-label="Cerrar edición de umbral" onClick={cerrarEdicionUmbral} className="text-ink-muted hover:text-ink hover:bg-wash rounded-[10px] p-1.5">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -632,7 +633,7 @@ export default function CourseList() {
                   <h2 className="text-xl font-semibold">Detalle del Curso</h2>
                   <p className="text-xs opacity-90">Consulta de estudiantes matriculados</p>
                 </div>
-                <button
+                <button aria-label="Cerrar detalle del curso"
                   onClick={() => { setSelectedCourseDetail(null); setCourseDetailData(null); }}
                   className="text-ink-muted hover:text-ink hover:bg-wash rounded-[10px] p-1.5 transition-colors"
                 >

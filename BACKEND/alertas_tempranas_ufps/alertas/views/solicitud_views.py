@@ -19,6 +19,7 @@ from alertas.solicitudes import (
 from usuarios.decorators import requiere_rol
 from usuarios.models import Usuario
 from usuarios.utils import registrar_auditoria
+from alertas_tempranas_ufps.paginacion import paginar_si_se_pide, metadatos_pagina
 
 
 def _serializar(solicitud):
@@ -86,11 +87,13 @@ def listar_solicitudes(request):
         .distinct().order_by('-anio', '-semestre')
     ]
 
+    pagina = paginar_si_se_pide(request, qs.order_by('-fecha_solicitud', '-id'))
     return JsonResponse({
-        'solicitudes': [_serializar(s) for s in qs.order_by('-fecha_solicitud', '-id')],
+        'solicitudes': [_serializar(s) for s in (pagina if pagina is not None else qs.order_by('-fecha_solicitud', '-id'))],
         'conteos': conteos,
         'periodos': periodos,
         'estados': [{'valor': valor, 'texto': texto} for valor, texto in ESTADOS.items()],
+        **metadatos_pagina(pagina),
     })
 
 

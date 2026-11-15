@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useEffect, useState } from 'react';
 import { Bell, ChevronRight, Menu } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
@@ -9,7 +10,7 @@ function useAvisosSinLeer(pathname: string): number {
   const [sinLeer, setSinLeer] = useState(0);
   useEffect(() => {
     let vigente = true;
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const baseUrl = API_BASE_URL;
     apiFetch(`${baseUrl}/api/alertas/notificaciones/internas/`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {

@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
@@ -12,7 +13,7 @@ import { type ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, Char
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
-const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const baseUrl = API_BASE_URL;
 
 type Nivel = 'high' | 'medium' | 'low';
 
@@ -1507,7 +1508,7 @@ function TarjetaAsistencia({ curso }: { curso: CursoAsistencia }) {
           <p className={`text-2xl font-semibold tabular-nums ${curso.supera_umbral ? 'text-red-700' : curso.cerca_del_limite ? 'text-amber-700' : 'text-gray-900'}`}>
             {sinClases ? '—' : `${numero(curso.porcentaje)} %`}
           </p>
-          <p className="text-xs text-gray-500">de inasistencia</p>
+          <p className="text-xs text-gray-500">de inasistencia · <Link to="/dashboard/ayuda#asistencia-ayuda" className="font-medium text-primary underline">Cómo se calcula</Link></p>
         </div>
       </div>
 

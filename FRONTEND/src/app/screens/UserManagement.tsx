@@ -1,3 +1,6 @@
+import { toast } from 'sonner';
+import { confirmarAccion } from '../components/Confirmacion';
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, X, RefreshCw, AlertTriangle, Edit2, Search } from 'lucide-react';
 import { CintaIndicadores, EncabezadoPagina } from '../components/Panel';
@@ -32,7 +35,7 @@ export default function UserManagement() {
   // Contraseña temporal del usuario recién creado: el backend solo la devuelve una vez
   const [credencialesNuevas, setCredencialesNuevas] = useState<{ correo: string; contrasena: string } | null>(null);
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const baseUrl = API_BASE_URL;
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -115,7 +118,7 @@ export default function UserManagement() {
   };
 
   const handleToggleStatus = async (user: User) => {
-    if (!window.confirm(`¿Estás seguro de que quieres ${user.activo ? 'desactivar' : 'activar'} a este usuario?`)) {
+    if (!await confirmarAccion(`¿Estás seguro de que quieres ${user.activo ? 'desactivar' : 'activar'} a este usuario?`)) {
       return;
     }
     
@@ -129,7 +132,7 @@ export default function UserManagement() {
       }
       fetchUsers();
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message);
     }
   };
 

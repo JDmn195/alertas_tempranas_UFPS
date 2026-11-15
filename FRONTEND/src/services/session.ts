@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 // src/services/session.ts
 //
 // El usuario guardado en localStorage se puede modificar desde el navegador, así
@@ -5,7 +6,7 @@
 // a partir del JWT (GET /api/usuarios/me/). Se verifica una vez por carga de la
 // página y por token. La protección real de los datos está en el backend.
 
-const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const baseUrl = API_BASE_URL;
 
 export interface UsuarioSesion {
   id: number;
@@ -44,6 +45,24 @@ export function cerrarSesionLocal() {
   cache = null;
 }
 
+/** Revoca primero la sesión en el servidor; si falla, permite reintentar el cierre. */
+export async function cerrarSesionEnServidor(): Promise<void> {
+  const token = tokenGuardado();
+  if (token) {
+    const respuesta = await fetch(`${baseUrl}/api/usuarios/logout/`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!respuesta.ok && respuesta.status !== 401) {
+      throw new Error('No se pudo cerrar la sesión. Inténtalo de nuevo.');
+    }
+    if (respuesta.ok && !respuesta.headers.get('Content-Type')?.includes('json')) {
+      throw new Error('No se pudo confirmar el cierre de sesión. Inténtalo de nuevo.');
+    }
+  }
+  cerrarSesionLocal();
+}
+
 /** Resultado ya verificado para el token actual, si lo hay (para no mostrar "cargando" de nuevo). */
 export function sesionVerificada(): ResultadoSesion | undefined {
   const token = tokenGuardado();
@@ -60,6 +79,7 @@ async function consultarServidor(token: string): Promise<ResultadoSesion> {
       return { estado: 'sin-sesion' };
     }
     if (!res.ok) throw new Error(`Error ${res.status}`);
+    if (!res.headers.get('Content-Type')?.includes('json')) throw new Error('Respuesta inválida del servidor.');
     const usuario: UsuarioSesion = await res.json();
     // Corrige cualquier dato alterado en localStorage con lo que dice el servidor
     const guardado = JSON.parse(localStorage.getItem('user') || '{}');

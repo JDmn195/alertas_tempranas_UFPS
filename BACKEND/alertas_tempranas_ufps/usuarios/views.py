@@ -1,6 +1,7 @@
 import json
 import logging
 import secrets
+from ipaddress import ip_address
 import jwt
 from datetime import datetime, timedelta, timezone
 from django.http import JsonResponse
@@ -8,6 +9,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.password_validation import validate_password
 from django.core import signing
 from django.core.cache import cache
+from django.db.models import F
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.conf import settings
@@ -16,6 +18,7 @@ from django.views.decorators.http import require_http_methods
 from .models import Usuario
 from .decorators import obtener_usuario_de_request, requiere_rol
 from .utils import registrar_auditoria
+from alertas_tempranas_ufps.paginacion import paginar_si_se_pide, metadatos_pagina
 
 logger = logging.getLogger(__name__)
 
@@ -28,21 +31,36 @@ def _huella_contrasena(usuario):
     return salted_hmac('usuarios.huella-contrasena', usuario.contrasena).hexdigest()[:16]
 
 
-# Límite de intentos fallidos de inicio de sesión por correo (contra fuerza bruta)
+# Límite por IP y correo: un origen no bloquea el acceso desde otro.
 LOGIN_MAX_INTENTOS = getattr(settings, 'LOGIN_MAX_INTENTOS', 5)
 LOGIN_BLOQUEO_MINUTOS = getattr(settings, 'LOGIN_BLOQUEO_MINUTOS', 15)
 
 
-def _clave_intentos(correo):
-    return 'login-fallidos:' + salted_hmac('usuarios.login', str(correo).strip().lower()).hexdigest()
+def _ip_login(request):
+    # Render recibe el tráfico público a través de Cloudflare. Fuera de Render
+    # no confiamos en cabeceras de IP enviadas por el cliente.
+    if getattr(settings, 'RENDER_EXTERNAL_HOSTNAME', None):
+        try:
+            return str(ip_address(request.META.get('HTTP_CF_CONNECTING_IP', '')))
+        except ValueError:
+            pass
+    try:
+        return str(ip_address(request.META.get('REMOTE_ADDR', '')))
+    except ValueError:
+        return 'sin-ip'
 
 
-def _login_bloqueado(correo):
-    return cache.get(_clave_intentos(correo), 0) >= LOGIN_MAX_INTENTOS
+def _clave_intentos(correo, ip):
+    identificador = json.dumps([str(correo).strip().lower(), ip])
+    return 'login-fallidos:' + salted_hmac('usuarios.login', identificador).hexdigest()
 
 
-def _registrar_intento_fallido(correo):
-    clave = _clave_intentos(correo)
+def _login_bloqueado(correo, ip):
+    return cache.get(_clave_intentos(correo, ip), 0) >= LOGIN_MAX_INTENTOS
+
+
+def _registrar_intento_fallido(correo, ip):
+    clave = _clave_intentos(correo, ip)
     cache.add(clave, 0, LOGIN_BLOQUEO_MINUTOS * 60)
     try:
         cache.incr(clave)
@@ -50,8 +68,8 @@ def _registrar_intento_fallido(correo):
         cache.set(clave, 1, LOGIN_BLOQUEO_MINUTOS * 60)
 
 
-def _limpiar_intentos_fallidos(correo):
-    cache.delete(_clave_intentos(correo))
+def _limpiar_intentos_fallidos(correo, ip):
+    cache.delete(_clave_intentos(correo, ip))
 
 
 def _validar_rol(rol):
@@ -89,7 +107,8 @@ def login_view(request):
         if not correo or not contrasena:
             return JsonResponse({'error': 'Faltan credenciales.'}, status=400)
 
-        if _login_bloqueado(correo):
+        ip = _ip_login(request)
+        if _login_bloqueado(correo, ip):
             return JsonResponse({
                 'error': f'Demasiados intentos fallidos. Intente de nuevo en {LOGIN_BLOQUEO_MINUTOS} minutos '
                          f'o recupere su contraseña.'
@@ -99,12 +118,12 @@ def login_view(request):
         if usuario is None:
             # Hashear igual para no revelar por el tiempo de respuesta si el correo existe
             Usuario().set_password(contrasena)
-            _registrar_intento_fallido(correo)
+            _registrar_intento_fallido(correo, ip)
             return JsonResponse({'error': 'Credenciales incorrectas.'}, status=401)
         if not usuario.check_password(contrasena):
-            _registrar_intento_fallido(correo)
+            _registrar_intento_fallido(correo, ip)
             return JsonResponse({'error': 'Credenciales incorrectas.'}, status=401)
-        _limpiar_intentos_fallidos(correo)
+        _limpiar_intentos_fallidos(correo, ip)
 
         if not usuario.activo:
             return JsonResponse({'error': 'La cuenta está desactivada.'}, status=403)
@@ -119,7 +138,8 @@ def login_view(request):
         # Lógica de JWT
         payload = {
             'user_id': usuario.id,
-            'exp': datetime.now(timezone.utc) + timedelta(days=1),
+            'exp': datetime.now(timezone.utc) + timedelta(hours=8),
+            'version_sesion': usuario.version_sesion,
             'iat': datetime.now(timezone.utc)
         }
         token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
@@ -142,6 +162,15 @@ def login_view(request):
     except Exception:
         logger.exception("Error inesperado en el inicio de sesión")
         return JsonResponse({'error': 'Error inesperado al iniciar sesión.'}, status=500)
+
+@csrf_exempt
+@require_http_methods(['POST'])
+@requiere_rol([rol for rol, _ in Usuario.ROL_CHOICES])
+def cerrar_sesion(request):
+    Usuario.objects.filter(pk=request.usuario.pk).update(version_sesion=F('version_sesion') + 1)
+    registrar_auditoria(request.usuario, 'LOGOUT', 'Cierre de sesión y revocación de las sesiones anteriores.')
+    return JsonResponse({'mensaje': 'Sesión cerrada.'})
+
 
 def _enviar_correo_recuperacion(usuario, link):
     """
@@ -262,7 +291,7 @@ def cambiar_contrasena(request):
         return JsonResponse({'error': ' '.join(e.messages)}, status=400)
 
     usuario.cambiar_contrasena(nueva_contrasena)
-    _limpiar_intentos_fallidos(usuario.correo)
+    _limpiar_intentos_fallidos(usuario.correo, _ip_login(request))
 
     return JsonResponse({'mensaje': 'Contraseña actualizada correctamente.'}, status=200)
 
@@ -287,15 +316,16 @@ def sesion_actual(request):
 @require_http_methods(["GET"])
 @requiere_rol(['ADMINISTRADOR'])
 def listar_usuarios(request):
-    usuarios = Usuario.objects.all().order_by('nombre')
+    usuarios = Usuario.objects.all().order_by('nombre', 'id')
+    pagina = paginar_si_se_pide(request, usuarios)
     data = [{
         'id': u.id,
         'nombre': u.nombre,
         'correo': u.correo,
         'rol': u.rol,
         'activo': u.activo
-    } for u in usuarios]
-    return JsonResponse({'usuarios': data}, status=200)
+    } for u in (pagina if pagina is not None else usuarios)]
+    return JsonResponse({'usuarios': data, **metadatos_pagina(pagina)}, status=200)
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -471,7 +501,10 @@ def cuenta_estudiante(request, codigo):
     try:
         accion, usuario, anterior = asociar_cuenta_estudiante(estudiante, data.get('correo'))
     except ErrorCuentaEstudiante as e:
-        return JsonResponse({'error': str(e)}, status=409)
+        logger.warning("No se pudo asociar la cuenta del estudiante %s: %s", codigo, e)
+        return JsonResponse({
+            'error': 'No se puede asociar la cuenta. Revise el correo institucional y que no pertenezca a otra persona.'
+        }, status=409)
     except Exception:
         logger.exception("Error al crear o asociar la cuenta del estudiante %s", codigo)
         return JsonResponse({'error': 'Error al crear o asociar la cuenta del estudiante.'}, status=500)

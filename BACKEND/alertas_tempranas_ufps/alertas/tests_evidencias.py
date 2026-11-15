@@ -77,6 +77,7 @@ class SubidaEvidenciasTests(BaseAlertas):
     @patch.dict(os.environ, ENV_OK)
     def test_fallo_dns_responde_503_sin_detalle_tecnico(self):
         cliente = MagicMock()
+        cliente.storage.get_bucket.return_value.public = False
         cliente.storage.from_.return_value.upload.side_effect = httpx.ConnectError(
             '[Errno -2] Name or service not known')
         with patch('supabase.create_client', return_value=cliente):
@@ -95,11 +96,54 @@ class SubidaEvidenciasTests(BaseAlertas):
     @patch.dict(os.environ, ENV_OK)
     def test_subida_exitosa(self):
         cliente = MagicMock()
-        cliente.storage.from_.return_value.get_public_url.return_value = 'https://abcdefgh.supabase.co/x/acta.pdf'
+        cliente.storage.get_bucket.return_value.public = False
+        cliente.storage.from_.return_value.get_public_url.return_value = (
+            'https://abcdefgh.supabase.co/storage/v1/object/public/evidencias/intervencion_1/acta.pdf'
+        )
+        cliente.storage.from_.return_value.create_signed_url.return_value = {
+            'signedURL': 'https://abcdefgh.supabase.co/storage/v1/object/sign/evidencias/intervencion_1/acta.pdf'
+        }
         with patch('supabase.create_client', return_value=cliente):
             resp = self._subir(self.interv_propia, self.director)
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(Evidencia.objects.get().intervencion, self.interv_propia)
+        self.assertIn('/object/sign/', resp.json()['evidencia']['url'])
+        cliente.storage.from_.return_value.create_signed_url.assert_called_once()
+
+    @patch.dict(os.environ, ENV_OK)
+    def test_bucket_publico_rechaza_nuevas_evidencias(self):
+        cliente = MagicMock()
+        cliente.storage.get_bucket.return_value.public = True
+        with patch('supabase.create_client', return_value=cliente):
+            resp = self._subir(self.interv_propia, self.director)
+        self.assertEqual(resp.status_code, 503)
+        cliente.storage.from_.return_value.upload.assert_not_called()
+        self.assertFalse(Evidencia.objects.exists())
+
+    @patch.dict(os.environ, ENV_OK)
+    def test_pdf_falso_no_se_sube(self):
+        archivo = SimpleUploadedFile('acta.pdf', b'<script>contenido</script>', content_type='application/pdf')
+        url = reverse('subir-evidencia', kwargs={'intervencion_id': self.interv_propia.id})
+        resp = self.client.post(url, {'file': archivo}, **_auth(self.director))
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(Evidencia.objects.exists())
+
+    @patch.dict(os.environ, ENV_OK)
+    def test_listado_firma_url_guardada(self):
+        Evidencia.objects.create(
+            intervencion=self.interv_propia,
+            archivo_url='https://abcdefgh.supabase.co/storage/v1/object/public/evidencias/intervencion_1/acta.pdf',
+            nombre_archivo='acta.pdf',
+        )
+        cliente = MagicMock()
+        cliente.storage.from_.return_value.create_signed_url.return_value = {
+            'signedURL': 'https://abcdefgh.supabase.co/storage/v1/object/sign/evidencias/intervencion_1/acta.pdf'
+        }
+        with patch('supabase.create_client', return_value=cliente):
+            resp = self.client.get(reverse('listar-evidencias', kwargs={'intervencion_id': self.interv_propia.id}),
+                                   **_auth(self.director))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('/object/sign/', resp.json()['evidencias'][0]['url'])
 
 
 class AlcanceDocenteTests(BaseAlertas):

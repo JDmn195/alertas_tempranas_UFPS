@@ -1,3 +1,6 @@
+import { toast } from 'sonner';
+import { confirmarAccion } from '../components/Confirmacion';
+import { API_BASE_URL } from '@/services/config';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Button } from '../components/ui/Button';
@@ -8,7 +11,7 @@ import { X, ClipboardList, CheckCircle2, AlertTriangle, Filter, ExternalLink, Re
 import { apiFetch } from '../../services/apiFetch';
 
 import { AvisoError, CargandoBloque, CargandoLista, EstadoVacio } from '../components/Estados';
-const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas`;
+const API_BASE = `${API_BASE_URL}/api/alertas`;
 
 const RISK_CONFIG: Record<string, { label: string; variant: 'high' | 'medium' | 'low' }> = {
   high: { label: 'ALTO', variant: 'high' },
@@ -133,7 +136,7 @@ function ModalRegistrar({
             <ClipboardList className="w-5 h-5 text-primary" />
             <h2 className="text-base font-semibold text-gray-900">Registrar Intervención</h2>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button aria-label="Cerrar registro de intervención" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -236,7 +239,7 @@ function ModalHistorial({
             <ClipboardList className="w-5 h-5 text-primary" />
             <h2 className="text-base font-semibold text-gray-900">Historial de Intervenciones</h2>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button aria-label="Cerrar historial de intervenciones" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -353,7 +356,7 @@ export default function AlertManagement() {
   const handleGenerateAlerts = async () => {
     setGenerating(true);
     try {
-      const res = await apiFetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas/generar/`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/alertas/generar/`, {
         method: 'POST'
       });
       const data = await res.json();
@@ -361,7 +364,7 @@ export default function AlertManagement() {
       fetchAlerts();
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err) {
-      alert('Error al conectar con el servicio de alertas');
+      toast.error('Error al conectar con el servicio de alertas');
     } finally {
       setGenerating(false);
     }
@@ -371,7 +374,7 @@ export default function AlertManagement() {
   const handleReevaluarAlertas = async () => {
     setReevaluating(true);
     try {
-      const res = await apiFetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/alertas/reevaluar/`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/alertas/reevaluar/`, {
         method: 'POST'
       });
       const data = await res.json();
@@ -379,7 +382,7 @@ export default function AlertManagement() {
       fetchAlerts();
       setTimeout(() => setSuccessMsg(null), 6000);
     } catch (err) {
-      alert('Error al reevaluar alertas');
+      toast.error('Error al reevaluar alertas');
     } finally {
       setReevaluating(false);
     }
@@ -706,11 +709,11 @@ export default function AlertManagement() {
                               >
                                 <span className="text-[10px] font-semibold uppercase tracking-widest">Intervenir</span>
                               </Button>
-                              <Button 
+                              <Button aria-label="Cerrar alerta"
                                 variant="outline" 
                                 size="sm" 
                                 className="h-9 px-3 border-gray-200 text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-[10px]"
-                                onClick={() => { if(window.confirm('¿Seguro que deseas cerrar esta alerta?')) handleCerrarAlerta(alert.id); }}
+                                onClick={async () => { if(await confirmarAccion('¿Seguro que deseas cerrar esta alerta?')) handleCerrarAlerta(alert.id); }}
                               >
                                 <X className="w-4 h-4" />
                               </Button>
@@ -731,7 +734,7 @@ export default function AlertManagement() {
                                 variant="outline" 
                                 size="sm" 
                                 className="h-9 px-4 border-gray-200 text-gray-500 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-[10px] flex-1 lg:flex-none"
-                                onClick={() => { if(window.confirm('¿Cerrar esta alerta? Ya no se podrán registrar más intervenciones.')) handleCerrarAlerta(alert.id); }}
+                                onClick={async () => { if(await confirmarAccion('¿Cerrar esta alerta? Ya no se podrán registrar más intervenciones.')) handleCerrarAlerta(alert.id); }}
                               >
                                 <X className="w-3.5 h-3.5 mr-2" />
                                 <span className="text-[10px] font-semibold uppercase tracking-widest">Cerrar Alerta</span>

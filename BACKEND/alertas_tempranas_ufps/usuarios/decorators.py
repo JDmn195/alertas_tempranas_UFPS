@@ -21,6 +21,9 @@ def obtener_usuario_de_request(request):
         if not user_id:
             return None
         usuario = Usuario.objects.get(id=user_id, activo=True)
+        # Los tokens anteriores a SDAT-323 pertenecen a la versión inicial (0).
+        if payload.get('version_sesion', 0) != usuario.version_sesion:
+            return None
         # Un token emitido antes del último cambio de contraseña ya no es válido
         if usuario.contrasena_cambiada_en is not None:
             emitido = payload.get('iat')

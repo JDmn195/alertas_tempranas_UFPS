@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Search, AlertTriangle, CheckCircle, Activity, RefreshCw, ChevronLeft, ChevronRight, Bell, UserMinus } from 'lucide-react';
@@ -26,7 +27,7 @@ interface ApiResponse {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/academico`;
+const API_BASE = `${API_BASE_URL}/api/academico`;
 const PAGE_SIZE = 15;
 
 const RISK_LABEL: Record<string, string> = {
@@ -382,7 +383,7 @@ export default function StudentList() {
               Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, total)} de {total}
             </p>
             <div className="flex items-center gap-1">
-              <button
+              <button aria-label="Página anterior"
                 id="prev-page"
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
@@ -408,7 +409,7 @@ export default function StudentList() {
                   </button>
                 );
               })}
-              <button
+              <button aria-label="Página siguiente"
                 id="next-page"
                 onClick={() => setCurrentPage(p => Math.min(pages, p + 1))}
                 disabled={currentPage === pages}

@@ -1,3 +1,5 @@
+import { API_BASE_URL } from '@/services/config';
+import { Link } from 'react-router';
 import { useEffect, useState } from 'react';
 import { BellRing, CalendarClock, ChevronDown, ChevronUp, Play, RefreshCw, Save } from 'lucide-react';
 import { CintaIndicadores, EncabezadoPagina, Seccion } from '../components/Panel';
@@ -89,7 +91,7 @@ const ESTADO_RECORDATORIO: Record<Recordatorio['estado'], { label: string; class
   CANCELADO: { label: 'Cancelado', className: 'bg-gray-100 text-ink-muted' },
 };
 
-const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const baseUrl = API_BASE_URL;
 
 const formatDate = (iso: string | null) =>
   iso
@@ -513,7 +515,7 @@ export default function AutomaticProcesses() {
     <div className="space-y-5">
       <EncabezadoPagina
         titulo="Procesos automáticos"
-        detalle="Re-evaluación periódica del riesgo y recordatorios de casos sin seguimiento."
+        detalle={<>Re-evaluación periódica del riesgo y recordatorios de casos sin seguimiento. <Link to="/dashboard/ayuda#procesos-ayuda" className="font-medium text-primary underline">Horarios y estado de la revaluación</Link></>}
       />
       <ReevaluacionPeriodica puedeEjecutar={puedeEjecutarReevaluacion} />
       <RecordatoriosSeguimiento />

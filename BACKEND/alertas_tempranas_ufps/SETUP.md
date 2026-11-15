@@ -17,7 +17,7 @@ Asegúrate de tener instalado en tu máquina:
 ## Paso 1 — Clonar el repositorio
 
 ```bash
-git clone https://github.com/tu-usuario/alertas_tempranas_UFPS.git
+git clone https://github.com/JDmn195/alertas_tempranas_UFPS.git
 cd alertas_tempranas_UFPS
 ```
 
@@ -220,15 +220,20 @@ Tras 5 intentos fallidos de inicio de sesión, la cuenta se bloquea 15 minutos
 
 ## Almacenamiento de evidencias (Supabase)
 
-Las evidencias de las intervenciones se suben a Supabase Storage. Define en `.env`
-`SUPABASE_URL`, `SUPABASE_KEY` (service role key) y `SUPABASE_BUCKET_NAME` con los datos
-reales del proyecto y comprueba la conexión con:
+Las evidencias de las intervenciones se suben a Supabase Storage. Configura
+`SUPABASE_URL`, `SUPABASE_KEY` (clave de servicio) y `SUPABASE_BUCKET_NAME`
+en el gestor seguro del servidor y comprueba la conexión con:
 
 ```bash
 python manage.py verificar_almacenamiento
 ```
 
-El comando revisa la configuración, la resolución DNS del host y el acceso al bucket.
+El comando revisa la configuración, la resolución DNS, el acceso al bucket y que sea privado.
+Antes de usar el flujo nuevo, cambia el bucket existente a **privado** en Supabase Storage.
+Comprueba con una evidencia de prueba que la URL pública antigua ya no abra el archivo
+y que el listado de la API entregue una URL firmada temporal a un usuario autorizado.
+Las URL firmadas duran cinco minutos. Conserva la clave de servicio solo en la
+configuración segura del servidor; nunca en el frontend ni en el repositorio.
 El error `[Errno -2] Name or service not known` significa que el host de `SUPABASE_URL`
 no resuelve: normalmente quedó el valor de ejemplo `https://tu-proyecto.supabase.co` o la
 URL tiene un error.
@@ -264,5 +269,13 @@ alertas_tempranas_UFPS/
 ```
 
 ---
+
+## Documentación de usuario y validación local
+
+Consulta el [manual por rol](../../docs/Manual_Usuario_SAT.md) y el [README](../../README.md). El frontend utiliza npm y un único `package-lock.json`: ejecuta `npm ci`, `npm run dev` o `npm run build` desde `FRONTEND/`.
+
+La suite `npm run test:e2e` arranca sus servidores y recrea una base SQLite desechable, sin cargar `.env`. Incluye escenarios del personal y del portal del estudiante. Si Python no está en `env/`, configura `E2E_PYTHON` para tu sesión siguiendo las instrucciones de tu entorno; no apuntes la suite a producción. No ejecutes simultáneamente otro servidor en los puertos 8001/5174.
+
+La compilación carga las pantallas bajo demanda. Para validar fallos de Render, comprueba que una respuesta HTML de error muestre un aviso y permita reintentar. Las pruebas locales no reemplazan el humo sobre el despliegue final ni las mediciones de rendimiento en PostgreSQL.
 
 > **¿Tienes problemas?** Escríbele a Carlos Avendaño.

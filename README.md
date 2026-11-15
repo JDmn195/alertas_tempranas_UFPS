@@ -1,10 +1,12 @@
 # Sistema de Alertas Tempranas Académicas (UFPS)
 
+Documentación: [manual por rol](docs/Manual_Usuario_SAT.md) y [guía técnica](BACKEND/alertas_tempranas_ufps/SETUP.md). El frontend utiliza npm: `npm ci`, `npm run dev` y `npm run build` desde `FRONTEND/`.
+
 Plataforma web institucional para la detección oportuna, seguimiento y gestión de intervenciones a estudiantes en condición de vulnerabilidad o riesgo académico en la **Universidad Francisco de Paula Santander (UFPS)**.
 
 * **Repositorio:** [https://github.com/JDmn195/alertas_tempranas_UFPS](https://github.com/JDmn195/alertas_tempranas_UFPS)
 * **Despliegue Frontend:** [Vercel](https://alertas-tempranas-ufps.vercel.app/) *(Configurado mediante `FRONTEND/vercel.json`)*
-* **Despliegue Backend:** Render / Neon PostgreSQL
+* **Despliegue Backend:** [Render](https://alertas-tempranas-ufps.onrender.com/) / Neon PostgreSQL
 
 ---
 

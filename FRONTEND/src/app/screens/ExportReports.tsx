@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useMemo, useEffect } from 'react';
 import { 
   FileText, 
@@ -53,7 +54,7 @@ export default function ExportReports() {
       setIsLoading(true);
       setFetchError('');
       try {
-        const baseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+        const baseUrl = API_BASE_URL;
         const res = await apiFetch(`${baseUrl}/api/alertas/reportes/?tipo=${selectedReportId}`);
         if (!res.ok) throw new Error(`Error ${res.status}`);
         const json = await res.json();
@@ -387,7 +388,7 @@ export default function ExportReports() {
 
           {/* Botón principal */}
           <Button fullWidth size="lg" className="w-full font-semibold" onClick={async () => {
-            const baseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+            const baseUrl = API_BASE_URL;
             const params = new URLSearchParams({
               tipo: selectedReportId,
               formato: format,
@@ -635,7 +636,7 @@ export default function ExportReports() {
               <button
                 type="button"
                 onClick={() => {
-                  const baseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+                  const baseUrl = API_BASE_URL;
                   const params = new URLSearchParams({
                     tipo: selectedReportId,
                     formato: format,

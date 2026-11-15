@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect } from 'react';
 import { CintaIndicadores, EncabezadoPagina } from '../components/Panel';
 import { Badge } from '../components/ui/Badge';
@@ -8,6 +9,7 @@ import { CargandoFilas, EstadoVacio } from '../components/Estados';
 export default function NotificationHistory() {
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
   const [filter, setFilter] = useState({
     resultado: '',
     canal: ''
@@ -15,17 +17,19 @@ export default function NotificationHistory() {
 
   const fetchHistory = async () => {
     setIsLoading(true);
+    setError('');
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseUrl = API_BASE_URL;
       const params = new URLSearchParams();
       if (filter.resultado) params.append('resultado', filter.resultado);
       if (filter.canal) params.append('canal', filter.canal);
       
       const response = await apiFetch(`${baseUrl}/api/alertas/notificaciones/historial/?${params.toString()}`);
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo cargar el historial.');
       setHistory(data.historial || []);
     } catch (error) {
-      console.error("Error fetching history:", error);
+      setError(error instanceof Error ? error.message : 'No se pudo cargar el historial.');
     } finally {
       setIsLoading(false);
     }
@@ -47,6 +51,13 @@ export default function NotificationHistory() {
         titulo="Historial de Notificaciones"
         detalle="Auditoría de todas las comunicaciones enviadas por el sistema."
       />
+
+      {error && (
+        <div role="alert" className="rounded-[10px] border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <p>{error}</p>
+          <button type="button" className="mt-2 font-semibold underline" onClick={fetchHistory}>Reintentar</button>
+        </div>
+      )}
 
       <CintaIndicadores
         cargando={isLoading && history.length === 0}

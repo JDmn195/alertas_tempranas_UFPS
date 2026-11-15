@@ -19,9 +19,11 @@ import {
   Bell,
   CalendarCheck,
   HeartHandshake,
+  CircleHelp,
   X,
 } from 'lucide-react';
-import { cerrarSesionLocal } from '../../../services/session';
+import { cerrarSesionEnServidor, cerrarSesionLocal } from '../../../services/session';
+import { toast } from 'sonner';
 
 export type NavItem = {
   path: string;
@@ -52,6 +54,7 @@ export const navItems: NavItem[] = [
   { path: '/dashboard/portal/alertas', label: 'Mis alertas', icon: Bell, roles: ['ESTUDIANTE'], section: 'Mi Portal' },
   { path: '/dashboard/portal/asistencia', label: 'Mi asistencia', icon: CalendarCheck, roles: ['ESTUDIANTE'], section: 'Mi Portal' },
   { path: '/dashboard/portal/acompanamiento', label: 'Mi acompañamiento', icon: HeartHandshake, roles: ['ESTUDIANTE'], section: 'Mi Portal' },
+  { path: '/dashboard/ayuda', label: '¿Cómo funciona?', icon: CircleHelp, section: 'Ayuda' },
 ];
 
 // Pantallas que no están en el menú pero tienen nombre propio
@@ -103,9 +106,14 @@ export function tituloDePagina(pathname: string): string {
   return ubicacionDePagina(pathname).label;
 }
 
-export function cerrarSesion() {
-  cerrarSesionLocal();
-  window.location.href = '/login';
+export async function cerrarSesion() {
+  try {
+    await cerrarSesionEnServidor();
+    cerrarSesionLocal();
+    window.location.href = '/login';
+  } catch {
+    toast.error('No se pudo cerrar la sesión. Inténtalo de nuevo.');
+  }
 }
 
 /**

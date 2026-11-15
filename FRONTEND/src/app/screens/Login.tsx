@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { Button } from '../components/ui/Button';
@@ -17,7 +18,7 @@ export default function Login() {
     setError('');
 
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseUrl = API_BASE_URL;
       const response = await fetch(`${baseUrl}/api/usuarios/login/`, {
         method: 'POST',
         headers: {
@@ -26,6 +27,9 @@ export default function Login() {
         body: JSON.stringify({ email, password }),
       });
 
+      if (!response.headers.get('Content-Type')?.includes('json')) {
+        throw new Error('El servidor está iniciando o no está disponible. Espera un momento e inténtalo de nuevo.');
+      }
       const data = await response.json();
 
       if (response.ok) {
@@ -45,8 +49,8 @@ export default function Login() {
         setError(data.error || 'Error al iniciar sesión.');
       }
     } catch (err) {
-      console.error('Error de login:', err);
-      setError('Error de conexión con el servidor.');
+      setError(err instanceof Error && err.message.startsWith('El servidor está iniciando')
+        ? err.message : 'No se pudo conectar con el servidor. Inténtalo de nuevo.');
     } finally {
       setIsLoading(false);
     }

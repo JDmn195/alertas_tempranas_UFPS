@@ -1,6 +1,8 @@
 // Escenario que carga `manage.py preparar_e2e` (BACKEND/.../alertas/management/commands/preparar_e2e.py)
 
 export const CONTRASENA = 'Clave-Segura-2026';
+// Cuenta existente fuera de USUARIOS: el logout no revoca sus snapshots compartidos.
+export const CORREO_CIERRE = 'otro@ufps.edu.co';
 
 export const USUARIOS = {
   admin: { correo: 'admin@ufps.edu.co', nombre: 'Admin E2E', rol: 'ADMINISTRADOR' },

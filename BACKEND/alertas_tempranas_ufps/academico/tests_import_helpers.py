@@ -184,12 +184,25 @@ class ValidarRequestArchivoTests(TestCase):
         self.assertIn(".txt", body["error"])
 
     def test_extension_permitida_pasa(self):
-        request = self._make_request(file_name='datos.csv')
+        request = self._make_request(file_name='datos.csv', file_size=1, file_content=b'Codigo\n123')
         archivo, error = _validar_request_archivo(
             request, extensiones_permitidas=['.xlsx', '.csv']
         )
         self.assertIsNotNone(archivo)
         self.assertIsNone(error)
+
+    def test_excel_falso_con_extension_permitida_se_rechaza(self):
+        request = self._make_request(file_name='datos.xlsx')
+        archivo, error = _validar_request_archivo(request, extensiones_permitidas=['.xlsx'])
+        self.assertIsNone(archivo)
+        self.assertEqual(error.status_code, 400)
+
+    def test_excel_autentico_con_extension_permitida_pasa(self):
+        archivo_excel = SimpleUploadedFile('datos.xlsx', _make_excel_bytes({'Codigo': ['123']}))
+        request = self.factory.post('/', {'file': archivo_excel})
+        archivo, error = _validar_request_archivo(request, extensiones_permitidas=['.xlsx'])
+        self.assertIsNone(error)
+        self.assertIsNotNone(archivo)
 
     def test_sin_restriccion_de_extension_cualquier_archivo_pasa(self):
         request = self._make_request(file_name='datos.txt')
@@ -269,6 +282,13 @@ class LeerDataframeTests(TestCase):
         self.assertIsNone(error)
         # Con dtype=str el valor debe ser string, no int
         self.assertIsInstance(df.iloc[0]["Codigo"], str)
+
+    @patch('academico.views.import_views.MAX_IMPORT_ROWS', 2)
+    def test_limite_filas_rechaza_antes_de_importar(self):
+        archivo = SimpleUploadedFile('datos.csv', _make_csv_bytes({'Codigo': [1, 2, 3]}))
+        df, error = _leer_dataframe(archivo)
+        self.assertIsNone(df)
+        self.assertEqual(error.status_code, 413)
 
 
 # ==============================================================================

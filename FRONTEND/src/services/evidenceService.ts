@@ -1,6 +1,7 @@
+import { API_BASE_URL } from '@/services/config';
 import { apiFetch } from './apiFetch';
 
-const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000') + '/api/alertas';
+const API_BASE = (API_BASE_URL) + '/api/alertas';
 
 export interface Evidencia {
   id: number;

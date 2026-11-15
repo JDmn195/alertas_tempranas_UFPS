@@ -1,4 +1,5 @@
 import json
+import logging
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
@@ -9,6 +10,16 @@ from django.db.models import ProtectedError
 from usuarios.models import Usuario
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
+
+logger = logging.getLogger(__name__)
+
+
+class ErrorValidacionRegla(ValueError):
+    """Mensaje de negocio controlado, separado de las excepciones internas."""
+
+    def __init__(self, mensaje):
+        super().__init__(mensaje)
+        self.mensaje = mensaje
 
 
 def _recalcular_en_background(usuario, regla_id=None):
@@ -46,13 +57,13 @@ def _validar_regla_corte(tipo, valor_umbral, parametros, regla_id=None):
         return
 
     if not isinstance(parametros, dict):
-        raise ValueError("Para reglas de tipo CORTE, 'parametros' debe ser un objeto JSON.")
+        raise ErrorValidacionRegla("Para reglas de tipo CORTE, 'parametros' debe ser un objeto JSON.")
 
     clave = parametros.get('clave')
     evalua = parametros.get('evalua')
 
     if not clave or not isinstance(clave, str) or not clave.strip():
-        raise ValueError("El parámetro 'clave' es obligatorio para reglas CORTE.")
+        raise ErrorValidacionRegla("El parámetro 'clave' es obligatorio para reglas CORTE.")
     clave = clave.strip()
 
     # Unicidad de clave entre reglas CORTE
@@ -60,23 +71,23 @@ def _validar_regla_corte(tipo, valor_umbral, parametros, regla_id=None):
     if regla_id:
         qs_clave = qs_clave.exclude(pk=regla_id)
     if qs_clave.exists():
-        raise ValueError(f"Ya existe una regla de corte con la clave '{clave}'.")
+        raise ErrorValidacionRegla("Ya existe una regla de corte con esa clave.")
 
     if evalua not in ['CORTE', 'NOTA_NECESARIA']:
-        raise ValueError("El parámetro 'evalua' debe ser 'CORTE' o 'NOTA_NECESARIA'.")
+        raise ErrorValidacionRegla("El parámetro 'evalua' debe ser 'CORTE' o 'NOTA_NECESARIA'.")
 
     # Validar valor_umbral principal entre 0.0 y 5.0
     try:
         vu = float(valor_umbral)
     except (TypeError, ValueError):
-        raise ValueError("El valor del umbral debe ser numérico.")
+        raise ErrorValidacionRegla("El valor del umbral debe ser numérico.")
     if vu < 0.0 or vu > 5.0:
-        raise ValueError("El valor del umbral debe estar entre 0.0 y 5.0.")
+        raise ErrorValidacionRegla("El valor del umbral debe estar entre 0.0 y 5.0.")
 
     if evalua == 'CORTE':
         corte = parametros.get('corte')
         if corte not in [1, 2, 3]:
-            raise ValueError("Para 'evalua': 'CORTE', 'corte' debe ser 1, 2 o 3.")
+            raise ErrorValidacionRegla("Para 'evalua': 'CORTE', 'corte' debe ser 1, 2 o 3.")
 
         corte_previo = parametros.get('corte_previo')
         operador_previo = parametros.get('operador_previo')
@@ -85,19 +96,19 @@ def _validar_regla_corte(tipo, valor_umbral, parametros, regla_id=None):
         tiene_previo = any(x is not None for x in [corte_previo, operador_previo, umbral_previo])
         if tiene_previo:
             if corte_previo is None or operador_previo is None or umbral_previo is None:
-                raise ValueError("Para condición previa, 'corte_previo', 'operador_previo' y 'umbral_previo' deben proporcionarse juntos.")
+                raise ErrorValidacionRegla("Para condición previa, 'corte_previo', 'operador_previo' y 'umbral_previo' deben proporcionarse juntos.")
             if corte_previo not in [1, 2]:
-                raise ValueError("'corte_previo' debe ser 1 o 2.")
+                raise ErrorValidacionRegla("'corte_previo' debe ser 1 o 2.")
             if corte_previo >= corte:
-                raise ValueError("'corte_previo' debe ser estrictamente menor que 'corte'.")
+                raise ErrorValidacionRegla("'corte_previo' debe ser estrictamente menor que 'corte'.")
             if operador_previo not in ['<', '>', '<=', '>=', '==']:
-                raise ValueError(f"Operador previo inválido: '{operador_previo}'.")
+                raise ErrorValidacionRegla("Operador previo no permitido.")
             try:
                 up = float(umbral_previo)
             except (TypeError, ValueError):
-                raise ValueError("'umbral_previo' debe ser numérico.")
+                raise ErrorValidacionRegla("'umbral_previo' debe ser numérico.")
             if up < 0.0 or up > 5.0:
-                raise ValueError("'umbral_previo' debe estar entre 0.0 y 5.0.")
+                raise ErrorValidacionRegla("'umbral_previo' debe estar entre 0.0 y 5.0.")
 
 
 def _validar_regla_inasistencia(tipo, valor_umbral, parametros, activo, regla_id=None):
@@ -111,22 +122,22 @@ def _validar_regla_inasistencia(tipo, valor_umbral, parametros, activo, regla_id
     try:
         vu = float(valor_umbral)
     except (TypeError, ValueError):
-        raise ValueError("El umbral de inasistencia debe ser numérico.")
+        raise ErrorValidacionRegla("El umbral de inasistencia debe ser numérico.")
     if isinstance(valor_umbral, bool) or vu < 0 or vu > 100:
-        raise ValueError("El umbral de inasistencia debe estar entre 0 y 100.")
+        raise ErrorValidacionRegla("El umbral de inasistencia debe estar entre 0 y 100.")
 
     if not isinstance(parametros, dict):
-        raise ValueError("Para reglas de tipo INASISTENCIA, 'parametros' debe ser un objeto JSON.")
+        raise ErrorValidacionRegla("Para reglas de tipo INASISTENCIA, 'parametros' debe ser un objeto JSON.")
     min_clases = parametros.get('min_clases')
     if isinstance(min_clases, bool) or not isinstance(min_clases, int) or not 1 <= min_clases <= 50:
-        raise ValueError("El mínimo de clases ('min_clases') debe ser un número entero entre 1 y 50.")
+        raise ErrorValidacionRegla("El mínimo de clases ('min_clases') debe ser un número entero entre 1 y 50.")
 
     if activo:
         otras_activas = Regla.objects.filter(tipo='INASISTENCIA', activo=True)
         if regla_id:
             otras_activas = otras_activas.exclude(pk=regla_id)
         if otras_activas.exists():
-            raise ValueError(
+            raise ErrorValidacionRegla(
                 "Ya existe una regla de inasistencia activa. Desactívela antes de activar otra: "
                 "solo puede haber un umbral general de inasistencia."
             )
@@ -203,8 +214,12 @@ def listar_crear_reglas(request):
                 'id': regla.id,
                 'mensaje': 'Regla creada exitosamente. El riesgo de los estudiantes se está recalculando.'
             }, status=201)
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=400)
+        except ErrorValidacionRegla as error:
+            logger.warning('Validación de regla rechazada: %s', error)
+            return JsonResponse({'error': error.mensaje}, status=400)
+        except Exception:
+            logger.exception('Error al guardar la regla')
+            return JsonResponse({'error': 'No se pudo guardar la regla. Revise los datos e inténtelo de nuevo.'}, status=400)
 
 
 @csrf_exempt
@@ -274,8 +289,12 @@ def detalle_regla(request, pk):
             ejecutar_en_segundo_plano(_recalcular_en_background, request.usuario, regla.id)
 
             return JsonResponse({'mensaje': msg_resp})
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=400)
+        except ErrorValidacionRegla as error:
+            logger.warning('Validación de regla rechazada: %s', error)
+            return JsonResponse({'error': error.mensaje}, status=400)
+        except Exception:
+            logger.exception('Error al guardar la regla')
+            return JsonResponse({'error': 'No se pudo guardar la regla. Revise los datos e inténtelo de nuevo.'}, status=400)
 
     elif request.method == "DELETE":
         try:
@@ -288,5 +307,6 @@ def detalle_regla(request, pk):
                 'error': 'protected_error',
                 'detalle': 'No se puede eliminar la regla porque tiene alertas asociadas.'
             }, status=400)
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=400)
+        except Exception:
+            logger.exception('Error al eliminar la regla')
+            return JsonResponse({'error': 'No se pudo eliminar la regla. Inténtelo de nuevo.'}, status=400)

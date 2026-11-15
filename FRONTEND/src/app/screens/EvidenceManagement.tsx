@@ -1,3 +1,4 @@
+import { confirmarAccion } from '../components/Confirmacion';
 import { useState, useEffect, useCallback } from 'react';
 import { EncabezadoPagina, Seccion } from '../components/Panel';
 import { useParams, useNavigate } from 'react-router';
@@ -106,7 +107,7 @@ export default function EvidenceManagement() {
 
   const handleDelete = async (evidenciaId: number) => {
     if (isClosed) return;
-    if (!window.confirm('¿Estás seguro de eliminar esta evidencia?')) return;
+    if (!await confirmarAccion('¿Estás seguro de eliminar esta evidencia?')) return;
 
     try {
       await evidenceService.delete(evidenciaId);
@@ -140,7 +141,7 @@ export default function EvidenceManagement() {
 
   const handleDeleteAnotacion = async (anotacionId: number) => {
     if (isClosed) return;
-    if (!window.confirm('¿Eliminar esta observación?')) return;
+    if (!await confirmarAccion('¿Eliminar esta observación?')) return;
 
     try {
       await evidenceService.deleteAnotacion(anotacionId);

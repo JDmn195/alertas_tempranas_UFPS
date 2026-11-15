@@ -63,6 +63,11 @@ class Command(BaseCommand):
         # Buen rendimiento y matriculada en Cálculo I del periodo actual: pruebas de asistencia
         carla = estudiante('1152003', 'Carla Ruiz', '100200302')
 
+        # SDAT-311: cuentas ficticias para probar el portal y el aislamiento.
+        for est in (ana, carla):
+            est.usuario = usuario(est.nombre, est.email_institucional, 'ESTUDIANTE')
+            est.save(update_fields=['usuario'])
+
         Regla.objects.create(
             nombre='Promedio Crítico', tipo='PROMEDIO', operador='<', valor_umbral=Decimal('2.5'),
             nivel='high', prioridad=30,

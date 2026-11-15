@@ -1,3 +1,6 @@
+import { toast } from 'sonner';
+import { confirmarAccion } from '../components/Confirmacion';
+import { Link } from 'react-router';
 import { useState, useEffect } from 'react';
 import { Plus, Settings, X, Trash2, AlertTriangle, Play, CheckCircle, CalendarX } from 'lucide-react';
 import { CintaIndicadores, EncabezadoPagina, Seccion } from '../components/Panel';
@@ -66,21 +69,21 @@ export default function RiskRules() {
   const handleToggleActive = async (rule: Rule) => {
     if (!rule.id) return;
     if (!usuarioId) {
-      alert('Debes iniciar sesión para realizar esta acción');
+      toast.error('Debes iniciar sesión para realizar esta acción');
       return;
     }
     try {
       await ruleService.updateRule(rule.id, { activo: !rule.activo });
       loadRules();
     } catch (error) {
-      alert('Error al cambiar estado de la regla');
+      toast.error('Error al cambiar estado de la regla');
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('¿Estás seguro de eliminar esta regla?')) return;
+    if (!await confirmarAccion('¿Estás seguro de eliminar esta regla?')) return;
     if (!usuarioId) {
-      alert('Debes iniciar sesión para realizar esta acción');
+      toast.error('Debes iniciar sesión para realizar esta acción');
       return;
     }
     try {
@@ -94,7 +97,7 @@ export default function RiskRules() {
           message: 'No se puede eliminar esta regla porque existen alertas académicas asociadas a ella. Se recomienda desactivarla en su lugar para conservar el historial.'
         });
       } else {
-        alert('Error al eliminar la regla: ' + msg);
+        toast.error('Error al eliminar la regla: ' + msg);
       }
     }
   };
@@ -108,7 +111,7 @@ export default function RiskRules() {
       });
       loadRules();
     } catch (error: any) {
-      alert(error.message || 'Error al actualizar el umbral');
+      toast.error(error.message || 'Error al actualizar el umbral');
     }
   };
 
@@ -143,7 +146,7 @@ export default function RiskRules() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!usuarioId) {
-      alert('Debes iniciar sesión para realizar esta acción');
+      toast.error('Debes iniciar sesión para realizar esta acción');
       return;
     }
     try {
@@ -156,7 +159,7 @@ export default function RiskRules() {
       resetForm();
       loadRules();
     } catch (error: any) {
-      alert(error.message || 'Error al guardar la regla');
+      toast.error(error.message || 'Error al guardar la regla');
     }
   };
 
@@ -168,7 +171,7 @@ export default function RiskRules() {
       setEvaluacionOk(true);
       setTimeout(() => setEvaluacionOk(false), 4000);
     } catch (error: any) {
-      alert(error.message || 'Error al evaluar alertas por corte');
+      toast.error(error.message || 'Error al evaluar alertas por corte');
     } finally {
       setEvaluandoCortes(false);
     }
@@ -210,7 +213,7 @@ export default function RiskRules() {
     <div className="animate-in fade-in duration-300 space-y-5">
       <EncabezadoPagina
         titulo="Reglas de Riesgo"
-        detalle="Define cuándo un estudiante entra en riesgo y qué alertas se generan."
+        detalle={<>Define cuándo un estudiante entra en riesgo y qué alertas se generan. <Link to="/dashboard/ayuda#notas-ayuda" className="font-medium text-primary underline">Cómo se calculan las alertas de corte</Link></>}
       >
         <Button onClick={() => { resetForm(); setShowModal(true); }}>
           <Plus className="w-4 h-4 mr-2" />
@@ -333,7 +336,7 @@ export default function RiskRules() {
           <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-[10px] px-4 py-3" role="alert">
             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
             <span className="flex-1">{errorInasistencia}</span>
-            <button type="button" onClick={() => setErrorInasistencia(null)} className="text-red-500 hover:text-red-700">
+            <button aria-label="Cerrar aviso de inasistencia" type="button" onClick={() => setErrorInasistencia(null)} className="text-red-500 hover:text-red-700">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -415,7 +418,7 @@ export default function RiskRules() {
                     Editar
                   </Button>
                   
-                  <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50 border-red-200" onClick={() => { if(rule.id) handleDelete(rule.id); }}>
+                  <Button variant="outline" size="sm" aria-label={`Eliminar regla ${rule.nombre}`} className="text-red-600 hover:bg-red-50 border-red-200" onClick={() => { if(rule.id) handleDelete(rule.id); }}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>

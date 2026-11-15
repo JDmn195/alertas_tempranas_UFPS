@@ -57,6 +57,27 @@ if not ALLOWED_HOSTS:
         raise ImproperlyConfigured('Define ALLOWED_HOSTS (o RENDER_EXTERNAL_HOSTNAME) con DEBUG=False.')
     ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
 
+# SDAT-300: HTTPS y caché compartida entre los procesos de producción.
+EN_PRODUCCION = not (DEBUG or EJECUTANDO_TESTS or EJECUTANDO_E2E)
+SECURE_SSL_REDIRECT = EN_PRODUCCION
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') if EN_PRODUCCION else None
+SECURE_HSTS_SECONDS = 31536000 if EN_PRODUCCION else 0
+SESSION_COOKIE_SECURE = EN_PRODUCCION
+CSRF_COOKIE_SECURE = EN_PRODUCCION
+
+CACHES = {
+    'default': {
+        'BACKEND': ('django.core.cache.backends.db.DatabaseCache' if EN_PRODUCCION
+                    else 'django.core.cache.backends.locmem.LocMemCache'),
+        'LOCATION': 'sat_cache' if EN_PRODUCCION else 'sat_local',
+    },
+}
+
+ADMIN_URL = os.environ.get('ADMIN_URL', 'gestion-interna/' if EN_PRODUCCION else 'admin/').strip('/')
+if not ADMIN_URL:
+    raise ImproperlyConfigured('ADMIN_URL debe contener una ruta no vacía.')
+ADMIN_URL += '/'
+
 
 # Application definition
 
@@ -264,6 +285,9 @@ LOGGING = {
 
 # Email configuration
 EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+if EJECUTANDO_E2E:
+    # Los enlaces de recuperación no deben aparecer en la salida de las pruebas.
+    EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
 EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
@@ -282,7 +306,7 @@ MAX_IMPORT_FILE_SIZE_MB = int(os.environ.get('MAX_IMPORT_FILE_SIZE_MB', 10))
 IMPORT_MAX_PORCENTAJE_INVALIDOS = float(os.environ.get('IMPORT_MAX_PORCENTAJE_INVALIDOS', 10))
 
 # Intentos fallidos de inicio de sesión por correo antes de bloquear temporalmente.
-# El contador vive en la caché de Django (por defecto en memoria de cada proceso).
+# En producción el contador usa la tabla compartida sat_cache.
 LOGIN_MAX_INTENTOS = int(os.environ.get('LOGIN_MAX_INTENTOS', 5))
 LOGIN_BLOQUEO_MINUTOS = int(os.environ.get('LOGIN_BLOQUEO_MINUTOS', 15))
 

@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
@@ -17,7 +18,7 @@ import AttendanceImport from '../components/AttendanceImport';
 import { BarraDistribucion, CintaIndicadores, EncabezadoPagina, Seccion } from '../components/Panel';
 
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const BASE_URL = API_BASE_URL;
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -491,7 +492,7 @@ export default function TeacherDashboard() {
                   <h2 className="text-xl font-semibold">{selectedCurso.materia}</h2>
                   <p className="text-sm text-ink-muted">{selectedCurso.codigo} · Grupo {selectedCurso.grupo}</p>
                 </div>
-                <button onClick={() => setSelectedCurso(null)} className="p-1.5 rounded-[10px] text-ink-muted hover:text-ink hover:bg-wash transition-colors">
+                <button aria-label="Cerrar detalle del curso" onClick={() => setSelectedCurso(null)} className="p-1.5 rounded-[10px] text-ink-muted hover:text-ink hover:bg-wash transition-colors">
                   <X className="w-6 h-6" />
                 </button>
               </div>

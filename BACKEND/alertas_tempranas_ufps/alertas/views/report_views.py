@@ -9,6 +9,7 @@ from django.db.models import Count, Avg, Q
 
 from alertas.models import Alerta, Intervencion, RiesgoEstudiante, RiesgoEstudiantePeriodo
 from academico.models import Estudiante, Curso, Nota
+from alertas_tempranas_ufps.paginacion import paginar_si_se_pide, metadatos_pagina
 
 logger = logging.getLogger(__name__)
 
@@ -380,9 +381,11 @@ def export_report_data(request):
     cursos_ids = _get_docente_cursos(request)
     try:
         data = _get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids)
-        return JsonResponse({'data': data})
+        pagina = paginar_si_se_pide(request, data)
+        return JsonResponse({'data': list(pagina) if pagina is not None else data, **metadatos_pagina(pagina)})
     except ValueError as e:
-        return JsonResponse({'error': str(e)}, status=400)
+        logger.warning("Solicitud de reporte inválida: %s", e)
+        return JsonResponse({'error': 'Tipo de reporte no válido.'}, status=400)
     except Exception:
         logger.exception("Error al consultar los datos del reporte %s", tipo)
         return JsonResponse({'error': 'Error al consultar los datos del reporte.'}, status=500)
@@ -414,7 +417,8 @@ def exportar_reporte(request):
     try:
         data_list = _get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids)
     except ValueError as e:
-        return JsonResponse({'error': str(e)}, status=400)
+        logger.warning("Solicitud de exportación inválida: %s", e)
+        return JsonResponse({'error': 'Tipo de reporte no válido.'}, status=400)
     except Exception:
         logger.exception("Error al obtener los datos para exportar el reporte %s", tipo)
         return JsonResponse({'error': 'Error al obtener los datos del reporte.'}, status=500)
