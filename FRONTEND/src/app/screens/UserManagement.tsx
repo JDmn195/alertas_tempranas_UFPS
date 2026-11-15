@@ -290,7 +290,7 @@ export default function UserManagement() {
           <div className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-white shadow-2xl z-50 overflow-y-auto transform transition-transform">
             <div className="bg-[#C8102E] text-white px-6 py-4 flex items-center justify-between sticky top-0 z-10">
               <h2 className="text-xl font-bold">{editingUser ? 'Editar Usuario' : 'Crear Nuevo Usuario'}</h2>
-              <button
+              <button aria-label="Cerrar formulario de usuario"
                 onClick={() => !formLoading && setShowDrawer(false)}
                 className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-1"
                 disabled={formLoading}

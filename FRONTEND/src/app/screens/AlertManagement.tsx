@@ -133,7 +133,7 @@ function ModalRegistrar({
             <ClipboardList className="w-5 h-5 text-[#C8102E]" />
             <h2 className="text-base font-bold text-gray-900">Registrar Intervención</h2>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button aria-label="Cerrar registro de intervención" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -236,7 +236,7 @@ function ModalHistorial({
             <ClipboardList className="w-5 h-5 text-[#C8102E]" />
             <h2 className="text-base font-bold text-gray-900">Historial de Intervenciones</h2>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button aria-label="Cerrar historial de intervenciones" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -687,7 +687,7 @@ export default function AlertManagement() {
                               >
                                 <span className="text-[10px] font-extrabold uppercase tracking-widest">Intervenir</span>
                               </Button>
-                              <Button 
+                              <Button aria-label="Cerrar alerta"
                                 variant="outline" 
                                 size="sm" 
                                 className="h-9 px-3 border-gray-200 text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-xl"

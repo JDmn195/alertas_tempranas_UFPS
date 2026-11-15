@@ -148,7 +148,7 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
               <h2 className="text-xl font-bold">Tomar Asistencia: {curso.materia}</h2>
               <p className="text-xs opacity-80">{curso.codigo} · Grupo {curso.grupo}</p>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/20 transition-colors">
+            <button aria-label="Cerrar ventana de asistencia" onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/20 transition-colors">
               <X className="w-6 h-6" />
             </button>
           </div>

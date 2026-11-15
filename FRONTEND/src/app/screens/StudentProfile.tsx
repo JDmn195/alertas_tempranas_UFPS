@@ -253,7 +253,7 @@ function ModalMateriasReprobadas({
               <p className="text-xs text-gray-500">{reprobadas.length} registros en el historial</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
+          <button aria-label="Cerrar ventana" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -971,7 +971,7 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
                   <p className="text-[10px] text-red-200">#{selected.id}</p>
                 </div>
               </div>
-              <button
+              <button aria-label="Cerrar detalle de intervención"
                 onClick={() => setSelected(null)}
                 className="text-white/80 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10"
               >

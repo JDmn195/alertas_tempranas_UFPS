@@ -143,7 +143,7 @@ export default function StudentList() {
             <Activity className="w-5 h-5 text-yellow-600" />
           </div>
           <div>
-            <p className="text-[10px] sm:text-xs text-yellow-600 font-medium uppercase tracking-wide leading-tight">Riesgo Medio</p>
+            <p className="text-[10px] sm:text-xs text-yellow-800 font-medium uppercase tracking-wide leading-tight">Riesgo Medio</p>
             <p className="text-xl sm:text-2xl font-bold text-yellow-700">
               {loading ? '—' : countMedium}
             </p>
@@ -154,7 +154,7 @@ export default function StudentList() {
             <CheckCircle className="w-5 h-5 text-green-600" />
           </div>
           <div>
-            <p className="text-[10px] sm:text-xs text-green-600 font-medium uppercase tracking-wide leading-tight">Riesgo Bajo</p>
+            <p className="text-[10px] sm:text-xs text-green-800 font-medium uppercase tracking-wide leading-tight">Riesgo Bajo</p>
             <p className="text-xl sm:text-2xl font-bold text-green-700">
               {loading ? '—' : countLow}
             </p>
@@ -363,7 +363,7 @@ export default function StudentList() {
               Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, total)} de {total}
             </p>
             <div className="flex items-center gap-1">
-              <button
+              <button aria-label="Página anterior"
                 id="prev-page"
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
@@ -387,7 +387,7 @@ export default function StudentList() {
                   </button>
                 );
               })}
-              <button
+              <button aria-label="Página siguiente"
                 id="next-page"
                 onClick={() => setCurrentPage(p => Math.min(pages, p + 1))}
                 disabled={currentPage === pages}

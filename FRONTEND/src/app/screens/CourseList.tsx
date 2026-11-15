@@ -563,7 +563,7 @@ export default function CourseList() {
               Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, total)} de {total}
             </p>
             <div className="flex items-center gap-1">
-              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+              <button aria-label="Página anterior" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
                 className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
                 <ChevronLeft className="w-4 h-4 text-gray-600" />
               </button>
@@ -576,7 +576,7 @@ export default function CourseList() {
                   </button>
                 );
               })}
-              <button onClick={() => setCurrentPage(p => Math.min(pages, p + 1))} disabled={currentPage === pages}
+              <button aria-label="Página siguiente" onClick={() => setCurrentPage(p => Math.min(pages, p + 1))} disabled={currentPage === pages}
                 className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
                 <ChevronRight className="w-4 h-4 text-gray-600" />
               </button>
@@ -596,7 +596,7 @@ export default function CourseList() {
                   {umbralEditando.codigo_materia} G-{umbralEditando.grupo} · {umbralEditando.materia}
                 </p>
               </div>
-              <button onClick={cerrarEdicionUmbral} className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-1.5">
+              <button aria-label="Cerrar edición de umbral" onClick={cerrarEdicionUmbral} className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-1.5">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -673,7 +673,7 @@ export default function CourseList() {
                   <h2 className="text-xl font-bold">Detalle del Curso</h2>
                   <p className="text-xs opacity-90">Consulta de estudiantes matriculados</p>
                 </div>
-                <button
+                <button aria-label="Cerrar detalle del curso"
                   onClick={() => { setSelectedCourseDetail(null); setCourseDetailData(null); }}
                   className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-1.5 transition-colors"
                 >

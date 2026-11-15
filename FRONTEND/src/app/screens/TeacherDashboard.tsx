@@ -485,7 +485,7 @@ export default function TeacherDashboard() {
                   <h2 className="text-xl font-bold">{selectedCurso.materia}</h2>
                   <p className="text-xs opacity-80">{selectedCurso.codigo} · Grupo {selectedCurso.grupo}</p>
                 </div>
-                <button onClick={() => setSelectedCurso(null)} className="p-1.5 rounded-lg hover:bg-white/20 transition-colors">
+                <button aria-label="Cerrar detalle del curso" onClick={() => setSelectedCurso(null)} className="p-1.5 rounded-lg hover:bg-white/20 transition-colors">
                   <X className="w-6 h-6" />
                 </button>
               </div>
