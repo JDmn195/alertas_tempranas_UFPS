@@ -18,6 +18,7 @@ from django.views.decorators.http import require_http_methods
 from .models import Usuario
 from .decorators import obtener_usuario_de_request, requiere_rol
 from .utils import registrar_auditoria
+from alertas_tempranas_ufps.paginacion import paginar_si_se_pide, metadatos_pagina
 
 logger = logging.getLogger(__name__)
 
@@ -315,15 +316,16 @@ def sesion_actual(request):
 @require_http_methods(["GET"])
 @requiere_rol(['ADMINISTRADOR'])
 def listar_usuarios(request):
-    usuarios = Usuario.objects.all().order_by('nombre')
+    usuarios = Usuario.objects.all().order_by('nombre', 'id')
+    pagina = paginar_si_se_pide(request, usuarios)
     data = [{
         'id': u.id,
         'nombre': u.nombre,
         'correo': u.correo,
         'rol': u.rol,
         'activo': u.activo
-    } for u in usuarios]
-    return JsonResponse({'usuarios': data}, status=200)
+    } for u in (pagina if pagina is not None else usuarios)]
+    return JsonResponse({'usuarios': data, **metadatos_pagina(pagina)}, status=200)
 
 @csrf_exempt
 @require_http_methods(["POST"])
