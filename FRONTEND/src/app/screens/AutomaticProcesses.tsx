@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { Link } from 'react-router';
 import { useEffect, useState } from 'react';
 import { BellRing, CalendarClock, ChevronDown, ChevronUp, Play, RefreshCw, Save } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -538,6 +539,7 @@ export default function AutomaticProcesses() {
     <div className="space-y-6">
       <div className="border-l-4 border-[#C8102E] pl-4">
         <h1 className="text-2xl font-bold text-gray-900">Procesos automáticos</h1>
+        <Link to="/dashboard/ayuda#procesos-ayuda" className="text-sm font-medium text-[#9B0C24] underline">Horarios y estado de la revaluación</Link>
         <p className="text-sm text-gray-600 mt-1">
           Re-evaluación periódica del riesgo y recordatorios de casos sin seguimiento
         </p>

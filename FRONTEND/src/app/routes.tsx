@@ -39,6 +39,7 @@ const StudentPortal = pantallaDiferida(() => import('./screens/StudentPortal'));
 const PortalAcompanamiento = pantallaDiferida(() => import('./screens/StudentPortal').then(m => ({ default: m.PortalAcompanamiento })));
 const PortalAlertas = pantallaDiferida(() => import('./screens/StudentPortal').then(m => ({ default: m.PortalAlertas })));
 const PortalAsistencia = pantallaDiferida(() => import('./screens/StudentPortal').then(m => ({ default: m.PortalAsistencia })));
+const Ayuda = pantallaDiferida(() => import('./screens/Ayuda'));
 
 // Pantalla inicial de /dashboard según el rol (el estudiante va a su portal)
 function InicioDashboard() {
@@ -151,6 +152,7 @@ export const router = createBrowserRouter([
         path: "admin/notifications-history",
         element: <ProtectedRoute allowedRoles={['ADMINISTRADOR']}><NotificationHistory /></ProtectedRoute>
       },
+      { path: "ayuda", element: <Ayuda /> },
       // Portal del estudiante (EP-09): una ruta por sección de la barra lateral
       {
         path: "portal",

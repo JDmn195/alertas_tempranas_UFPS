@@ -1388,6 +1388,7 @@ function MiAsistencia() {
           <div className="flex items-center gap-2">
             <CalendarCheck className="w-5 h-5 text-gray-500" />
             <h2 className="text-lg font-semibold text-gray-900">Mi asistencia</h2>
+            <Link to="/dashboard/ayuda#asistencia-ayuda" className="text-sm font-medium text-[#9B0C24] underline">Cómo se calcula</Link>
           </div>
           <p className="text-sm text-gray-500 mb-4">
             Tu porcentaje de inasistencia en cada materia frente al límite permitido. Las faltas justificadas cuentan como
