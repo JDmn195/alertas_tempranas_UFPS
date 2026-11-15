@@ -1,6 +1,7 @@
 import json
 import logging
 import secrets
+from ipaddress import ip_address
 import jwt
 from datetime import datetime, timedelta, timezone
 from django.http import JsonResponse
@@ -28,21 +29,36 @@ def _huella_contrasena(usuario):
     return salted_hmac('usuarios.huella-contrasena', usuario.contrasena).hexdigest()[:16]
 
 
-# Límite de intentos fallidos de inicio de sesión por correo (contra fuerza bruta)
+# Límite por IP y correo: un origen no bloquea el acceso desde otro.
 LOGIN_MAX_INTENTOS = getattr(settings, 'LOGIN_MAX_INTENTOS', 5)
 LOGIN_BLOQUEO_MINUTOS = getattr(settings, 'LOGIN_BLOQUEO_MINUTOS', 15)
 
 
-def _clave_intentos(correo):
-    return 'login-fallidos:' + salted_hmac('usuarios.login', str(correo).strip().lower()).hexdigest()
+def _ip_login(request):
+    # Render recibe el tráfico público a través de Cloudflare. Fuera de Render
+    # no confiamos en cabeceras de IP enviadas por el cliente.
+    if getattr(settings, 'RENDER_EXTERNAL_HOSTNAME', None):
+        try:
+            return str(ip_address(request.META.get('HTTP_CF_CONNECTING_IP', '')))
+        except ValueError:
+            pass
+    try:
+        return str(ip_address(request.META.get('REMOTE_ADDR', '')))
+    except ValueError:
+        return 'sin-ip'
 
 
-def _login_bloqueado(correo):
-    return cache.get(_clave_intentos(correo), 0) >= LOGIN_MAX_INTENTOS
+def _clave_intentos(correo, ip):
+    identificador = json.dumps([str(correo).strip().lower(), ip])
+    return 'login-fallidos:' + salted_hmac('usuarios.login', identificador).hexdigest()
 
 
-def _registrar_intento_fallido(correo):
-    clave = _clave_intentos(correo)
+def _login_bloqueado(correo, ip):
+    return cache.get(_clave_intentos(correo, ip), 0) >= LOGIN_MAX_INTENTOS
+
+
+def _registrar_intento_fallido(correo, ip):
+    clave = _clave_intentos(correo, ip)
     cache.add(clave, 0, LOGIN_BLOQUEO_MINUTOS * 60)
     try:
         cache.incr(clave)
@@ -50,8 +66,8 @@ def _registrar_intento_fallido(correo):
         cache.set(clave, 1, LOGIN_BLOQUEO_MINUTOS * 60)
 
 
-def _limpiar_intentos_fallidos(correo):
-    cache.delete(_clave_intentos(correo))
+def _limpiar_intentos_fallidos(correo, ip):
+    cache.delete(_clave_intentos(correo, ip))
 
 
 def _validar_rol(rol):
@@ -89,7 +105,8 @@ def login_view(request):
         if not correo or not contrasena:
             return JsonResponse({'error': 'Faltan credenciales.'}, status=400)
 
-        if _login_bloqueado(correo):
+        ip = _ip_login(request)
+        if _login_bloqueado(correo, ip):
             return JsonResponse({
                 'error': f'Demasiados intentos fallidos. Intente de nuevo en {LOGIN_BLOQUEO_MINUTOS} minutos '
                          f'o recupere su contraseña.'
@@ -99,12 +116,12 @@ def login_view(request):
         if usuario is None:
             # Hashear igual para no revelar por el tiempo de respuesta si el correo existe
             Usuario().set_password(contrasena)
-            _registrar_intento_fallido(correo)
+            _registrar_intento_fallido(correo, ip)
             return JsonResponse({'error': 'Credenciales incorrectas.'}, status=401)
         if not usuario.check_password(contrasena):
-            _registrar_intento_fallido(correo)
+            _registrar_intento_fallido(correo, ip)
             return JsonResponse({'error': 'Credenciales incorrectas.'}, status=401)
-        _limpiar_intentos_fallidos(correo)
+        _limpiar_intentos_fallidos(correo, ip)
 
         if not usuario.activo:
             return JsonResponse({'error': 'La cuenta está desactivada.'}, status=403)
@@ -262,7 +279,7 @@ def cambiar_contrasena(request):
         return JsonResponse({'error': ' '.join(e.messages)}, status=400)
 
     usuario.cambiar_contrasena(nueva_contrasena)
-    _limpiar_intentos_fallidos(usuario.correo)
+    _limpiar_intentos_fallidos(usuario.correo, _ip_login(request))
 
     return JsonResponse({'mensaje': 'Contraseña actualizada correctamente.'}, status=200)
 
