@@ -96,7 +96,6 @@ test('crear y cancelar una solicitud mantiene el estado al recargar', async ({ p
   await page.reload();
   page.on('dialog', dialogo => dialogo.accept());
   await page.getByRole('button', { name: 'Cancelar solicitud', exact: true }).click();
-  const confirmar = page.getByRole('alertdialog').getByRole('button', { name: 'Confirmar', exact: true });
-  if (await confirmar.count()) await confirmar.click();
+  await page.getByRole('button', { name: 'Sí, cancelar' }).click();
   await expect(page.getByRole('button', { name: 'Enviar solicitud' })).toBeEnabled();
 });
