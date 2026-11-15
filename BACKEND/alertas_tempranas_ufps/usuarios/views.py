@@ -471,7 +471,10 @@ def cuenta_estudiante(request, codigo):
     try:
         accion, usuario, anterior = asociar_cuenta_estudiante(estudiante, data.get('correo'))
     except ErrorCuentaEstudiante as e:
-        return JsonResponse({'error': str(e)}, status=409)
+        logger.warning("No se pudo asociar la cuenta del estudiante %s: %s", codigo, e)
+        return JsonResponse({
+            'error': 'No se puede asociar la cuenta. Revise el correo institucional y que no pertenezca a otra persona.'
+        }, status=409)
     except Exception:
         logger.exception("Error al crear o asociar la cuenta del estudiante %s", codigo)
         return JsonResponse({'error': 'Error al crear o asociar la cuenta del estudiante.'}, status=500)
