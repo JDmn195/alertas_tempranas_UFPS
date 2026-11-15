@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router';
 import { Search, AlertTriangle, CheckCircle, Activity, RefreshCw, ChevronLeft, ChevronRight, Bell, UserMinus } from 'lucide-react';
@@ -25,7 +26,7 @@ interface ApiResponse {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/academico`;
+const API_BASE = `${API_BASE_URL}/api/academico`;
 const PAGE_SIZE = 15;
 
 const RISK_LABEL: Record<string, string> = {

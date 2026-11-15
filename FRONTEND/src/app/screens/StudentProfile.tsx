@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 import {
@@ -1221,7 +1222,7 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
       setLoading(true);
       setError(null);
       try {
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const baseUrl = API_BASE_URL;
         const query = periodo ? `?periodo=${encodeURIComponent(periodo)}` : '';
         const res = await apiFetch(`${baseUrl}/api/academico/students/${codigo}/asistencia/${query}`);
         if (!res.ok) throw new Error('No se pudo cargar la asistencia del estudiante.');
@@ -1446,7 +1447,7 @@ export default function StudentProfile() {
       setLoading(true);
       setError(null);
       try {
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const baseUrl = API_BASE_URL;
         
         // Cargar datos del perfil, indicadores e historial en paralelo
         const [studentRes, indicatorsRes, historialRes, intervencionesRes] = await Promise.all([
@@ -1493,7 +1494,7 @@ export default function StudentProfile() {
     setRecalculating(true);
     setRecalcMsg(null);
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseUrl = API_BASE_URL;
       const res = await apiFetch(`${baseUrl}/api/alertas/estudiantes/${id}/recalcular/`, {
         method: 'POST',
       });

@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { Button } from '../components/ui/Button';
@@ -45,7 +46,7 @@ export default function ResetPassword() {
     setError('');
 
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseUrl = API_BASE_URL;
       const response = await fetch(`${baseUrl}/api/usuarios/cambiar-password/`, {
         method: 'POST',
         headers: {

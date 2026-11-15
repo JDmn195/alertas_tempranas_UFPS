@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 // src/services/session.ts
 //
 // El usuario guardado en localStorage se puede modificar desde el navegador, así
@@ -5,7 +6,7 @@
 // a partir del JWT (GET /api/usuarios/me/). Se verifica una vez por carga de la
 // página y por token. La protección real de los datos está en el backend.
 
-const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const baseUrl = API_BASE_URL;
 
 export interface UsuarioSesion {
   id: number;

@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { Button } from '../components/ui/Button';
@@ -16,7 +17,7 @@ export default function Login() {
     setError('');
 
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseUrl = API_BASE_URL;
       const response = await fetch(`${baseUrl}/api/usuarios/login/`, {
         method: 'POST',
         headers: {

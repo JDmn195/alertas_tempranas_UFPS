@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router';
 import { Upload, FileText, AlertCircle, CheckCircle, Database, RefreshCw } from 'lucide-react';
@@ -23,7 +24,7 @@ export default function AdminDashboard() {
 
   const fetchHistory = async () => {
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseUrl = API_BASE_URL;
       const response = await apiFetch(`${baseUrl}/api/academico/bitacora/`);
       const result = await response.json();
       if (result.status === 'success') {
@@ -78,7 +79,7 @@ export default function AdminDashboard() {
       setResponseErrors([]);
       setResponseAdvertencias([]);
 
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseUrl = API_BASE_URL;
       const response = await apiFetch(
         `${baseUrl}/api/academico/${endpoint}`,
         {
@@ -136,7 +137,7 @@ export default function AdminDashboard() {
     setMigrando(true);
     setMigResult(null);
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseUrl = API_BASE_URL;
       const res = await apiFetch(
         `${baseUrl}/api/alertas/migrar-riesgo-periodos/?solo_vacios=true`,
         { method: 'POST' }

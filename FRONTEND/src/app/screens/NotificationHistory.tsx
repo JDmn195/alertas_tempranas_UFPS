@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect } from 'react';
 import { Badge } from '../components/ui/Badge';
 import { Mail, Bell, CheckCircle, AlertCircle, Clock } from 'lucide-react';
@@ -14,7 +15,7 @@ export default function NotificationHistory() {
   const fetchHistory = async () => {
     setIsLoading(true);
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseUrl = API_BASE_URL;
       const params = new URLSearchParams();
       if (filter.resultado) params.append('resultado', filter.resultado);
       if (filter.canal) params.append('canal', filter.canal);

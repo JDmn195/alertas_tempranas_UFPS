@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect } from 'react';
 import { ShieldAlert, RefreshCw, Search, Calendar, Filter } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -23,7 +24,7 @@ export default function AuditLog() {
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const baseUrl = API_BASE_URL;
 
   const fetchAuditLogs = async () => {
     setLoading(true);
