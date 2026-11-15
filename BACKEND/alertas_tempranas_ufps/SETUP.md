@@ -220,15 +220,20 @@ Tras 5 intentos fallidos de inicio de sesión, la cuenta se bloquea 15 minutos
 
 ## Almacenamiento de evidencias (Supabase)
 
-Las evidencias de las intervenciones se suben a Supabase Storage. Define en `.env`
-`SUPABASE_URL`, `SUPABASE_KEY` (service role key) y `SUPABASE_BUCKET_NAME` con los datos
-reales del proyecto y comprueba la conexión con:
+Las evidencias de las intervenciones se suben a Supabase Storage. Configura
+`SUPABASE_URL`, `SUPABASE_KEY` (clave de servicio) y `SUPABASE_BUCKET_NAME`
+en el gestor seguro del servidor y comprueba la conexión con:
 
 ```bash
 python manage.py verificar_almacenamiento
 ```
 
-El comando revisa la configuración, la resolución DNS del host y el acceso al bucket.
+El comando revisa la configuración, la resolución DNS, el acceso al bucket y que sea privado.
+Antes de usar el flujo nuevo, cambia el bucket existente a **privado** en Supabase Storage.
+Comprueba con una evidencia de prueba que la URL pública antigua ya no abra el archivo
+y que el listado de la API entregue una URL firmada temporal a un usuario autorizado.
+Las URL firmadas duran cinco minutos. Conserva la clave de servicio solo en la
+configuración segura del servidor; nunca en el frontend ni en el repositorio.
 El error `[Errno -2] Name or service not known` significa que el host de `SUPABASE_URL`
 no resuelve: normalmente quedó el valor de ejemplo `https://tu-proyecto.supabase.co` o la
 URL tiene un error.
