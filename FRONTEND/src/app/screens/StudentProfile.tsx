@@ -48,7 +48,7 @@ interface StudentDetail {
   codigo: string;
   nombre: string;
   tipo_documento: string;
-  numero_documento: string;
+  numero_documento: string | null;
   semestre: number;
   pensum: string | null;
   ingreso: string | null;
@@ -71,7 +71,7 @@ function FichaAcademica({ student }: { student: StudentDetail | null }) {
     ['Nombre Completo', student.nombre],
     ['Código Estudiantil', student.codigo],
     ['Tipo de Documento', student.tipo_documento],
-    ['Número de Documento', student.numero_documento],
+    ['Número de Documento', student.numero_documento || 'No disponible'],
     ['Celular', student.celular || 'No registrado'],
     ['Correo Personal', student.email_personal || 'No registrado'],
     ['Correo Institucional', student.email_institucional || 'No registrado'],

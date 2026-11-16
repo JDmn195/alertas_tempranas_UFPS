@@ -6,7 +6,7 @@ from django.db.models import Q, Count, Avg, Subquery, OuterRef
 
 from academico.busqueda import filtrar_sin_tildes, normalizar_texto
 from academico.models import Curso, Nota, Periodo, Estudiante
-from alertas.models import RiesgoEstudiante, RiesgoEstudiantePeriodo, Alerta, Regla
+from alertas.models import alertas_abiertas, RiesgoEstudiante, RiesgoEstudiantePeriodo, Alerta, Regla
 from usuarios.decorators import requiere_rol
 from academico.asistencia import numero_o_none, obtener_umbral_general, umbral_efectivo
 
@@ -508,9 +508,7 @@ def director_indicadores(request):
         porcentaje_riesgo = round((en_riesgo / total_activos * 100), 2) if total_activos > 0 else 0.0
 
         # ── KPI 3: Total alertas activas ─────────────────────────────────────
-        alertas_activas = acotar(Alerta.objects.filter(
-            estado__in=['activa', 'active']
-        )).count()
+        alertas_activas = alertas_abiertas(acotar(Alerta.objects.all())).count()
 
         # ── KPIs 4 + tabla cursos críticos: una sola query agregada ──────────
         # Agrupa todas las notas por curso y calcula reprobados/matriculados en SQL
@@ -549,49 +547,36 @@ def director_indicadores(request):
         cursos_criticos_list.sort(key=lambda x: x['failureRate'], reverse=True)
 
         # ── Distribución de riesgo por semestre ──────────────────────────────
-        # Fuente 1: estudiantes CON historial de notas → usar el nivel del
-        # RiesgoEstudiantePeriodo más reciente (más preciso).
-        # Fuente 2: estudiantes SIN notas → usar RiesgoEstudiante (snapshot).
-        # Combinamos ambas para no dejar fuera a los estudiantes recién importados.
-
-        # Estudiantes con RiesgoEstudiantePeriodo
-        estudiantes_con_periodo = set(
-            riesgo_por_periodo().values_list('estudiante_id', flat=True)
+        # Nivel del RiesgoEstudiantePeriodo más reciente (o el del periodo pedido); sin periodo
+        # pedido, si no hay, el snapshot RiesgoEstudiante. Quien no tiene ninguno cuenta como
+        # «sin dato», de modo que las barras suman los estudiantes activos. El eje cubre del 1 al 10.
+        nivel_por_estudiante = {}
+        if periodo_obj is None:
+            nivel_por_estudiante.update(
+                acotar(RiesgoEstudiante.objects).values_list('estudiante_id', 'nivel_riesgo')
+            )
+        nivel_por_estudiante.update(
+            riesgo_por_periodo().values_list('estudiante_id', 'nivel_riesgo')
         )
 
-        dist_map = defaultdict(lambda: {'low': 0, 'medium': 0, 'high': 0})
+        activos = acotar(Estudiante.objects.exclude(
+            Q(estado_matricula__icontains='retirado') |
+            Q(estado_matricula__icontains='graduado') |
+            Q(estado_matricula__icontains='cancelado')
+        ), 'pk').values_list('pk', 'semestre')
+        dist_map = defaultdict(lambda: {'low': 0, 'medium': 0, 'high': 0, 'sin_dato': 0})
+        for est_id, sem in activos:
+            nivel = nivel_por_estudiante.get(est_id)
+            dist_map[sem][nivel if nivel in ('low', 'medium', 'high') else 'sin_dato'] += 1
 
-        # Fuente 1: nivel del periodo más reciente
-        dist_raw = (
-            riesgo_por_periodo()
-            .filter(nivel_riesgo__in=['low', 'medium', 'high'])
-            .values('nivel_riesgo', 'estudiante__semestre')
-            .annotate(total=Count('id'))
+        semestres = sorted(
+            set(range(1, 11)) | {s for s in dist_map if s is not None}
         )
-        for row in dist_raw:
-            sem = row['estudiante__semestre']
-            dist_map[sem][row['nivel_riesgo']] += row['total']
-
-        # Fuente 2: snapshot de estudiantes sin RiesgoEstudiantePeriodo
-        dist_snapshot = (
-            acotar(RiesgoEstudiante.objects)
-            .exclude(estudiante_id__in=estudiantes_con_periodo)
-            .filter(nivel_riesgo__in=['low', 'medium', 'high'])
-            .values('nivel_riesgo', 'estudiante__semestre')
-            .annotate(total=Count('id'))
-        )
-        for row in ([] if periodo_obj is not None else dist_snapshot):
-            sem = row['estudiante__semestre']
-            dist_map[sem][row['nivel_riesgo']] += row['total']
-
+        if semestre_filtro is not None:
+            semestres = [semestre_filtro]
         distribucion_riesgo = [
-            {
-                'semester': f'Sem {sem}',
-                'low': counts['low'],
-                'medium': counts['medium'],
-                'high': counts['high'],
-            }
-            for sem, counts in sorted(dist_map.items())
+            {'semester': f'Sem {sem}', **dist_map[sem]}
+            for sem in semestres
         ]
 
         # ── Tendencia GPA por periodo: una query agregada ─────────────────────
