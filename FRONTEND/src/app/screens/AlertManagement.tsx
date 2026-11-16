@@ -26,6 +26,8 @@ const RISK_CONFIG: Record<string, { label: string; variant: 'high' | 'medium' | 
   BAJO: { label: 'BAJO', variant: 'low' },
 };
 
+const TAMANO_PAGINA = 20;
+
 const tabMapping: Record<string, string> = {
   'Activas': 'activa',
   'En Seguimiento': 'en_seguimiento',
@@ -204,9 +206,11 @@ function ModalRegistrar({
 function ModalHistorial({
   alerta,
   onClose,
+  puedeVerEvidencias,
 }: {
   alerta: AlertItem;
   onClose: () => void;
+  puedeVerEvidencias: boolean;
 }) {
   const [intervenciones, setIntervenciones] = useState<Intervencion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -287,14 +291,16 @@ function ModalHistorial({
               )}
               <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
                 <p className="text-xs text-gray-400">Por: <span className="font-medium text-gray-600">{item.usuario}</span></p>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                {puedeVerEvidencias && (
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="h-7 text-[10px] gap-1 hover:bg-gray-50"
                   onClick={() => navigate(`/dashboard/intervenciones/${item.id}/evidencias`)}
                 >
                   <ExternalLink className="w-3 h-3" /> Ver Evidencias
                 </Button>
+                )}
               </div>
             </div>
           ))}
@@ -309,7 +315,13 @@ function ModalHistorial({
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
 export default function AlertManagement() {
-  const [activeTab, setActiveTab] = useState('Activas');
+  // SDAT-349: la pestaña va en la URL (?tab=activa) para poder volver a ella o compartirla
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = Object.keys(tabMapping).find((t) => tabMapping[t] === searchParams.get('tab')) ?? 'Activas';
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [totalAlertas, setTotalAlertas] = useState(0);
+  const [filterNivel, setFilterNivel] = useState('all');
   const [filterType, setFilterType] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');          // 3.1
   const [alertsList, setAlertsList] = useState<AlertItem[]>([]);
@@ -317,7 +329,9 @@ export default function AlertManagement() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [cerrando, setCerrando] = useState<Array<string | number>>([]);
-  const puedeReevaluar = rolGuardado() === 'ADMINISTRADOR';
+  const rol = rolGuardado();
+  const puedeReevaluar = rol === 'ADMINISTRADOR';
+  const soloLectura = rol === 'DIRECTOR';  // SDAT-349: el director consulta, no edita
   const [reevaluating, setReevaluating] = useState(false);     // 3.6
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [expandedStudents, setExpandedStudents] = useState<Record<string, boolean>>({});
@@ -327,7 +341,13 @@ export default function AlertManagement() {
   const [showHistory, setShowHistory] = useState(false);
 
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+
+  const setActiveTab = (tab: string) => {
+    const nuevos = new URLSearchParams(searchParams);
+    nuevos.set('tab', tabMapping[tab]);
+    setSearchParams(nuevos, { replace: true });
+    setPage(1);
+  };
 
   // 4.2: pre-cargar búsqueda desde URL (?search=nombre) al montar
   useEffect(() => {
@@ -342,16 +362,19 @@ export default function AlertManagement() {
       const stateParam = tabMapping[activeTab];
       // 3.1: enviar parámetro search al backend
       const searchParam = searchQuery.trim() ? `&search=${encodeURIComponent(searchQuery.trim())}` : '';
-      const res = await apiFetch(`${API_BASE}/?estado=${stateParam}&tipo_regla=${filterType}${searchParam}`);
+      const res = await apiFetch(`${API_BASE}/?estado=${stateParam}&tipo_regla=${filterType}&nivel=${filterNivel}&page=${page}&page_size=${TAMANO_PAGINA}${searchParam}`);
       const data = await res.json();
       setAlertsList(data.alertas);
       setConteos(data.conteos);
+      setPages(data.pages ?? 1);
+      setTotalAlertas(data.total ?? data.alertas.length);
+      if (data.page && data.page !== page) setPage(data.page);
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, [activeTab, filterType, searchQuery]);
+  }, [activeTab, filterType, filterNivel, searchQuery, page]);
 
   useEffect(() => {
     fetchAlerts();
@@ -392,8 +415,12 @@ export default function AlertManagement() {
     }
   };
 
+  // SDAT-349: un solo botón y un solo mensaje de confirmación para cerrar, en cualquier pestaña
   const handleCerrarAlerta = async (id: string | number) => {
     if (cerrando.includes(id)) return;
+    const alerta = alertsList.find(a => a.id === id);
+    const detalle = alerta ? `«${alerta.alertType}» de ${alerta.studentName}` : 'esta alerta';
+    if (!(await confirmarAccion(`¿Cerrar la alerta ${detalle}? Ya no se podrán registrar más intervenciones.`, { titulo: 'Cerrar alerta', confirmar: 'Cerrar alerta' }))) return;
     setCerrando(prev => [...prev, id]);
     try {
       const res = await apiFetch(`${API_BASE}/${id}/cerrar/`, { method: 'POST' });
@@ -446,7 +473,8 @@ export default function AlertManagement() {
       {showHistory && selectedAlert && (
         <ModalHistorial 
           alerta={selectedAlert} 
-          onClose={() => setShowHistory(false)} 
+          onClose={() => setShowHistory(false)}
+          puedeVerEvidencias={!soloLectura}
         />
       )}
 
@@ -465,10 +493,12 @@ export default function AlertManagement() {
           {reevaluating ? 'Reevaluando...' : 'Reevaluar alertas'}
         </Button>
         )}
+        {!soloLectura && (
         <Button onClick={handleGenerateAlerts} disabled={generating || reevaluating} className="gap-2">
           <RefreshCw className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} aria-hidden="true" />
           {generating ? 'Procesando...' : 'Actualizar'}
         </Button>
+        )}
       </EncabezadoPagina>
 
       {successMsg && (
@@ -519,7 +549,7 @@ export default function AlertManagement() {
                 placeholder="Buscar estudiante..."
                 aria-label="Buscar estudiante"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
                 className="h-9 pl-9 pr-3 text-sm border border-line-strong rounded-[10px] bg-white w-52"
               />
             </div>
@@ -527,7 +557,7 @@ export default function AlertManagement() {
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" aria-hidden="true" />
               <select
                 value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
+                onChange={(e) => { setFilterType(e.target.value); setPage(1); }}
                 aria-label="Filtrar por tipo de alerta"
                 className="h-9 pl-9 pr-3 text-sm border border-line-strong rounded-[10px] bg-white cursor-pointer"
               >
@@ -539,6 +569,17 @@ export default function AlertManagement() {
                 <option value="INASISTENCIA">INASISTENCIA</option>
               </select>
             </div>
+            <select
+              value={filterNivel}
+              onChange={(e) => { setFilterNivel(e.target.value); setPage(1); }}
+              aria-label="Filtrar por nivel de la alerta"
+              className="h-9 px-3 text-sm border border-line-strong rounded-[10px] bg-white cursor-pointer"
+            >
+              <option value="all">TODOS LOS NIVELES</option>
+              <option value="high">NIVEL ALTO</option>
+              <option value="medium">NIVEL MEDIO</option>
+              <option value="low">NIVEL BAJO</option>
+            </select>
           </div>
         </div>
 
@@ -547,13 +588,13 @@ export default function AlertManagement() {
           {loading ? (
             <CargandoLista filas={4} texto="Cargando alertas…" />
           ) : studentGroups.length === 0 ? (
-            (filterType !== 'all' || searchQuery.trim() !== '') ? (
+            (filterType !== 'all' || filterNivel !== 'all' || searchQuery.trim() !== '') ? (
               <EstadoVacio
                 icono={SearchX}
                 titulo="Ninguna alerta coincide con tu búsqueda"
                 detalle="Hay filtros activos en esta pestaña. Quítalos para ver todas las alertas."
               >
-                <Button variant="outline" size="sm" onClick={() => { setFilterType('all'); setSearchQuery(''); }}>
+                <Button variant="outline" size="sm" onClick={() => { setFilterType('all'); setFilterNivel('all'); setSearchQuery(''); setPage(1); }}>
                   Quitar filtros
                 </Button>
               </EstadoVacio>
@@ -718,47 +759,25 @@ export default function AlertManagement() {
                             <span className="text-[10px] font-semibold uppercase tracking-widest">Historial</span>
                           </Button>
                           
-                          {/* Activas y En Seguimiento: Intervenir + Cerrar */}
-                          {(activeTab === 'Activas' || activeTab === 'En Seguimiento') && (
+                          {/* Intervenir y cerrar: mismas acciones en todas las pestañas abiertas; el director no las ve */}
+                          {!soloLectura && activeTab !== 'Cerradas' && (
                             <>
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 className="h-9 px-5 bg-primary text-white hover:bg-primary-strong rounded-[10px] flex-1 lg:flex-none"
                                 onClick={() => { setSelectedAlert(alert); setShowModal(true); }}
                               >
                                 <span className="text-[10px] font-semibold uppercase tracking-widest">Intervenir</span>
                               </Button>
-                              <Button aria-label="Cerrar alerta"
-                                variant="outline" 
-                                size="sm" 
-                                className="h-9 px-3 border-gray-200 text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-[10px]"
-                                disabled={cerrando.includes(alert.id)}
-                                onClick={async () => { if(await confirmarAccion(`¿Cerrar la alerta «${alert.alertType}» de ${alert.studentName}?`, { titulo: 'Cerrar alerta', confirmar: 'Cerrar alerta' })) handleCerrarAlerta(alert.id); }}
-                              >
-                                <X className="w-4 h-4" />
-                              </Button>
-                            </>
-                          )}
-
-                          {/* Atendidas: puede intervenir de nuevo + cerrar */}
-                          {activeTab === 'Atendidas' && (
-                            <>
-                              <Button 
-                                size="sm" 
-                                className="h-9 px-5 bg-primary text-white hover:bg-primary-strong rounded-[10px] flex-1 lg:flex-none"
-                                onClick={() => { setSelectedAlert(alert); setShowModal(true); }}
-                              >
-                                <span className="text-[10px] font-semibold uppercase tracking-widest">Intervenir</span>
-                              </Button>
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
+                              <Button
+                                variant="outline"
+                                size="sm"
                                 className="h-9 px-4 border-gray-200 text-gray-500 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-[10px] flex-1 lg:flex-none"
                                 disabled={cerrando.includes(alert.id)}
-                                onClick={async () => { if(await confirmarAccion(`¿Cerrar la alerta «${alert.alertType}» de ${alert.studentName}? Ya no se podrán registrar más intervenciones.`, { titulo: 'Cerrar alerta', confirmar: 'Cerrar alerta' })) handleCerrarAlerta(alert.id); }}
+                                onClick={() => handleCerrarAlerta(alert.id)}
                               >
-                                <X className="w-3.5 h-3.5 mr-2" />
-                                <span className="text-[10px] font-semibold uppercase tracking-widest">{cerrando.includes(alert.id) ? 'Cerrando...' : 'Cerrar Alerta'}</span>
+                                <X className="w-3.5 h-3.5 mr-2" aria-hidden="true" />
+                                <span className="text-[10px] font-semibold uppercase tracking-widest">{cerrando.includes(alert.id) ? 'Cerrando...' : 'Cerrar alerta'}</span>
                               </Button>
                             </>
                           )}
@@ -771,6 +790,16 @@ export default function AlertManagement() {
             ))
           )}
         </div>
+
+        {!loading && pages > 1 && (
+          <nav aria-label="Paginación de alertas" className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 sm:px-5 py-3 text-sm text-ink-muted">
+            <span>Página {page} de {pages} · {totalAlertas} alertas</span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Anterior</Button>
+              <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>Siguiente</Button>
+            </div>
+          </nav>
+        )}
       </div>
     </div>
   );

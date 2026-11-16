@@ -59,7 +59,7 @@ def recalcular_estado_alerta(alerta):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR'])  # SDAT-349: el DIRECTOR solo consulta
 def registrar_intervencion(request, alerta_id):
     """
     POST /api/alertas/<alerta_id>/intervenciones/
@@ -277,7 +277,7 @@ def eliminar_anotacion(request, anotacion_id):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR'])  # SDAT-349: el DIRECTOR solo consulta
 def concluir_intervencion(request, intervencion_id):
     """
     POST /api/alertas/intervenciones/<id>/concluir/
