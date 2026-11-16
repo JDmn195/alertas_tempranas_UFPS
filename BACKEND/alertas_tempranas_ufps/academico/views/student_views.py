@@ -324,21 +324,23 @@ def obtener_detalle_estudiante(request, codigo):
             ppa_calculado = e.promedio
         ppa_calculado = float(ppa_calculado) if ppa_calculado is not None else None
 
+        # SDAT-338: el docente no recibe datos personales sensibles del estudiante
+        es_docente = request.usuario.rol == 'DOCENTE'
         return JsonResponse({
             'codigo':              e.codigo,
             'nombre':              e.nombre,
             'tipo_documento':      e.tipo_documento,
-            'numero_documento':    e.numero_documento,
+            'numero_documento':    None if es_docente else e.numero_documento,
             'semestre':            e.semestre,
             'pensum':              e.pensum,
             'ingreso':             e.ingreso.isoformat() if e.ingreso else None,
             'promedio':            ppa_calculado,
             'estado_matricula':    e.estado_matricula,
-            'celular':             e.celular,
-            'email_personal':      e.email_personal,
+            'celular':             None if es_docente else e.celular,
+            'email_personal':      None if es_docente else e.email_personal,
             'email_institucional': e.email_institucional,
-            'colegio_egresado':    e.colegio_egresado,
-            'municipio_nacimiento': e.municipio_nacimiento,
+            'colegio_egresado':    None if es_docente else e.colegio_egresado,
+            'municipio_nacimiento': None if es_docente else e.municipio_nacimiento,
             'nivel_riesgo':        nivel,
             'alertas_activas':     total_alertas,
         })
@@ -461,7 +463,10 @@ def obtener_historial_academico(request, codigo):
         return denegado
     notas = Nota.objects.filter(estudiante=estudiante).select_related(
         'periodo', 'curso__materia', 'curso__docente'
-    ).order_by('periodo__anio', 'periodo__semestre')
+    )
+    if request.usuario.rol == 'DOCENTE':  # SDAT-338: solo las notas de sus propios cursos
+        notas = notas.filter(curso__docente__usuario=request.usuario)
+    notas = notas.order_by('periodo__anio', 'periodo__semestre')
 
     historial = {}
     alertas_por_curso = alertas_corte_abiertas(estudiante)
@@ -537,9 +542,10 @@ def obtener_intervenciones_estudiante(request, codigo):
         return denegado
     
     from alertas.models import Intervencion
-    intervenciones = Intervencion.objects.filter(alerta__estudiante=estudiante).select_related(
-        'usuario', 'alerta__regla'
-    ).order_by('-fecha')
+    from alertas.permisos import filtrar_intervenciones_visibles
+    intervenciones = filtrar_intervenciones_visibles(
+        request.usuario, Intervencion.objects.filter(alerta__estudiante=estudiante)
+    ).select_related('usuario', 'alerta__regla').order_by('-fecha')
     
     results = []
     for i in intervenciones:
