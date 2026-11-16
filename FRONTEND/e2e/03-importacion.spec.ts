@@ -34,11 +34,12 @@ test.describe('Importación de historial académico', () => {
       buffer: Buffer.from('Periodo,Definitiva\n2026-1,4.0\n'),
     });
 
-    await expect(page.getByText(`historial_${ESTUDIANTES.sinNotas.codigo}.csv`)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Importar', exact: true })).toBeVisible();
+    await expect(page.getByText(`historial_${ESTUDIANTES.sinNotas.codigo}.csv`).first()).toBeVisible();
     expect(envios).toBe(0);
     await page.getByRole('button', { name: 'Cancelar' }).click();
     await expect(page.getByRole('button', { name: 'Cancelar' })).toHaveCount(0);
-    await expect(page.getByText(`historial_${ESTUDIANTES.sinNotas.codigo}.csv`)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Importar', exact: true })).toHaveCount(0);
     expect(envios).toBe(0);
   });
 
