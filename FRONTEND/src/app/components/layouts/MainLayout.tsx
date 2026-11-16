@@ -3,6 +3,7 @@ import { Outlet, Navigate, Link, useLocation } from 'react-router';
 import { LogOut } from 'lucide-react';
 import { Sidebar, cerrarSesion, estaActivo, iniciales, itemsDelRol } from './Sidebar';
 import { TopNav } from './TopNav';
+import { ToggleTema } from '../ToggleTema';
 
 const enlaceSalto =
   'sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:bg-white focus:text-primary focus:px-4 focus:py-2 focus:rounded-[10px] focus:shadow-lg';
@@ -35,7 +36,7 @@ export function MainLayout() {
     <div className="flex h-dvh bg-desk">
       <a href="#contenido" className={enlaceSalto}>Saltar al contenido</a>
       <Sidebar abierto={menuAbierto} onCerrar={() => setMenuAbierto(false)} />
-      <div className="flex-1 flex flex-col min-w-0 bg-[#FBF3F1] lg:my-2 lg:mr-2 lg:rounded-[14px] lg:border lg:border-line overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 bg-paper lg:my-2 lg:mr-2 lg:rounded-[14px] lg:border lg:border-line overflow-hidden">
         <TopNav onMenu={() => setMenuAbierto(true)} menuAbierto={menuAbierto} />
         <main id="contenido" ref={contenido} className="flex-1 overflow-auto px-3 py-5 sm:px-5 lg:px-7 lg:py-6">
           <div key={location.pathname} className="page-enter">
@@ -55,7 +56,7 @@ function EstructuraPortal({ nombre, contenido, pathname }: { nombre?: string; co
   const items = itemsDelRol('ESTUDIANTE');
 
   return (
-    <div className="flex flex-col h-dvh bg-[#F8ECE9]">
+    <div className="flex flex-col h-dvh bg-desk">
       <a href="#contenido" className={enlaceSalto}>Saltar al contenido</a>
       <header className="shrink-0 bg-white border-b border-line">
         <div className="mx-auto max-w-6xl h-16 px-4 sm:px-6 flex items-center justify-between gap-4">
@@ -89,6 +90,7 @@ function EstructuraPortal({ nombre, contenido, pathname }: { nombre?: string; co
               </span>
               <span className="hidden lg:block text-sm font-medium text-ink max-w-40 truncate">{nombre}</span>
             </div>
+            <ToggleTema />
             <button
               onClick={cerrarSesion}
               className="flex items-center gap-2 rounded-full border border-line px-3 py-2 text-sm font-medium text-ink-soft hover:border-line-strong hover:text-ink"

@@ -5,10 +5,10 @@
 export type NivelRiesgo = 'high' | 'medium' | 'low' | 'unknown';
 
 const NIVELES: Record<NivelRiesgo, { segmentos: number; etiqueta: string; texto: string; fondo: string; borde: string; hex: string }> = {
-  high: { segmentos: 4, etiqueta: 'Alto', texto: 'text-red-800', fondo: 'bg-red-50', borde: 'border-red-200', hex: '#B02A2B' },
-  medium: { segmentos: 2, etiqueta: 'Medio', texto: 'text-amber-800', fondo: 'bg-amber-50', borde: 'border-amber-200', hex: '#C98A12' },
-  low: { segmentos: 1, etiqueta: 'Bajo', texto: 'text-green-800', fondo: 'bg-green-50', borde: 'border-green-200', hex: '#2F8F6B' },
-  unknown: { segmentos: 0, etiqueta: 'Sin datos', texto: 'text-ink-muted', fondo: 'bg-wash', borde: 'border-line', hex: '#9C8D8A' },
+  high: { segmentos: 4, etiqueta: 'Alto', texto: 'text-red-800', fondo: 'bg-red-50', borde: 'border-red-200', hex: 'var(--riesgo-critico)' },
+  medium: { segmentos: 2, etiqueta: 'Medio', texto: 'text-amber-800', fondo: 'bg-amber-50', borde: 'border-amber-200', hex: 'var(--riesgo-medio)' },
+  low: { segmentos: 1, etiqueta: 'Bajo', texto: 'text-green-800', fondo: 'bg-green-50', borde: 'border-green-200', hex: 'var(--riesgo-bajo)' },
+  unknown: { segmentos: 0, etiqueta: 'Sin datos', texto: 'text-ink-muted', fondo: 'bg-wash', borde: 'border-line', hex: 'var(--ink-faint)' },
 };
 
 export function normalizarNivel(nivel?: string | null): NivelRiesgo {

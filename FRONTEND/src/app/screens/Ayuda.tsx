@@ -45,13 +45,13 @@ export default function Ayuda() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 text-gray-800">
       <header>
-        <p className="text-sm font-semibold text-[#9B0C24]">Guía del SAT · {nombres[rol] || 'Ayuda'}</p>
+        <p className="text-sm font-semibold text-primary-strong">Guía del SAT · {nombres[rol] || 'Ayuda'}</p>
         <h1 className="mt-1 text-3xl font-bold">¿Cómo funciona?</h1>
         <p className="mt-2 text-gray-600">Consulta el significado de los indicadores y las acciones disponibles para tu rol.</p>
       </header>
 
       <nav aria-label="Accesos relacionados" className="flex flex-wrap gap-2">
-        {enlaces.map(([texto, ruta]) => <Link key={ruta} to={ruta} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-[#9B0C24] hover:bg-red-50">{texto}</Link>)}
+        {enlaces.map(([texto, ruta]) => <Link key={ruta} to={ruta} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-primary-strong hover:bg-red-50">{texto}</Link>)}
       </nav>
 
       <section className="rounded-xl border border-gray-200 bg-white p-5 space-y-3" aria-labelledby="riesgo-ayuda">
