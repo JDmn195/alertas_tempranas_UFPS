@@ -11,7 +11,7 @@ from academico.services.notas_corte import ESTADO_EN_CURSO, alertas_corte_abiert
 from alertas.evaluacion import calcular_indicadores, calcular_ppa, nivel_de_riesgo
 from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, Alerta, Regla
 from usuarios.decorators import requiere_rol
-from usuarios.utils import registrar_auditoria
+from usuarios.utils import fecha_local, registrar_auditoria
 
 logger = logging.getLogger(__name__)
 
@@ -520,7 +520,7 @@ def obtener_intervenciones_estudiante(request, codigo):
             'observaciones': i.observaciones,
             'evidencia':     i.evidencia,
             'resultado':     i.resultado,
-            'fecha':         i.fecha.strftime('%Y-%m-%d %H:%M'),
+            'fecha':         fecha_local(i.fecha),
             'usuario':       i.usuario.nombre,
             'usuario_rol':   i.usuario.rol,
             'alerta_id':     i.alerta.id,

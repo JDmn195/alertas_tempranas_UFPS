@@ -10,6 +10,7 @@ from django.db.models import Count, Avg, Q
 from alertas.models import Alerta, Intervencion, RiesgoEstudiante, RiesgoEstudiantePeriodo
 from academico.models import Estudiante, Curso, Nota
 from alertas_tempranas_ufps.paginacion import paginar_si_se_pide, metadatos_pagina
+from usuarios.utils import fecha_local
 
 logger = logging.getLogger(__name__)
 
@@ -259,7 +260,7 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
                 result_friendly = 'En Proceso'
             evidence_count = i.evidencias.count() if hasattr(i, 'evidencias') else 0
             data.append({
-                'date': i.fecha.strftime('%Y-%m-%d'),
+                'date': fecha_local(i.fecha, '%Y-%m-%d'),
                 'student': i.alerta.estudiante.nombre,
                 'type': tipo_friendly,
                 'counselor': i.usuario.nombre,

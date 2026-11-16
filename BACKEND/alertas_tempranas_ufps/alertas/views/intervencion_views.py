@@ -6,7 +6,7 @@ from django.views.decorators.http import require_http_methods
 from alertas.models import Alerta, Intervencion
 from alertas.permisos import denegar_acceso_alerta, puede_acceder_alerta
 from usuarios.decorators import requiere_rol
-from usuarios.utils import registrar_auditoria
+from usuarios.utils import fecha_local, registrar_auditoria
 
 # Alertas cerradas no permiten nuevas intervenciones
 ESTADOS_NO_PERMITIDOS = ['cerrada', 'closed']
@@ -144,7 +144,7 @@ def registrar_intervencion(request, alerta_id):
             'evidencia':    intervencion.evidencia,
             'resultado':    intervencion.resultado,
             'concluida':    intervencion.concluida,
-            'fecha':        intervencion.fecha.strftime('%Y-%m-%d %H:%M'),
+            'fecha':        fecha_local(intervencion.fecha),
         }
     }, status=201)
 
@@ -176,7 +176,7 @@ def listar_intervenciones(request, alerta_id):
             'evidencia':     i.evidencia,
             'resultado':     i.resultado,
             'concluida':     i.concluida,
-            'fecha':         i.fecha.strftime('%Y-%m-%d %H:%M'),
+            'fecha':         fecha_local(i.fecha),
             'usuario':       i.usuario.nombre,
             'usuario_rol':   i.usuario.rol,
         })
@@ -213,7 +213,7 @@ def gestionar_anotaciones(request, intervencion_id):
             results.append({
                 'id': a.id,
                 'texto': a.texto,
-                'fecha': a.fecha.strftime('%Y-%m-%d %H:%M'),
+                'fecha': fecha_local(a.fecha),
                 'usuario': a.usuario.nombre,
                 'usuario_rol': a.usuario.rol
             })
@@ -245,7 +245,7 @@ def gestionar_anotaciones(request, intervencion_id):
             'anotacion': {
                 'id': anotacion.id,
                 'texto': anotacion.texto,
-                'fecha': anotacion.fecha.strftime('%Y-%m-%d %H:%M'),
+                'fecha': fecha_local(anotacion.fecha),
                 'usuario': usuario.nombre,
                 'usuario_rol': usuario.rol
             }
