@@ -472,6 +472,8 @@ def listar_auditoria(request):
         
     pagina = paginar_si_se_pide(request, qs)
     data = []
+    # SDAT-303: etiqueta del tipo de acción desde un diccionario (get_FOO_display por fila era lo más costoso)
+    etiquetas = dict(Auditoria.TIPO_ACCION_CHOICES)
     for a in (pagina if pagina is not None else qs):
         data.append({
             'id': a.id,
@@ -479,7 +481,7 @@ def listar_auditoria(request):
             'usuario_correo': a.usuario.correo if a.usuario else '',
             'fecha_hora': a.fecha_hora.isoformat(),
             'tipo_accion': a.tipo_accion,
-            'tipo_accion_display': a.get_tipo_accion_display(),
+            'tipo_accion_display': etiquetas.get(a.tipo_accion, a.tipo_accion),
             'detalle': a.detalle
         })
         

@@ -1,5 +1,7 @@
+import json
 import logging
-from django.http import JsonResponse
+from django.core.serializers.json import DjangoJSONEncoder
+from django.http import HttpResponse, JsonResponse
 from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -8,6 +10,7 @@ from django.shortcuts import get_object_or_404
 from academico.busqueda import filtrar_sin_tildes
 from academico.models import Estudiante, Nota, Curso, Periodo
 from alertas.alertas_inasistencia import factor_inasistencia, obtener_regla_inasistencia, periodos_con_asistencia
+from alertas import cache_listado
 from alertas.evaluacion import ORDEN_NIVELES, actualizar_promedio, calcular_indicadores, evaluar_regla, nivel_de_riesgo
 from alertas.permisos import denegar_acceso_alerta, puede_acceder_alerta
 from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, Regla, Alerta, RiesgoEstudiante, RiesgoEstudiantePeriodo
@@ -399,8 +402,14 @@ def listar_alertas(request):
     estado = request.GET.get('estado', 'activa')
     tipo_regla = request.GET.get('tipo_regla')
     search = request.GET.get('search', '').strip()  # 3.1
-    
-    qs = Alerta.objects.select_related('estudiante', 'regla').order_by('-fecha_generacion')
+
+    # SDAT-303: respuesta ya serializada, válida pocos segundos (ver alertas/cache_listado.py)
+    clave_cache = (usuario.id if usuario.rol == 'DOCENTE' else 'todos', estado, tipo_regla, search)
+    cuerpo = cache_listado.obtener(clave_cache)
+    if cuerpo is not None:
+        return HttpResponse(cuerpo, content_type='application/json')
+
+    qs = Alerta.objects.order_by('-fecha_generacion')
     total_qs = Alerta.objects.all()
     
     if usuario.rol == 'DOCENTE':
@@ -440,32 +449,37 @@ def listar_alertas(request):
 
     # Cargar el nivel de riesgo actual de cada estudiante en una sola query
     # para ordenar las alertas por riesgo del estudiante (high > medium > low > unknown)
-    estudiante_ids = qs.values_list('estudiante_id', flat=True).distinct()
-    riesgo_map = {
-        r.estudiante_id: r.nivel_riesgo
-        for r in RiesgoEstudiante.objects.filter(estudiante_id__in=estudiante_ids)
-    }
+    estudiante_ids = qs.order_by().values_list('estudiante_id', flat=True).distinct()
+    riesgo_map = dict(
+        RiesgoEstudiante.objects.filter(estudiante_id__in=estudiante_ids)
+        .values_list('estudiante_id', 'nivel_riesgo')
+    )
 
     ORDEN_RIESGO_EST = {'high': 0, 'medium': 1, 'low': 2, 'unknown': 3}
     ORDEN_NIVEL_REGLA = {'high': 0, 'medium': 1, 'low': 2}
 
     data = []
-    for a in qs:
-        nivel_est = riesgo_map.get(a.estudiante_id, 'unknown')
+    # SDAT-303: filas planas (sin instanciar Alerta, Estudiante y Regla por cada alerta)
+    filas = qs.values_list(
+        'id', 'estudiante_id', 'estudiante__nombre', 'regla__nivel', 'regla__nombre', 'regla__tipo',
+        'fecha_generacion', 'estado', 'valor_causa', 'metadata',
+    )
+    for id_, est_id, nombre, nivel_regla, nombre_regla, tipo, fecha, estado_a, valor, metadata in filas:
+        nivel_est = riesgo_map.get(est_id, 'unknown')
         data.append({
-            'id': a.id,
-            'studentName': a.estudiante.nombre,
-            'studentCode': a.estudiante.codigo,
-            'riskLevel': a.regla.nivel,
+            'id': id_,
+            'studentName': nombre,
+            'studentCode': est_id,
+            'riskLevel': nivel_regla,
             'studentRiskLevel': nivel_est,
-            'alertType': a.regla.nombre,
-            'generatedDate': a.fecha_generacion.strftime('%Y-%m-%d'),
-            'status': a.estado,
-            'tipo_regla': a.regla.tipo,
-            'valor_causa': float(a.valor_causa) if a.valor_causa else None,
-            'metadata': a.metadata,
+            'alertType': nombre_regla,
+            'generatedDate': fecha.strftime('%Y-%m-%d'),
+            'status': estado_a,
+            'tipo_regla': tipo,
+            'valor_causa': float(valor) if valor else None,
+            'metadata': metadata,
             '_ord_est': ORDEN_RIESGO_EST.get(nivel_est, 3),
-            '_ord_regla': ORDEN_NIVEL_REGLA.get(a.regla.nivel, 3),
+            '_ord_regla': ORDEN_NIVEL_REGLA.get(nivel_regla, 3),
         })
 
     # Ordenar: primero por riesgo del estudiante, luego por nivel de la alerta, luego fecha más reciente
@@ -474,10 +488,9 @@ def listar_alertas(request):
         del item['_ord_est']
         del item['_ord_regla']
         
-    return JsonResponse({
-        'alertas': data,
-        'conteos': conteos
-    }, safe=False)
+    cuerpo = json.dumps({'alertas': data, 'conteos': conteos}, cls=DjangoJSONEncoder).encode('utf-8')
+    cache_listado.guardar(clave_cache, cuerpo)
+    return HttpResponse(cuerpo, content_type='application/json')
 
 @csrf_exempt
 @require_http_methods(["POST"])

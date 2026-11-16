@@ -6,6 +6,7 @@ from django.db.models import Q, Count, Avg, Subquery, OuterRef
 
 from academico.busqueda import filtrar_sin_tildes, normalizar_texto
 from academico.models import Curso, Nota, Periodo, Estudiante
+from alertas.riesgo_actual import ultimo_riesgo_por_estudiante
 from alertas.models import RiesgoEstudiante, RiesgoEstudiantePeriodo, Alerta, Regla
 from usuarios.decorators import requiere_rol
 from academico.asistencia import numero_o_none, obtener_umbral_general, umbral_efectivo
@@ -437,19 +438,10 @@ def director_indicadores(request):
 
         # ── KPI 2: Porcentaje en riesgo ───────────────────────────────────────
         # Combina ambas fuentes igual que la distribución por semestre.
-        _periodo_max_id_sq = (
-            RiesgoEstudiantePeriodo.objects
-            .filter(estudiante_id=OuterRef('estudiante_id'))
-            .order_by('-periodo__anio', '-periodo__semestre')
-            .values('id')[:1]
-        )
+        # SDAT-303: último riesgo de cada estudiante en una sola lectura (antes 3 subconsultas correlacionadas)
+        riesgo_ultimo = ultimo_riesgo_por_estudiante()
         # Estudiantes con RiesgoEstudiantePeriodo en riesgo
-        ids_en_riesgo_con_periodo = set(
-            RiesgoEstudiantePeriodo.objects
-            .filter(id=Subquery(_periodo_max_id_sq))
-            .filter(nivel_riesgo__in=['high', 'medium'])
-            .values_list('estudiante_id', flat=True)
-        )
+        ids_en_riesgo_con_periodo = {est for est, nivel in riesgo_ultimo.items() if nivel in ('high', 'medium')}
         # Estudiantes sin RiesgoEstudiantePeriodo pero con snapshot en riesgo
         ids_en_riesgo_sin_periodo = set(
             RiesgoEstudiante.objects
@@ -503,33 +495,16 @@ def director_indicadores(request):
         # Fuente 2: estudiantes SIN notas → usar RiesgoEstudiante (snapshot).
         # Combinamos ambas para no dejar fuera a los estudiantes recién importados.
 
-        periodo_max_id_sq = (
-            RiesgoEstudiantePeriodo.objects
-            .filter(estudiante_id=OuterRef('estudiante_id'))
-            .order_by('-periodo__anio', '-periodo__semestre')
-            .values('id')[:1]
-        )
-
         # Estudiantes con RiesgoEstudiantePeriodo
-        estudiantes_con_periodo = set(
-            RiesgoEstudiantePeriodo.objects
-            .filter(id=Subquery(periodo_max_id_sq))
-            .values_list('estudiante_id', flat=True)
-        )
+        estudiantes_con_periodo = set(riesgo_ultimo)
 
         dist_map = defaultdict(lambda: {'low': 0, 'medium': 0, 'high': 0})
 
         # Fuente 1: nivel del periodo más reciente
-        dist_raw = (
-            RiesgoEstudiantePeriodo.objects
-            .filter(id=Subquery(periodo_max_id_sq))
-            .filter(nivel_riesgo__in=['low', 'medium', 'high'])
-            .values('nivel_riesgo', 'estudiante__semestre')
-            .annotate(total=Count('id'))
-        )
-        for row in dist_raw:
-            sem = row['estudiante__semestre']
-            dist_map[sem][row['nivel_riesgo']] += row['total']
+        semestre_de = dict(Estudiante.objects.values_list('codigo', 'semestre'))
+        for est_id, nivel in riesgo_ultimo.items():
+            if nivel in ('low', 'medium', 'high') and est_id in semestre_de:
+                dist_map[semestre_de[est_id]][nivel] += 1
 
         # Fuente 2: snapshot de estudiantes sin RiesgoEstudiantePeriodo
         dist_snapshot = (

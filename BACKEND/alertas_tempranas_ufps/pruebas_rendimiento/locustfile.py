@@ -24,6 +24,11 @@ UMBRAL_ERRORES = float(os.environ.get('UMBRAL_ERRORES', 0.01))
 # Endpoints pesados por diseño (reportes): umbral aparte
 UMBRAL_P95_REPORTES_MS = float(os.environ.get('UMBRAL_P95_REPORTES_MS', 5000))
 
+# Token por cuenta. Se llenan antes de generar carga (ver abrir_sesiones): el login es lento a propósito
+# (hash de la contraseña, ~2 s de CPU) y los usuarios reales lo hacen una vez y reutilizan su JWT. Si 50
+# usuarios simulados entraran a la vez, el hash acapararía la CPU y retrasaría a todos los demás endpoints.
+SESIONES: dict[str, str] = {}
+
 ACADEMICO = '/api/academico'
 ALERTAS = '/api/alertas'
 
@@ -51,10 +56,13 @@ class UsuarioSAT(HttpUser):
 
     def on_start(self):
         self.correo = random.choice(self.correos)
-        resp = self.client.post('/api/usuarios/login/', json={'email': self.correo, 'password': CONTRASENA},
-                                name='login')
-        resp.raise_for_status()
-        self.client.headers['Authorization'] = f"Bearer {resp.json()['token']}"
+        token = SESIONES.get(self.correo)  # sesión abierta de antemano: el frontend reutiliza su JWT
+        if token is None:
+            resp = self.client.post('/api/usuarios/login/', json={'email': self.correo, 'password': CONTRASENA},
+                                    name='login')
+            resp.raise_for_status()
+            token = SESIONES[self.correo] = resp.json()['token']
+        self.client.headers['Authorization'] = f"Bearer {token}"
         self.client.get('/api/usuarios/me/', name='me')
         self.estudiantes = []
 
@@ -208,6 +216,23 @@ class Administrador(UsuarioSAT):
     @task(2)
     def alertas(self):
         self.ver_alertas()
+
+
+@events.test_start.add_listener
+def abrir_sesiones(environment, **_kwargs):
+    """Inicia sesión una vez por cuenta (de a una) antes de que arranquen los usuarios simulados."""
+    if not environment.host:
+        return
+    import requests
+    cuentas = {c for clase in (Docente, Bienestar, Director, Administrador) for c in clase.correos}
+    for correo in sorted(cuentas):
+        try:
+            resp = requests.post(f'{environment.host}/api/usuarios/login/',
+                                 json={'email': correo, 'password': CONTRASENA}, timeout=120)
+            if resp.ok:
+                SESIONES[correo] = resp.json()['token']
+        except requests.RequestException:
+            pass  # on_start vuelve a intentar con login normal
 
 
 @events.quitting.add_listener
