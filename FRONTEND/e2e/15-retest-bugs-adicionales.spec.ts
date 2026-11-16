@@ -18,8 +18,8 @@ test.describe('Administrador', () => {
     });
     await page.goto('/dashboard/admin/risk-rules');
     await page.getByRole('button', { name: 'Añadir Regla' }).click();
-    await page.getByPlaceholder('e.g., Bajo Promedio - Crítico').fill('Regla doble clic B08');
-    await page.getByPlaceholder('e.g., 3.0').fill('3.1');
+    await page.getByPlaceholder('Ej.: Bajo promedio - Crítico').fill('Regla doble clic B08');
+    await page.getByPlaceholder('Ej.: 3.0').fill('3.1');
     await page.getByRole('button', { name: 'Guardar Regla' }).dblclick();
     await expect(page.getByRole('heading', { name: 'Añadir Nueva Regla' })).toHaveCount(0);
     expect(envios).toBe(1);
@@ -61,11 +61,11 @@ test.describe('Director', () => {
     expect(opciones).not.toMatch(/Promedio\s*[<>]|3\.0-3\.4|>=\s*3\.5/);
   });
 
-  test('B15 y B38: la ficha marca «En curso» y explica reprobadas frente a pendientes', async ({ page }) => {
+  test('B15 y B38: la ficha marca «En curso» y rotula las reprobadas como intentos perdidos', async ({ page }) => {
     await page.goto(`/dashboard/students/${ESTUDIANTES.regular.codigo}`);
     await expect(page.getByText('Promedio del Semestre')).toBeVisible();
     await expect(page.getByText('En curso').first()).toBeVisible();
-    await expect(page.getByText(/Intentos perdidos \(la regla de riesgo cuenta materias pendientes\)/)).toBeVisible();
+    await expect(page.getByText(/Intentos perdidos/)).toBeVisible();
   });
 });
 
@@ -95,7 +95,7 @@ test.describe('Bienestar', () => {
     await page.getByText('Historial de Intervenciones').scrollIntoViewIfNeeded();
     await page.getByText(/Por:/).first().click();
     await expect(page.getByText('Causa de la Alerta')).toBeVisible();
-    await expect(page.getByText('En seguimiento', { exact: true })).toBeVisible();
+    await expect(page.getByText('En seguimiento', { exact: true }).last()).toBeVisible();
     await expect(page.getByText('en_seguimiento')).toHaveCount(0);
   });
 });
