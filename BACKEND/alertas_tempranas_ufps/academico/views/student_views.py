@@ -152,21 +152,11 @@ def listar_estudiantes(request):
 
     # Cargar el nivel de riesgo más reciente desde RiesgoEstudiantePeriodo para
     # todos los estudiantes en una sola query, con fallback a RiesgoEstudiante.
-    from alertas.models import RiesgoEstudiantePeriodo as _REP, RiesgoEstudiante as _RE
-    from django.db.models import Subquery as _SQ, OuterRef as _OR
+    from alertas.models import RiesgoEstudiante as _RE
+    from alertas.riesgo_actual import ultimo_riesgo_por_estudiante
 
-    _ultimo_id_sq = (
-        _REP.objects
-        .filter(estudiante_id=_OR('estudiante_id'))
-        .order_by('-periodo__anio', '-periodo__semestre')
-        .values('id')[:1]
-    )
-    # Mapa codigo_estudiante → nivel_riesgo desde el periodo más reciente
-    nivel_periodo_map = dict(
-        _REP.objects
-        .filter(id=_SQ(_ultimo_id_sq))
-        .values_list('estudiante_id', 'nivel_riesgo')
-    )
+    # Mapa codigo_estudiante → nivel_riesgo desde el periodo más reciente (SDAT-303: sin subconsulta correlacionada)
+    nivel_periodo_map = ultimo_riesgo_por_estudiante()
     # Mapa codigo_estudiante → nivel_riesgo desde snapshot (fallback)
     nivel_snap_map = dict(
         _RE.objects.values_list('estudiante_id', 'nivel_riesgo')
@@ -195,8 +185,16 @@ def listar_estudiantes(request):
                 result[r['estudiante_id']] = round(float(r['puntos']) / float(r['creditos']), 2)
         return result
 
-    codigos_pagina = [e['codigo'] for e in estudiantes_raw]
-    ppa_map = _ppa_desde_notas(codigos_pagina)
+    # SDAT-303: el PPA solo se calcula para quien lo necesita (sin nivel guardado, o todos si se
+    # ordena por promedio); el de la página visible se completa después. Antes se agregaban
+    # las ~52 000 notas de todos los estudiantes en cada petición.
+    todos_los_codigos = [e['codigo'] for e in estudiantes_raw]
+    if sort == 'promedio':
+        ppa_map = _ppa_desde_notas(todos_los_codigos)
+    else:
+        ppa_map = _ppa_desde_notas([
+            c for c in todos_los_codigos if not (nivel_periodo_map.get(c) or nivel_snap_map.get(c))
+        ])
 
     def _nivel_por_promedio(promedio_val):
         if promedio_val is None:
@@ -272,6 +270,14 @@ def listar_estudiantes(request):
     start = (page - 1) * page_size
     end   = start + page_size
     page_results = results[start:end]
+
+    faltantes = [r['codigo'] for r in page_results if r['codigo'] not in ppa_map]
+    if faltantes:
+        ppa_map.update(_ppa_desde_notas(faltantes))
+        for r in page_results:
+            ppa_real = ppa_map.get(r['codigo'])
+            if ppa_real is not None:
+                r['promedio'] = ppa_real
 
     return JsonResponse({
         'total':     total,

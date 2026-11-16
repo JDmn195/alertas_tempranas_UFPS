@@ -1,5 +1,7 @@
+import json
 import logging
-from django.http import JsonResponse
+from django.core.serializers.json import DjangoJSONEncoder
+from django.http import HttpResponse, JsonResponse
 from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -8,6 +10,7 @@ from django.shortcuts import get_object_or_404
 from academico.busqueda import filtrar_sin_tildes
 from academico.models import Estudiante, Nota, Curso, Periodo
 from alertas.alertas_inasistencia import factor_inasistencia, obtener_regla_inasistencia, periodos_con_asistencia
+from alertas import cache_listado
 from alertas.evaluacion import ORDEN_NIVELES, actualizar_promedio, calcular_indicadores, evaluar_regla, nivel_de_riesgo
 from alertas.permisos import denegar_acceso_alerta, puede_acceder_alerta
 from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, alertas_abiertas, Regla, Alerta, RiesgoEstudiante, RiesgoEstudiantePeriodo
@@ -401,90 +404,109 @@ def listar_alertas(request):
     tipo_regla = request.GET.get('tipo_regla')
     nivel = request.GET.get('nivel')  # SDAT-349: nivel de la alerta (high, medium, low)
     search = request.GET.get('search', '').strip()  # 3.1
-    
-    qs = Alerta.objects.select_related('estudiante', 'regla').order_by('-fecha_generacion')
-    total_qs = Alerta.objects.all()
-    
-    if usuario.rol == 'DOCENTE':
-        try:
-            docente = usuario.docente
-            ids_cursos = Curso.objects.filter(docente=docente).values_list('id', flat=True)
-            estudiantes_ids = Nota.objects.filter(curso__in=ids_cursos).values_list('estudiante_id', flat=True).distinct()
-            qs = qs.filter(estudiante_id__in=estudiantes_ids)
-            total_qs = total_qs.filter(estudiante_id__in=estudiantes_ids)
-        except Exception:
-            qs = qs.none()
-            total_qs = total_qs.none()
-            
-    if estado and estado.lower() != 'todas':  # SDAT-349: 'todas' no filtra por estado
-        mapping = {
-            'activa': ['activa', 'active'],
-            'en_seguimiento': ['en_seguimiento'],
-            'atendida': ['atendida'],
-            'cerrada': ['cerrada', 'closed'],
-        }
-        target_states = mapping.get(estado.lower(), [estado])
-        qs = qs.filter(estado__in=target_states)
-        
-    if tipo_regla and tipo_regla != 'all':
-        qs = qs.filter(regla__tipo=tipo_regla)
-    if nivel and nivel != 'all':
-        qs = qs.filter(regla__nivel=nivel)
-    codigo_estudiante = request.GET.get('estudiante', '').strip()  # SDAT-349: ficha del estudiante
-    if codigo_estudiante:
-        qs = qs.filter(estudiante_id=codigo_estudiante)
 
-    # Fix 3.1: filtrar por nombre del estudiante
-    if search:
-        qs = filtrar_sin_tildes(qs, search, ['estudiante__nombre', 'estudiante__codigo'])
-        
+    codigo_estudiante = request.GET.get('estudiante', '').strip()  # SDAT-349: ficha del estudiante
+
     if usuario.rol == 'DIRECTOR':
         registrar_auditoria(usuario, 'CONSULTA_ALERTAS', f"El director consultó el listado de alertas (estado={estado}).")
 
-    conteos = {
-        'abiertas': alertas_abiertas(total_qs).count(),
-        'activa': total_qs.filter(estado__in=['activa', 'active']).count(),
-        'en_seguimiento': total_qs.filter(estado='en_seguimiento').count(),
-        'atendida': total_qs.filter(estado='atendida').count(),
-        'cerrada': total_qs.filter(estado__in=['cerrada', 'closed']).count(),
-    }
-
-    # Cargar el nivel de riesgo actual de cada estudiante en una sola query
-    # para ordenar las alertas por riesgo del estudiante (high > medium > low > unknown)
-    estudiante_ids = qs.values_list('estudiante_id', flat=True).distinct()
-    riesgo_map = {
-        r.estudiante_id: r.nivel_riesgo
-        for r in RiesgoEstudiante.objects.filter(estudiante_id__in=estudiante_ids)
-    }
-
-    ORDEN_RIESGO_EST = {'high': 0, 'medium': 1, 'low': 2, 'unknown': 3}
-    ORDEN_NIVEL_REGLA = {'high': 0, 'medium': 1, 'low': 2}
-
-    data = []
-    for a in qs:
-        nivel_est = riesgo_map.get(a.estudiante_id, 'unknown')
-        data.append({
-            'id': a.id,
-            'studentName': a.estudiante.nombre,
-            'studentCode': a.estudiante.codigo,
-            'riskLevel': a.regla.nivel,
-            'studentRiskLevel': nivel_est,
-            'alertType': a.regla.nombre,
-            'generatedDate': a.fecha_generacion.strftime('%Y-%m-%d'),
-            'status': a.estado,
-            'tipo_regla': a.regla.tipo,
-            'valor_causa': float(a.valor_causa) if a.valor_causa else None,
-            'metadata': a.metadata,
-            '_ord_est': ORDEN_RIESGO_EST.get(nivel_est, 3),
-            '_ord_regla': ORDEN_NIVEL_REGLA.get(a.regla.nivel, 3),
-        })
-
-    # Ordenar: primero por riesgo del estudiante, luego por nivel de la alerta, luego fecha más reciente
-    data.sort(key=lambda x: (x['_ord_est'], x['_ord_regla'], x['generatedDate']))
-    for item in data:
-        del item['_ord_est']
-        del item['_ord_regla']
+    def calcular():
+        qs = Alerta.objects.order_by('-fecha_generacion')
+        total_qs = Alerta.objects.all()
+    
+        if usuario.rol == 'DOCENTE':
+            try:
+                docente = usuario.docente
+                ids_cursos = Curso.objects.filter(docente=docente).values_list('id', flat=True)
+                estudiantes_ids = Nota.objects.filter(curso__in=ids_cursos).values_list('estudiante_id', flat=True).distinct()
+                qs = qs.filter(estudiante_id__in=estudiantes_ids)
+                total_qs = total_qs.filter(estudiante_id__in=estudiantes_ids)
+            except Exception:
+                qs = qs.none()
+                total_qs = total_qs.none()
+            
+        if estado and estado.lower() != 'todas':  # SDAT-349: 'todas' no filtra por estado
+            mapping = {
+                'activa': ['activa', 'active'],
+                'en_seguimiento': ['en_seguimiento'],
+                'atendida': ['atendida'],
+                'cerrada': ['cerrada', 'closed'],
+            }
+            target_states = mapping.get(estado.lower(), [estado])
+            qs = qs.filter(estado__in=target_states)
         
+        if tipo_regla and tipo_regla != 'all':
+            qs = qs.filter(regla__tipo=tipo_regla)
+        if nivel and nivel != 'all':
+            qs = qs.filter(regla__nivel=nivel)
+        if codigo_estudiante:
+            qs = qs.filter(estudiante_id=codigo_estudiante)
+
+        # Fix 3.1: filtrar por nombre del estudiante
+        if search:
+            qs = filtrar_sin_tildes(qs, search, ['estudiante__nombre', 'estudiante__codigo'])
+        
+        conteos = {
+            'abiertas': alertas_abiertas(total_qs).count(),
+            'activa': total_qs.filter(estado__in=['activa', 'active']).count(),
+            'en_seguimiento': total_qs.filter(estado='en_seguimiento').count(),
+            'atendida': total_qs.filter(estado='atendida').count(),
+            'cerrada': total_qs.filter(estado__in=['cerrada', 'closed']).count(),
+        }
+
+        # Cargar el nivel de riesgo actual de cada estudiante en una sola query
+        # para ordenar las alertas por riesgo del estudiante (high > medium > low > unknown)
+        estudiante_ids = qs.order_by().values_list('estudiante_id', flat=True).distinct()
+        riesgo_map = dict(
+            RiesgoEstudiante.objects.filter(estudiante_id__in=estudiante_ids)
+            .values_list('estudiante_id', 'nivel_riesgo')
+        )
+
+        ORDEN_RIESGO_EST = {'high': 0, 'medium': 1, 'low': 2, 'unknown': 3}
+        ORDEN_NIVEL_REGLA = {'high': 0, 'medium': 1, 'low': 2}
+
+        data = []
+        # SDAT-303: filas planas (sin instanciar Alerta, Estudiante y Regla por cada alerta)
+        filas = qs.values_list(
+            'id', 'estudiante_id', 'estudiante__nombre', 'regla__nivel', 'regla__nombre', 'regla__tipo',
+            'fecha_generacion', 'estado', 'valor_causa', 'metadata',
+        )
+        for id_, est_id, nombre, nivel_regla, nombre_regla, tipo, fecha, estado_a, valor, metadata in filas:
+            nivel_est = riesgo_map.get(est_id, 'unknown')
+            data.append({
+                'id': id_,
+                'studentName': nombre,
+                'studentCode': est_id,
+                'riskLevel': nivel_regla,
+                'studentRiskLevel': nivel_est,
+                'alertType': nombre_regla,
+                'generatedDate': fecha.strftime('%Y-%m-%d'),
+                'status': estado_a,
+                'tipo_regla': tipo,
+                'valor_causa': float(valor) if valor else None,
+                'metadata': metadata,
+                '_ord_est': ORDEN_RIESGO_EST.get(nivel_est, 3),
+                '_ord_regla': ORDEN_NIVEL_REGLA.get(nivel_regla, 3),
+            })
+
+        # Ordenar: primero por riesgo del estudiante, luego por nivel de la alerta, luego fecha más reciente
+        data.sort(key=lambda x: (x['_ord_est'], x['_ord_regla'], x['generatedDate']))
+        for item in data:
+            del item['_ord_est']
+            del item['_ord_regla']
+        
+        return data, conteos
+
+    # SDAT-303: lista ya calculada y ordenada, válida pocos segundos (ver alertas/cache_listado.py).
+    # Se guarda antes de paginar, así todas las páginas de un mismo filtro reutilizan el cálculo.
+    clave_cache = (usuario.id if usuario.rol == 'DOCENTE' else 'todos', estado, tipo_regla, nivel,
+                   codigo_estudiante, search)
+    resultado = cache_listado.obtener(clave_cache)
+    if resultado is None:
+        resultado = calcular()
+        cache_listado.guardar(clave_cache, resultado, peso=len(resultado[0]) * 500)
+    data, conteos = resultado
+
     pagina = paginar_si_se_pide(request, data)
     return JsonResponse({
         'alertas': list(pagina) if pagina is not None else data,
