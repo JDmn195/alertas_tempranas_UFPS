@@ -83,6 +83,15 @@ interface Conteos {
   cerrada: number;
 }
 
+// Cierra el modal con Escape
+function useCerrarConEscape(onClose: () => void) {
+  useEffect(() => {
+    const alPulsar = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', alPulsar);
+    return () => document.removeEventListener('keydown', alPulsar);
+  }, [onClose]);
+}
+
 // ─── Modal Registrar Intervención ─────────────────────────────────────────────
 function ModalRegistrar({
   alerta,
@@ -97,6 +106,7 @@ function ModalRegistrar({
   const [observaciones, setObservaciones] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useCerrarConEscape(onClose);
 
   const handleSubmit = async () => {
     if (!tipo) { setError('Selecciona el tipo de intervención'); return; }
@@ -129,7 +139,7 @@ function ModalRegistrar({
   };
 
   return (
-    <div className="fixed inset-0 animate-in fade-in duration-150 z-50 flex items-center justify-center">
+    <div role="dialog" aria-modal="true" aria-label="Registrar intervención" className="fixed inset-0 animate-in fade-in duration-150 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white rounded-[14px] shadow-2xl w-full max-w-lg mx-4 z-10 animate-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
@@ -211,6 +221,7 @@ function ModalHistorial({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  useCerrarConEscape(onClose);
 
   const TIPO_LABEL: Record<string, string> = { TUTORIA: 'Tutoría', CITACION: 'Citación', REMISION: 'Remisión' };
   const TIPO_COLOR: Record<string, string> = { TUTORIA: 'bg-blue-100 text-blue-700', CITACION: 'bg-amber-100 text-amber-700', REMISION: 'bg-purple-100 text-purple-700' };
@@ -232,7 +243,7 @@ function ModalHistorial({
   }, [alerta.id]);
 
   return (
-    <div className="fixed inset-0 animate-in fade-in duration-150 z-50 flex items-center justify-center">
+    <div role="dialog" aria-modal="true" aria-label="Historial de intervenciones" className="fixed inset-0 animate-in fade-in duration-150 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white rounded-[14px] shadow-2xl w-full max-w-lg mx-4 z-10 max-h-[80vh] flex flex-col animate-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
