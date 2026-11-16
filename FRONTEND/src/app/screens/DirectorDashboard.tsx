@@ -47,6 +47,7 @@ interface DashboardData {
   distribucion_riesgo: RiskDistributionItem[];
   tendencia_gpa: GpaTrendItem[];
   cursos_criticos: CriticalCourse[];
+  filtros?: { periodos: string[]; semestres: number[] };
 }
 
 // ─── Estilo común de gráficos ────────────────────────────────────────────────
@@ -87,6 +88,10 @@ export default function DirectorDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false); // 5.1
+  // SDAT-349: filtros por periodo (AAAA-S) y semestre del estudiante
+  const [periodo, setPeriodo] = useState('todos');
+  const [semestre, setSemestre] = useState('todos');
+  const [opciones, setOpciones] = useState<{ periodos: string[]; semestres: number[] }>({ periodos: [], semestres: [] });
 
   const fetchIndicadores = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -94,13 +99,15 @@ export default function DirectorDashboard() {
     setError(false);
     try {
       const baseUrl = API_BASE_URL;
-      const res = await apiFetch(`${baseUrl}/api/academico/indicadores/`);
+      const parametros = new URLSearchParams({ periodo, semestre });
+      const res = await apiFetch(`${baseUrl}/api/academico/indicadores/?${parametros}`);
       if (!res.ok) {
         const errBody = await res.text();
         throw new Error(`HTTP ${res.status}: ${errBody}`);
       }
       const json: DashboardData = await res.json();
       setData(json);
+      if (json.filtros) setOpciones(json.filtros);
     } catch (err) {
       console.error('Error al cargar indicadores del director:', err);
       setError(true);
@@ -108,7 +115,7 @@ export default function DirectorDashboard() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [periodo, semestre]);
 
   useEffect(() => {
     fetchIndicadores();
@@ -144,6 +151,37 @@ export default function DirectorDashboard() {
           {refreshing ? 'Actualizando...' : 'Actualizar datos'}
         </Button>
       </EncabezadoPagina>
+
+      {/* SDAT-349: filtros del panel */}
+      <div className="flex flex-wrap items-center gap-3" role="group" aria-label="Filtros del panel">
+        <label className="flex items-center gap-2 text-sm text-ink-muted">
+          Periodo
+          <select
+            value={periodo}
+            onChange={(e) => setPeriodo(e.target.value)}
+            className="h-9 px-3 text-sm border border-line-strong rounded-[10px] bg-white cursor-pointer"
+          >
+            <option value="todos">Todos</option>
+            {opciones.periodos.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-ink-muted">
+          Semestre
+          <select
+            value={semestre}
+            onChange={(e) => setSemestre(e.target.value)}
+            className="h-9 px-3 text-sm border border-line-strong rounded-[10px] bg-white cursor-pointer"
+          >
+            <option value="todos">Todos</option>
+            {opciones.semestres.map((n) => <option key={n} value={String(n)}>Semestre {n}</option>)}
+          </select>
+        </label>
+        {(periodo !== 'todos' || semestre !== 'todos') && (
+          <Button variant="outline" size="sm" onClick={() => { setPeriodo('todos'); setSemestre('todos'); }}>
+            Quitar filtros
+          </Button>
+        )}
+      </div>
 
       {/* Banner de error de conexión */}
       {error && (
