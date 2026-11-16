@@ -179,6 +179,10 @@ interface IndicadoresData {
   riesgo_evolucion: RiesgoEvolucionItem[];
 }
 
+const ESTADO_ALERTA_LABEL: Record<string, string> = {
+  activa: 'Activa', en_seguimiento: 'En seguimiento', atendida: 'Atendida', cerrada: 'Cerrada',
+};
+
 // ─── Modal Materias Reprobadas (4.3) ─────────────────────────────────────────
 function ModalMateriasReprobadas({
   historial,
@@ -980,7 +984,7 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
                     ? 'bg-gray-100 text-gray-600'
                     : 'bg-amber-100 text-amber-700'
                 }`}>
-                  {selected.alerta_estado}
+                  {ESTADO_ALERTA_LABEL[selected.alerta_estado] ?? selected.alerta_estado}
                 </span>
               </div>
 
