@@ -9,6 +9,11 @@ TIPOS_FUERA_DEL_MOTOR_GENERAL = ('CORTE', 'INASISTENCIA')
 ESTADOS_ALERTA_CERRADA = ('cerrada', 'closed')
 
 
+def alertas_abiertas(queryset):
+    """Única definición de «alerta activa»: toda alerta no cerrada (activa, en seguimiento o atendida)."""
+    return queryset.exclude(estado__in=ESTADOS_ALERTA_CERRADA)
+
+
 class Regla(models.Model):
     TIPO_CHOICES = [
         ('PROMEDIO', 'Promedio Acumulado'),

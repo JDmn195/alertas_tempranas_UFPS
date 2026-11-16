@@ -7,7 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db.models import Count, Avg, Q
 
-from alertas.models import Alerta, Intervencion, RiesgoEstudiante, RiesgoEstudiantePeriodo
+from alertas.models import alertas_abiertas, Alerta, Intervencion, RiesgoEstudiante, RiesgoEstudiantePeriodo
 from academico.models import Estudiante, Curso, Nota
 from alertas_tempranas_ufps.paginacion import paginar_si_se_pide, metadatos_pagina
 from usuarios.utils import fecha_local
@@ -115,9 +115,7 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
             riesgos_snap.values_list('estudiante_id', flat=True)
         )
         alertas_map = dict(
-            Alerta.objects
-            .filter(estudiante_id__in=todos_ids)
-            .exclude(estado__in=['cerrada', 'closed'])
+            alertas_abiertas(Alerta.objects.filter(estudiante_id__in=todos_ids))
             .values('estudiante_id')
             .annotate(total=Count('id'))
             .values_list('estudiante_id', 'total')

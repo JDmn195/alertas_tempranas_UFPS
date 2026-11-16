@@ -25,6 +25,7 @@ interface RiskDistributionItem {
   low: number;
   medium: number;
   high: number;
+  sin_dato: number;
 }
 
 interface GpaTrendItem {
@@ -212,13 +213,14 @@ export default function DirectorDashboard() {
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={data?.distribucion_riesgo ?? []} barCategoryGap="30%">
                 <CartesianGrid strokeDasharray="3 3" stroke="#F3E4E1" vertical={false} />
-                <XAxis dataKey="semester" stroke="#9C8D8A" tickLine={false} axisLine={{ stroke: '#E8D6D2' }} style={{ fontSize: '12px' }} />
+                <XAxis dataKey="semester" interval={0} stroke="#9C8D8A" tickLine={false} axisLine={{ stroke: '#E8D6D2' }} style={{ fontSize: '12px' }} />
                 <YAxis stroke="#9C8D8A" tickLine={false} axisLine={false} allowDecimals={false} style={{ fontSize: '12px' }} />
                 <Tooltip content={<TooltipLimpio />} cursor={{ fill: '#FAF1EF' }} />
                 <Legend iconType="square" wrapperStyle={{ fontSize: '12px', paddingTop: 8 }} />
                 <Bar dataKey="high" stackId="a" fill={COLOR_ALTO} name="Riesgo Alto" />
                 <Bar dataKey="medium" stackId="a" fill={COLOR_MEDIO} name="Riesgo Medio" />
-                <Bar dataKey="low" stackId="a" fill={COLOR_BAJO} name="Riesgo Bajo" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="low" stackId="a" fill={COLOR_BAJO} name="Riesgo Bajo" />
+                <Bar dataKey="sin_dato" stackId="a" fill="#9C8D8A" name="Sin dato" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

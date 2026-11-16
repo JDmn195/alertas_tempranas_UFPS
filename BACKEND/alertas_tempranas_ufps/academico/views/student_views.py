@@ -10,7 +10,7 @@ from academico.models import Estudiante, Nota
 from academico.services.historial_promedios import serie_promedios_por_periodo, tendencia_promedio
 from academico.services.notas_corte import ESTADO_EN_CURSO, alertas_corte_abiertas, desglose_cortes, estado_nota
 from alertas.evaluacion import calcular_indicadores, calcular_ppa, nivel_de_riesgo
-from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, Alerta, Regla
+from alertas.models import ESTADOS_ALERTA_CERRADA, TIPOS_FUERA_DEL_MOTOR_GENERAL, Alerta, Regla, alertas_abiertas
 from usuarios.decorators import requiere_rol
 from usuarios.utils import fecha_local, registrar_auditoria
 
@@ -132,7 +132,7 @@ def listar_estudiantes(request):
     qs = qs.annotate(
         total_alertas=Count(
             'alerta',
-            filter=~Q(alerta__estado__in=['cerrada', 'closed']),
+            filter=~Q(alerta__estado__in=ESTADOS_ALERTA_CERRADA),
         )
     )
 
@@ -300,9 +300,7 @@ def obtener_detalle_estudiante(request, codigo):
             return denegado
 
         # Anotar conteo de alertas activas
-        total_alertas = Alerta.objects.filter(
-            estudiante=e
-        ).exclude(estado__in=['cerrada', 'closed']).count()
+        total_alertas = alertas_abiertas(Alerta.objects.filter(estudiante=e)).count()
         # Fix 2.1/2.6: usar el nivel de riesgo del periodo más reciente calculado (RiesgoEstudiantePeriodo)
         # Si no hay registro por periodo, caer al snapshot RiesgoEstudiante
         nivel = 'unknown'
@@ -418,9 +416,7 @@ def obtener_indicadores_estudiante(request, codigo):
     datos_promedio = _calcular_historial_promedios(estudiante)
 
     # 8. Alertas Activas (todo excepto cerradas)
-    alertas_activas = Alerta.objects.filter(
-        estudiante=estudiante
-    ).exclude(estado__in=['cerrada', 'closed']).count()
+    alertas_activas = alertas_abiertas(Alerta.objects.filter(estudiante=estudiante)).count()
 
     # 9. Evolución del riesgo por periodo (2.5)
     from alertas.models import RiesgoEstudiantePeriodo
