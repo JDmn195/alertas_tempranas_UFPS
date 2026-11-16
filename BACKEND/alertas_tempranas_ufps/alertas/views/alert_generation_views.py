@@ -282,7 +282,7 @@ def generar_alertas(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
+@requiere_rol(['ADMINISTRADOR'])
 def reevaluar_alertas(request):
     """
     POST /api/alertas/reevaluar/
