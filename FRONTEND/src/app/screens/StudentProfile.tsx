@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { normalizarNombreMateria, normalizarCodigo } from '@/utils/formato';
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 import {
@@ -43,12 +44,13 @@ import { Button } from '../components/ui/Button';
 import { NivelRiesgoChip } from '../components/Riesgo';
 import { apiFetch } from '../../services/apiFetch';
 import { rolGuardado } from '../../services/session';
+import { etiquetaAlertaCorte, etiquetaEstadoAlerta } from '../../services/etiquetas';
 
 interface StudentDetail {
   codigo: string;
   nombre: string;
   tipo_documento: string;
-  numero_documento: string;
+  numero_documento: string | null;
   semestre: number;
   pensum: string | null;
   ingreso: string | null;
@@ -71,7 +73,7 @@ function FichaAcademica({ student }: { student: StudentDetail | null }) {
     ['Nombre Completo', student.nombre],
     ['Código Estudiantil', student.codigo],
     ['Tipo de Documento', student.tipo_documento],
-    ['Número de Documento', student.numero_documento],
+    ['Número de Documento', student.numero_documento || 'No disponible'],
     ['Celular', student.celular || 'No registrado'],
     ['Correo Personal', student.email_personal || 'No registrado'],
     ['Correo Institucional', student.email_institucional || 'No registrado'],
@@ -288,7 +290,6 @@ function IndicadoresSection({
   studentName?: string;
   historial?: HistorialPeriodo[] | null;
 }) {
-  const esDirector = rolGuardado() === 'DIRECTOR';
   const navigate = useNavigate();
   const [showReprobadas, setShowReprobadas] = useState(false); // 4.3
   const indicadores = [
@@ -316,12 +317,11 @@ function IndicadoresSection({
     {
       icon: AlertTriangle,
       label: 'Alertas Activas',
-      sublabel: esDirector ? 'Alertas abiertas del estudiante' : 'Ver en gestión de alertas',    // 4.2
+      sublabel: 'Ver en gestión de alertas',    // 4.2
       color: 'red',
       value: data?.alertas_activas ?? 0,
-      // 4.2: navegar a alertas buscando por nombre
-      // SDAT-338: el director no tiene acceso a Gestión de Alertas
-      onClick: studentName && !esDirector
+      // 4.2: navegar a alertas buscando por nombre (SDAT-349: el director las consulta en solo lectura)
+      onClick: studentName
         ? () => navigate(`/dashboard/alerts?search=${encodeURIComponent(studentName)}`)
         : undefined,
     },
@@ -336,7 +336,7 @@ function IndicadoresSection({
     {
       icon: Activity,
       label: 'Materias Reprobadas',
-      sublabel: 'Intentos perdidos (la regla de riesgo cuenta materias pendientes). Clic para ver detalle',        // 4.3
+      sublabel: 'Intentos perdidos. Abre el detalle por periodo',        // 4.3
       color: 'orange',
       value: data?.reprobadas,
       onClick: () => setShowReprobadas(true),    // 4.3
@@ -389,14 +389,13 @@ function IndicadoresSection({
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 border-b border-line overflow-hidden">
           {indicadores.map(({ icon: Icon, label, sublabel, color, value, onClick }) => {
             const activo = !loading && !!onClick;
+            // SDAT-349: las celdas que abren detalle son botones reales
+            const Celda = activo ? 'button' : 'div';
             return (
-              <div
+              <Celda
                 key={label}
-                onClick={activo ? onClick : undefined}
-                onKeyDown={activo ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick!(); } } : undefined}
-                role={activo ? 'button' : undefined}
-                tabIndex={activo ? 0 : undefined}
-                className={`relative px-4 sm:px-5 py-4 border-line border-r border-b -mb-px -mr-px flex flex-col gap-1.5 ${
+                {...(activo ? { type: 'button' as const, onClick } : {})}
+                className={`relative px-4 sm:px-5 py-4 border-line border-r border-b -mb-px -mr-px flex flex-col gap-1.5 text-left ${
                   activo ? 'cursor-pointer hover:bg-paper' : ''
                 }`}
               >
@@ -422,7 +421,7 @@ function IndicadoresSection({
                 ) : (
                   <Icon className="absolute top-3.5 right-3.5 w-4 h-4 text-line-strong" aria-hidden="true" />
                 )}
-              </div>
+              </Celda>
             );
           })}
         </div>
@@ -455,7 +454,7 @@ function IndicadoresSection({
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-sm font-semibold text-gray-700">Evolución del Promedio Acumulado</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Historial del PPA periodo a periodo</p>
+              <p className="text-xs text-gray-400 mt-0.5">Historial del promedio acumulado (PPA) periodo a periodo</p>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1.5">
@@ -792,7 +791,7 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
 
       {/* Tabla */}
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="tabla-tarjetas w-full">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
               {['Código', 'Materia', 'Créditos', 'Grupo', 'Docente', 'Corte 1', 'Corte 2', 'Corte 3', 'Examen', 'Nota Final', 'Estado'].map(col => (
@@ -820,9 +819,9 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
             ) : activePeriodData ? (
               activePeriodData.materias.map((mat, i) => (
                 <tr key={mat.codigo} className="bg-white hover:bg-paper transition-colors duration-150">
-                  <td className="px-5 py-3.5 text-xs tabular-nums text-gray-500">{mat.codigo}</td>
+                  <td className="px-5 py-3.5 text-xs tabular-nums text-gray-500">{normalizarCodigo(mat.codigo)}</td>
                   <td className="px-5 py-3.5 text-sm font-medium text-gray-900">
-                    {mat.materia}
+                    {normalizarNombreMateria(mat.materia)}
                     {mat.alertas_corte && mat.alertas_corte.length > 0 && (
                       <div className="mt-1 flex flex-wrap gap-1">
                         {mat.alertas_corte.map(a => (
@@ -832,7 +831,7 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
                             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200"
                           >
                             <AlertTriangle className="w-3 h-3" />
-                            {a.corte ? `Alerta corte ${a.corte}` : 'Alerta examen'} ({a.clave})
+                            {etiquetaAlertaCorte(a.corte, a.clave)}
                           </span>
                         ))}
                       </div>
@@ -921,8 +920,121 @@ export interface Intervencion {
   alerta_estado: string;
 }
 
+// SDAT-349 (6.3): todas las alertas del estudiante, de cualquier estado
+interface AlertaFicha {
+  id: number;
+  alertType: string;
+  riskLevel: string;
+  generatedDate: string;
+  status: string;
+}
+
+const ESTADO_ALERTA_ROTULO: Record<string, string> = {
+  activa: 'Activa', active: 'Activa', en_seguimiento: 'En seguimiento', atendida: 'Atendida', cerrada: 'Cerrada', closed: 'Cerrada',
+};
+
+function AlertasEstudiante({ codigo }: { codigo: string }) {
+  const [alertas, setAlertas] = useState<AlertaFicha[] | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let vigente = true;
+    (async () => {
+      try {
+        const res = await apiFetch(`${API_BASE_URL}/api/alertas/?estado=todas&estudiante=${encodeURIComponent(codigo)}`);
+        if (!res.ok) throw new Error();
+        const json = await res.json();
+        if (vigente) setAlertas(json.alertas ?? []);
+      } catch {
+        if (vigente) setError(true);
+      }
+    })();
+    return () => { vigente = false; };
+  }, [codigo]);
+
+  return (
+    <section className="bg-white rounded-[14px] border border-line overflow-hidden" aria-labelledby="alertas-ficha">
+      <div className="border-b border-line px-6 py-4">
+        <h2 id="alertas-ficha" className="text-base font-semibold text-ink">Alertas del estudiante</h2>
+        <p className="text-xs text-ink-muted">Activas, en seguimiento, atendidas y cerradas</p>
+      </div>
+      {error ? (
+        <p role="alert" className="px-6 py-6 text-sm text-ink-muted">No se pudieron cargar las alertas.</p>
+      ) : alertas === null ? (
+        <p role="status" className="px-6 py-6 text-sm text-ink-muted">Cargando alertas…</p>
+      ) : alertas.length === 0 ? (
+        <p className="px-6 py-6 text-sm text-ink-muted">El estudiante no tiene alertas registradas.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {alertas.map((a) => (
+            <li key={a.id} className="px-6 py-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <span className="font-semibold text-ink">{a.alertType}</span>
+              <NivelRiesgoChip nivel={a.riskLevel} />
+              <span className="text-ink-soft">{ESTADO_ALERTA_ROTULO[a.status] ?? a.status}</span>
+              <span className="ml-auto tabular-nums text-ink-muted">{a.generatedDate}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+interface AnotacionFicha {
+  id: number;
+  texto: string;
+  fecha: string;
+  usuario: string;
+}
+
+// SDAT-349 (6.4): observaciones (anotaciones) de la intervención, solo lectura desde la ficha
+function AnotacionesIntervencion({ intervencionId }: { intervencionId: number }) {
+  const [anotaciones, setAnotaciones] = useState<AnotacionFicha[] | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let vigente = true;
+    setAnotaciones(null);
+    setError(false);
+    (async () => {
+      try {
+        const res = await apiFetch(`${API_BASE_URL}/api/alertas/intervenciones/${intervencionId}/anotaciones/`);
+        if (!res.ok) throw new Error();
+        const json = await res.json();
+        if (vigente) setAnotaciones(json.anotaciones ?? []);
+      } catch {
+        if (vigente) setError(true);
+      }
+    })();
+    return () => { vigente = false; };
+  }, [intervencionId]);
+
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Observaciones de seguimiento</p>
+      {error ? (
+        <p role="alert" className="text-sm text-gray-500">No se pudieron cargar las observaciones.</p>
+      ) : anotaciones === null ? (
+        <p role="status" className="text-sm text-gray-500">Cargando observaciones…</p>
+      ) : anotaciones.length === 0 ? (
+        <p className="text-sm text-gray-500">Sin observaciones de seguimiento.</p>
+      ) : (
+        <ul className="space-y-2">
+          {anotaciones.map((a) => (
+            <li key={a.id} className="bg-gray-50 rounded-[10px] p-3 border border-gray-100">
+              <p className="text-sm text-gray-700 whitespace-pre-line">{a.texto}</p>
+              <p className="mt-1 text-[11px] text-gray-400">{a.usuario} · {a.fecha}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | null; loading: boolean }) {
   const navigate = useNavigate();
+  const puedeVerEvidencias = rolGuardado() !== 'DIRECTOR';
   const [selected, setSelected] = useState<Intervencion | null>(null); // 4.1
 
   const TIPO_LABEL: Record<string, string> = {
@@ -982,7 +1094,7 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
                     ? 'bg-gray-100 text-gray-600'
                     : 'bg-amber-100 text-amber-700'
                 }`}>
-                  {selected.alerta_estado}
+                  {etiquetaEstadoAlerta(selected.alerta_estado)}
                 </span>
               </div>
 
@@ -1013,6 +1125,8 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
                   </p>
                 </div>
               </div>
+
+              <AnotacionesIntervencion intervencionId={selected.id} />
 
               {/* Resultado */}
               {selected.resultado && (
@@ -1046,6 +1160,7 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
 
             {/* Footer */}
             <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex gap-3">
+              {puedeVerEvidencias && (
               <button
                 onClick={() => navigate(`/dashboard/intervenciones/${selected.id}/evidencias`)}
                 className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-primary rounded-[10px] hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
@@ -1053,6 +1168,7 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
                 <ExternalLink className="w-4 h-4" />
                 Ver Evidencias
               </button>
+              )}
               <button
                 onClick={() => setSelected(null)}
                 className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 border border-gray-200 rounded-[10px] hover:bg-white transition-colors"
@@ -1333,7 +1449,7 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
                       </td>
                       <td className="px-5 py-3.5 text-sm font-medium text-gray-900">
                         {c.materia}
-                        <span className="block text-xs tabular-nums text-gray-400">{c.codigo}</span>
+                        <span className="block text-xs tabular-nums text-gray-400">{normalizarCodigo(c.codigo)}</span>
                       </td>
                       <td className="px-5 py-3.5 text-sm text-gray-500">{c.grupo}</td>
                       <td className="px-5 py-3.5 text-sm text-gray-700">{c.total_clases}</td>
@@ -1571,7 +1687,7 @@ export default function StudentProfile() {
           <div className="min-w-0 flex-1">
             <h1 className="text-[1.65rem] font-semibold text-ink leading-tight tracking-[-0.02em]">{student.nombre}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-muted">
-              <span>Código: <span className="font-semibold text-ink">{student.codigo}</span></span>
+              <span>Código: <span className="font-semibold text-ink">{normalizarCodigo(student.codigo)}</span></span>
               <span className="inline-flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5" aria-hidden="true" />
                 {student.semestre}° Semestre
@@ -1645,6 +1761,9 @@ export default function StudentProfile() {
 
         {/* ── Bloque 3: Historial Académico ────────────────────────────────── */}
         <HistorialAcademico data={historial} loading={loading} />
+
+        {/* ── Bloque 3b: Alertas del estudiante (SDAT-349) ─────────────────── */}
+        <AlertasEstudiante codigo={student.codigo} />
 
         {/* ── Bloque 4: Historial de Intervenciones ────────────────────────── */}
         <HistorialIntervenciones data={intervenciones} loading={loading} />

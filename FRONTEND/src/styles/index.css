@@ -138,3 +138,36 @@ main .fixed.inset-0 { margin: 0 !important; }
 .dark main thead th { background: var(--paper); }
 .dark img[src$="logo-ufps.svg"] { background: #fff; border-radius: 6px; padding: 2px 4px; }
 .dark ::selection { background: var(--brand-tint); color: var(--ink); }
+/* ---------- Móvil (< md): tablas como tarjetas y objetivos táctiles de 44 px ---------- */
+@media (max-width: 767px) {
+  main table.tabla-tarjetas { min-width: 0 !important; display: block; }
+  main table.tabla-tarjetas thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  /* Conservar visibles los controles de ordenamiento y su foco en móvil. */
+  main table.tabla-tarjetas thead:has(button) { position: static; width: auto; height: auto; overflow: visible; clip: auto; display: block; }
+  main table.tabla-tarjetas thead:has(button) tr { display: flex; flex-wrap: wrap; padding: .5rem; }
+  main table.tabla-tarjetas thead:has(button) th { padding: .25rem; }
+  main table.tabla-tarjetas thead:has(button) th:not(:has(button)) { display: none; }
+  main table.tabla-tarjetas tbody { display: block; }
+  main table.tabla-tarjetas tbody tr {
+    display: block; margin: .75rem; padding: .5rem .875rem;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  }
+  main table.tabla-tarjetas tbody td {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding: .5rem 0 !important; max-width: none !important; text-align: right !important;
+    white-space: normal !important; overflow-wrap: anywhere; border-bottom: 1px solid var(--wash); overflow: visible;
+  }
+  main table.tabla-tarjetas tbody td:last-child { border-bottom: 0; }
+  main table.tabla-tarjetas tbody td[data-label]::before {
+    content: attr(data-label); flex: none; max-width: 45%; text-align: left;
+    font-size: .75rem; font-weight: 600; color: var(--ink-muted);
+  }
+  main table.tabla-tarjetas tbody td[colspan] { display: block; text-align: left !important; }
+
+  button, [role="button"], select, summary,
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]) { min-height: 44px; min-width: 44px; }
+  nav a, aside a, header a, [role="tab"], [role="menuitem"] { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; }
+  nav.grid a { display: flex; }
+  input[type=checkbox], input[type=radio] { width: 1.25rem; height: 1.25rem; }
+  label:has(> input[type=checkbox]), label:has(> input[type=radio]) { min-height: 44px; display: inline-flex; align-items: center; }
+}

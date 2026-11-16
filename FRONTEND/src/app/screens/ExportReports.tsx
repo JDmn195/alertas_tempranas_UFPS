@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { formatearFecha } from '@/utils/formato';
 import { useState, useMemo, useEffect } from 'react';
 import { 
   FileText, 
@@ -11,8 +12,10 @@ import {
   BarChart3, 
   Users,
   Calendar,
-  SearchX
+  SearchX,
+  Loader2
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { EncabezadoPagina } from '../components/Panel';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -151,7 +154,7 @@ export default function ExportReports() {
         { header: 'Código', key: 'code' },
         { header: 'Estudiante', key: 'name' },
         { header: 'Semestre', key: 'semester', render: (val) => `Semestre ${val}` },
-        { header: 'Promedio PPA', key: 'gpa', render: (val) => <span className="font-semibold text-ink">{val != null ? Number(val).toFixed(2) : '—'}</span> },
+        { header: 'Promedio acumulado', key: 'gpa', render: (val) => <span className="font-semibold text-ink">{val != null ? Number(val).toFixed(2) : '—'}</span> },
         { header: 'Aprobadas', key: 'passed', render: (val) => <span className="text-green-600 font-medium">{val}</span> },
         { header: 'Reprobadas', key: 'failed', render: (val) => <span className="text-red-600 font-medium">{val}</span> },
         { header: 'Créditos Aprobados', key: 'credits', render: (val) => `${val} / 165` }
@@ -429,6 +432,7 @@ export default function ExportReports() {
               a.remove();
               URL.revokeObjectURL(url);
               setExportMessage({ ok: true, text: 'Reporte generado y descargado.' });
+              toast.success('Reporte descargado');
             } catch (err) {
               console.error('Error al descargar reporte:', err);
               setExportMessage({ ok: false, text: 'No se pudo generar el reporte. Revise el rango de fechas e intente de nuevo.' });
@@ -436,8 +440,8 @@ export default function ExportReports() {
               setIsExporting(false);
             }
           }}>
-            <Download className="w-4 h-4 mr-2" />
-            {isExporting ? 'Generando...' : 'Generar y Descargar'}
+            {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" /> : <Download className="w-4 h-4 mr-2" />}
+            {isExporting ? `Generando ${format === 'pdf' ? 'PDF' : 'Excel'}...` : 'Generar y Descargar'}
           </Button>
           {exportMessage && (
             <p role="status" className={`text-xs ${exportMessage.ok ? 'text-green-700' : 'text-red-700'}`}>
@@ -484,7 +488,7 @@ export default function ExportReports() {
               </div>
 
               <div className="text-right text-[10px] text-ink-faint">
-                <p>Generado: {new Date().toLocaleDateString()}</p>
+                <p>Generado: {formatearFecha(new Date())}</p>
                 <p className="mt-0.5">Filtro Período: {dateFrom} al {dateTo}</p>
               </div>
             </div>
@@ -499,7 +503,7 @@ export default function ExportReports() {
 
             {/* Tabla Dinámica — preview de 5 filas */}
             <div className="overflow-x-auto flex-1 border border-line rounded-[10px]">
-              <table className="tabular-nums w-full border-collapse text-left">
+              <table className="tabla-tarjetas tabular-nums w-full border-collapse text-left">
                 <thead>
                   <tr className="bg-paper text-ink-soft border-b border-line">
                     {activeReport?.columns.map((col, idx) => (
@@ -589,7 +593,7 @@ export default function ExportReports() {
                 <img src="/logo-ufps.svg" alt="UFPS" className="h-8 w-auto" />
                 <div>
                   <h2 className="font-semibold text-ink text-base">{activeReport?.title}</h2>
-                  <p className="text-xs text-ink-muted">{filteredData.length} registros · Generado {new Date().toLocaleDateString()}</p>
+                  <p className="text-xs text-ink-muted">{filteredData.length} registros · Generado {formatearFecha(new Date())}</p>
                 </div>
               </div>
               <button
@@ -618,7 +622,7 @@ export default function ExportReports() {
 
             {/* Tabla completa scrollable */}
             <div className="flex-1 overflow-auto">
-              <table className="tabular-nums w-full border-collapse text-left">
+              <table className="tabla-tarjetas tabular-nums w-full border-collapse text-left">
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-paper text-ink-soft border-b border-line">
                     <th className="px-4 py-3 text-xs font-semibold">#</th>

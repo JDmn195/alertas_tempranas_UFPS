@@ -9,8 +9,8 @@ test('crear una regla recalcula el riesgo y genera sus alertas (HU-13)', async (
   await expect(page.getByRole('heading', { name: 'Añadir Nueva Regla' })).toBeVisible();
 
   // Carla tiene PPA 4.2: con esta regla queda en riesgo
-  await page.getByPlaceholder('e.g., Bajo Promedio - Crítico').fill('Promedio Bajo E2E');
-  await page.getByPlaceholder('e.g., 3.0').fill('4.5');
+  await page.getByPlaceholder('Ej.: Bajo promedio - Crítico').fill('Promedio Bajo E2E');
+  await page.getByPlaceholder('Ej.: 3.0').fill('4.5');
   await page.getByRole('button', { name: 'Media' }).click();
   await page.getByRole('button', { name: 'Guardar Regla' }).click();
 

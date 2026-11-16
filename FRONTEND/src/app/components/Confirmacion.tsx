@@ -4,13 +4,15 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from './ui/alert-dialog';
 
-type Solicitud = { mensaje: string; resolver: (aceptada: boolean) => void };
+export type OpcionesConfirmacion = { titulo?: string; confirmar?: string };
+type Solicitud = { mensaje: string; opciones?: OpcionesConfirmacion; resolver: (aceptada: boolean) => void };
 let presentar: ((solicitud: Solicitud) => void) | undefined;
 
 // SDAT-307: espera una decisión explícita sin bloquear el navegador.
-export function confirmarAccion(mensaje: string): Promise<boolean> {
+// SDAT-346: el título y el verbo del botón nombran la acción (por ejemplo «Eliminar regla»).
+export function confirmarAccion(mensaje: string, opciones?: OpcionesConfirmacion): Promise<boolean> {
   return new Promise(resolver => {
-    if (presentar) presentar({ mensaje, resolver });
+    if (presentar) presentar({ mensaje, opciones, resolver });
     else resolver(false);
   });
 }
@@ -30,12 +32,12 @@ export function Confirmacion() {
     <AlertDialog open={!!solicitud} onOpenChange={abierto => { if (!abierto) resolver(false); }}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Confirmar acción</AlertDialogTitle>
+          <AlertDialogTitle>{solicitud?.opciones?.titulo ?? 'Confirmar acción'}</AlertDialogTitle>
           <AlertDialogDescription className="whitespace-pre-line">{solicitud?.mensaje}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={evento => { evento.preventDefault(); resolver(false); }}>Cancelar</AlertDialogCancel>
-          <AlertDialogAction onClick={evento => { evento.preventDefault(); resolver(true); }}>Confirmar</AlertDialogAction>
+          <AlertDialogAction onClick={evento => { evento.preventDefault(); resolver(true); }}>{solicitud?.opciones?.confirmar ?? 'Confirmar'}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

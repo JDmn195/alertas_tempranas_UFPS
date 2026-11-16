@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { formatearFechaHora } from '@/utils/formato';
 import { useState, useEffect } from 'react';
 import { CintaIndicadores, EncabezadoPagina } from '../components/Panel';
 import { Badge } from '../components/ui/Badge';
@@ -122,7 +123,7 @@ export default function NotificationHistory() {
           <h2 className="text-base font-semibold text-ink">{isLoading && history.length === 0 ? 'Cargando...' : `${total} envío${total !== 1 ? 's' : ''}`}</h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="tabular-nums w-full min-w-[760px]">
+          <table className="tabla-tarjetas tabular-nums w-full min-w-[760px]">
             <thead className="bg-paper text-ink-soft border-b border-line">
               <tr>
                 <th className="px-5 py-3 text-left text-xs font-semibold">Fecha</th>
@@ -142,7 +143,7 @@ export default function NotificationHistory() {
                 history.map((record) => (
                   <tr key={record.id} className="hover:bg-paper">
                     <td className="px-5 py-3.5 text-sm text-ink-muted whitespace-nowrap">
-                      {new Date(record.fecha_envio).toLocaleString()}
+                      {formatearFechaHora(record.fecha_envio)}
                     </td>
                     <td className="px-5 py-3.5 text-sm font-medium text-ink">
                       {record.estudiante}
@@ -177,8 +178,13 @@ export default function NotificationHistory() {
                         </Badge>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 text-xs text-ink-muted max-w-xs truncate" title={record.detalle_error}>
-                      {record.detalle_error || '-'}
+                    <td className="px-5 py-3.5 text-xs text-ink-muted max-w-xs">
+                      {record.detalle_error ? (
+                        <details>
+                          <summary className="cursor-pointer text-ink-soft">No se pudo enviar el correo</summary>
+                          <p className="mt-1 break-words text-[11px] text-ink-faint">Detalle técnico: {record.detalle_error}</p>
+                        </details>
+                      ) : '-'}
                     </td>
                   </tr>
                 ))

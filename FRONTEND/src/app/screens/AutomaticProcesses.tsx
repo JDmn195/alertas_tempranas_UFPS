@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { formatearFechaHora } from '@/utils/formato';
 import { Link } from 'react-router';
 import { useEffect, useState } from 'react';
 import { BellRing, CalendarClock, ChevronDown, ChevronUp, Play, RefreshCw, Save } from 'lucide-react';
@@ -67,6 +68,7 @@ interface Recordatorio {
 interface CasoSinSeguimiento {
   tipo_caso: 'ALERTA' | 'INTERVENCION';
   alerta_id: number;
+  intervencion_id?: number | null;
   estudiante: { codigo: string; nombre: string };
   regla: string;
   nivel: string;
@@ -93,12 +95,7 @@ const ESTADO_RECORDATORIO: Record<Recordatorio['estado'], { label: string; class
 
 const baseUrl = API_BASE_URL;
 
-const formatDate = (iso: string | null) =>
-  iso
-    ? new Date(iso).toLocaleString('es-CO', {
-        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-      })
-    : '—';
+const formatDate = formatearFechaHora;
 
 function rolActual(): string[] {
   try {
@@ -173,7 +170,7 @@ function ReevaluacionPeriodica({ puedeEjecutar }: { puedeEjecutar: boolean }) {
   return (
     <Seccion
       titulo="Re-evaluación periódica del riesgo"
-      detalle="Recalcula indicadores, riesgo y alertas sin una nueva importación (HU-29)"
+      detalle="Recalcula indicadores, riesgo y alertas sin una nueva importación"
       accion={
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" onClick={cargar}>
@@ -193,7 +190,7 @@ function ReevaluacionPeriodica({ puedeEjecutar }: { puedeEjecutar: boolean }) {
         <CintaIndicadores
           cargando={loading && ejecuciones.length === 0}
           indicadores={[
-            { etiqueta: 'Programación', valor: <span className="text-base leading-tight">Diaria, 02:00</span>, detalle: 'Hora de Colombia, con reintentos ante fallos' },
+            { etiqueta: 'Programación', valor: <span className="text-base leading-tight">Diaria, 2:00 a. m.</span>, detalle: 'Hora de Colombia (UTC-5). GitHub puede demorar el inicio; las horas de abajo son las reales' },
             {
               etiqueta: 'Última ejecución',
               valor: <span className="text-base leading-tight">{ultima ? formatDate(ultima.fecha_inicio) : 'Sin ejecuciones'}</span>,
@@ -382,7 +379,7 @@ function RecordatoriosSeguimiento() {
   return (
     <Seccion
       titulo="Recordatorios de casos sin seguimiento"
-      detalle="Avisa sobre alertas e intervenciones inactivas; se cancelan al registrar seguimiento (HU-30)"
+      detalle="Avisa sobre alertas e intervenciones inactivas; se cancelan al registrar seguimiento"
       accion={
         <Button size="sm" onClick={enviarAhora}>
           <Play className="w-4 h-4 inline mr-1" />
@@ -462,7 +459,7 @@ function RecordatoriosSeguimiento() {
                 {casos.length === 0 ? (
                   <tr><td colSpan={5} className="px-4 py-4 text-center text-sm text-ink-muted">No hay casos sin seguimiento.</td></tr>
                 ) : casos.slice(0, 20).map(c => (
-                  <tr key={`${c.tipo_caso}-${c.alerta_id}`}>
+                  <tr key={`${c.tipo_caso}-${c.intervencion_id ?? c.alerta_id}`}>
                     <td className="px-4 py-2 text-sm text-ink-muted">{c.tipo_caso === 'ALERTA' ? 'Alerta' : 'Intervención'}</td>
                     <td className="px-4 py-2 text-sm text-ink">{c.estudiante.nombre} <span className="text-xs text-ink-muted">{c.estudiante.codigo}</span></td>
                     <td className="px-4 py-2 text-sm text-ink-muted">{c.regla}</td>

@@ -3,10 +3,11 @@ HU-30: Cancela los recordatorios pendientes cuando se registra seguimiento.
 
 Se usan señales para cubrir cualquier vía de registro (API, admin, comandos).
 """
-from django.db.models.signals import post_save
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from alertas.models import Alerta, AnotacionIntervencion, Evidencia, Intervencion
+from alertas import cache_listado
+from alertas.models import Alerta, AnotacionIntervencion, Evidencia, Intervencion, RiesgoEstudiante
 from alertas.recordatorios import ESTADOS_ALERTA_CERRADOS, cancelar_recordatorios
 
 
@@ -39,3 +40,9 @@ def alerta_guardada(sender, instance, created, update_fields=None, **kwargs):
         return
     if instance.estado in ESTADOS_ALERTA_CERRADOS:
         cancelar_recordatorios('La alerta fue cerrada.', alerta=instance)
+
+
+# SDAT-303: cualquier cambio de una alerta o del riesgo de un estudiante invalida el listado en caché
+for _modelo in (Alerta, RiesgoEstudiante):
+    post_save.connect(cache_listado.invalidar, sender=_modelo, dispatch_uid=f'listado_alertas_save_{_modelo.__name__}')
+    post_delete.connect(cache_listado.invalidar, sender=_modelo, dispatch_uid=f'listado_alertas_del_{_modelo.__name__}')
