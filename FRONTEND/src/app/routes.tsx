@@ -18,6 +18,7 @@ function pantallaDiferida(cargar: () => Promise<{ default: ComponentType }>) {
   };
 }
 
+const AdminResumen = pantallaDiferida(() => import('./screens/AdminResumen'));
 const AdminDashboard = pantallaDiferida(() => import('./screens/AdminDashboard'));
 const ImportLog = pantallaDiferida(() => import('./screens/ImportLog'));
 const StudentProfile = pantallaDiferida(() => import('./screens/StudentProfile'));
@@ -83,6 +84,10 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <InicioDashboard /> },
+      {
+        path: "admin/resumen",
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR']}><AdminResumen /></ProtectedRoute>
+      },
       { 
         path: "admin/import", 
         element: <ProtectedRoute allowedRoles={['ADMINISTRADOR']}><AdminDashboard /></ProtectedRoute> 
@@ -113,7 +118,7 @@ export const router = createBrowserRouter([
       },
       { 
         path: "alerts", 
-        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR']}><AlertManagement /></ProtectedRoute> 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DIRECTOR', 'DOCENTE', 'BIENESTAR']}><AlertManagement /></ProtectedRoute> 
       },
       {
         path: "intervenciones/:intervencionId/evidencias",
@@ -129,7 +134,7 @@ export const router = createBrowserRouter([
       },
       { 
         path: "reports", 
-        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'BIENESTAR', 'DOCENTE']}><ExportReports /></ProtectedRoute> 
+        element: <ProtectedRoute allowedRoles={['ADMINISTRADOR', 'DIRECTOR', 'BIENESTAR', 'DOCENTE']}><ExportReports /></ProtectedRoute> 
       },
       { 
         path: "courses", 
