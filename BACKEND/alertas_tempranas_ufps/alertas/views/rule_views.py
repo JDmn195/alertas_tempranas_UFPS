@@ -52,6 +52,30 @@ def _recalcular_en_background(usuario, regla_id=None):
     reprocesar_alertas_completas(usuario=usuario, regla_especifica=regla_obj)
 
 
+def _validar_regla_general(nombre, tipo, valor_umbral, operador, nivel):
+    """Datos básicos de toda regla; el umbral de PROMEDIO está en la escala de notas (0 a 5)."""
+    if not isinstance(nombre, str) or not nombre.strip():
+        raise ErrorValidacionRegla("El nombre de la regla es obligatorio.")
+    if tipo not in dict(Regla.TIPO_CHOICES):
+        raise ErrorValidacionRegla("Tipo de regla no válido.")
+    if operador not in dict(Regla.OPERADOR_CHOICES):
+        raise ErrorValidacionRegla("Operador no válido.")
+    if nivel not in dict(Regla.NIVEL_CHOICES):
+        raise ErrorValidacionRegla("Nivel de riesgo no válido.")
+    if tipo not in ('PROMEDIO', 'REPROBACION', 'ATRASO'):
+        return  # CORTE e INASISTENCIA tienen su propia validación
+    try:
+        vu = float(valor_umbral)
+    except (TypeError, ValueError):
+        raise ErrorValidacionRegla("El valor del umbral debe ser numérico.")
+    if isinstance(valor_umbral, bool) or vu != vu:
+        raise ErrorValidacionRegla("El valor del umbral debe ser numérico.")
+    if tipo == 'PROMEDIO' and not 0.0 <= vu <= 5.0:
+        raise ErrorValidacionRegla("El umbral de promedio debe estar entre 0.0 y 5.0.")
+    if vu < 0:
+        raise ErrorValidacionRegla("El valor del umbral no puede ser negativo.")
+
+
 def _validar_regla_corte(tipo, valor_umbral, parametros, regla_id=None):
     if tipo != 'CORTE':
         return
@@ -191,6 +215,8 @@ def listar_crear_reglas(request):
             parametros = body.get('parametros', {})
             activo = body.get('activo', True)
 
+            _validar_regla_general(body.get('nombre'), tipo, valor_umbral,
+                                   body.get('operador', '<'), body.get('nivel', 'medium'))
             _validar_regla_corte(tipo, valor_umbral, parametros)
             _validar_regla_inasistencia(tipo, valor_umbral, parametros, activo)
 
@@ -255,6 +281,8 @@ def detalle_regla(request, pk):
             nuevos_parametros = body.get('parametros', regla.parametros or {})
             nuevo_activo = body.get('activo', regla.activo)
 
+            _validar_regla_general(body.get('nombre', regla.nombre), nuevo_tipo, nuevo_umbral,
+                                   body.get('operador', regla.operador), body.get('nivel', regla.nivel))
             _validar_regla_corte(nuevo_tipo, nuevo_umbral, nuevos_parametros, regla_id=regla.id)
             _validar_regla_inasistencia(nuevo_tipo, nuevo_umbral, nuevos_parametros, nuevo_activo,
                                         regla_id=regla.id)

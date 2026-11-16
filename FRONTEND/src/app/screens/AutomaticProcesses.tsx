@@ -348,19 +348,36 @@ function RecordatoriosSeguimiento() {
     if (res.ok) setTimeout(cargar, 1500);
   };
 
-  const campoNumero = (campo: keyof ConfigRecordatorios, label: string, max = 365) => (
-    <label className="flex flex-col gap-1 text-xs font-medium text-ink-muted">
-      {label}
-      <input
-        type="number"
-        min={1}
-        max={max}
-        value={form ? String(form[campo]) : ''}
-        onChange={e => form && setForm({ ...form, [campo]: e.target.value === '' ? '' : Number(e.target.value) } as ConfigRecordatorios)}
-        className="px-3 py-2 text-sm border border-line-strong rounded-[10px] bg-white text-ink w-full"
-      />
-    </label>
-  );
+  const errorNumero = (campo: keyof ConfigRecordatorios, max: number) => {
+    const v = form ? form[campo] : null;
+    if (v === '' || v === null || v === undefined) return 'Este campo es obligatorio.';
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 1 || n > max) return `Ingresa un entero entre 1 y ${max}.`;
+    return null;
+  };
+  const hayErrores = !!form && ([
+    ['dias_inactividad_alerta', 365], ['dias_inactividad_intervencion', 365],
+    ['dias_entre_recordatorios', 365], ['max_intentos', 10],
+  ] as [keyof ConfigRecordatorios, number][]).some(([c, m]) => errorNumero(c, m));
+
+  const campoNumero = (campo: keyof ConfigRecordatorios, label: string, max = 365) => {
+    const error = errorNumero(campo, max);
+    return (
+      <label className="flex flex-col gap-1 text-xs font-medium text-ink-muted">
+        {label}
+        <input
+          type="number"
+          min={1}
+          max={max}
+          value={form ? String(form[campo]) : ''}
+          aria-invalid={!!error}
+          onChange={e => form && setForm({ ...form, [campo]: e.target.value === '' ? '' : Number(e.target.value) } as ConfigRecordatorios)}
+          className="px-3 py-2 text-sm border border-line-strong rounded-[10px] bg-white text-ink w-full"
+        />
+        {error && <span className="text-xs text-red-600" role="alert">{error}</span>}
+      </label>
+    );
+  };
 
   return (
     <Seccion
@@ -422,7 +439,7 @@ function RecordatoriosSeguimiento() {
               ))}
             </div>
             <div className="flex justify-end">
-              <Button size="sm" onClick={guardar} disabled={guardando}>
+              <Button size="sm" onClick={guardar} disabled={guardando || hayErrores}>
                 <Save className="w-4 h-4 inline mr-1" />
                 Guardar configuración
               </Button>
