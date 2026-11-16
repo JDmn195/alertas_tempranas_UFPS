@@ -441,7 +441,7 @@ export default function CourseList() {
 
         {!error && courses.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="tabular-nums w-full">
+            <table className="tabla-tarjetas tabular-nums w-full">
               <thead className="bg-paper text-ink-soft border-b border-line">
                 <tr>
                   <EncabezadoOrdenable clave="codigo_materia" etiqueta="Código" align="left" sortCol={sortCol} sortDir={sortDir} onOrdenar={ordenarPor} />

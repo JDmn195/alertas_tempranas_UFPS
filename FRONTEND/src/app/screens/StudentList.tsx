@@ -332,7 +332,7 @@ export default function StudentList() {
         {/* Table */}
         {!error && students.length > 0 && (
           <div className="overflow-x-auto animate-in fade-in duration-200">
-            <table className="w-full min-w-[720px]">
+            <table className="tabla-tarjetas w-full min-w-[720px]">
               <thead className="bg-paper text-ink-soft border-b border-line">
                 <tr>
                   {COLUMNAS.map(({ clave, etiqueta }) => (
