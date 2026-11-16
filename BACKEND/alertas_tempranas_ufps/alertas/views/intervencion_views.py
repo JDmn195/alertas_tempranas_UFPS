@@ -11,6 +11,22 @@ from usuarios.utils import registrar_auditoria
 # Alertas cerradas no permiten nuevas intervenciones
 ESTADOS_NO_PERMITIDOS = ['cerrada', 'closed']
 
+# Debe coincidir con Intervencion.resultado (max_length)
+LONGITUD_MAX_RESULTADO = 100
+
+
+def _texto(body, campo, max_len=None):
+    """Lee un campo de texto del body: None cuenta como vacío; otro tipo no string o exceso de largo lanza ValueError."""
+    valor = body.get(campo)
+    if valor is None:
+        return ''
+    if not isinstance(valor, str):
+        raise ValueError(f'{campo} debe ser texto')
+    valor = valor.strip()
+    if max_len and len(valor) > max_len:
+        raise ValueError(f'{campo} no puede superar {max_len} caracteres (tiene {len(valor)})')
+    return valor
+
 
 def recalcular_estado_alerta(alerta):
     """
@@ -74,11 +90,14 @@ def registrar_intervencion(request, alerta_id):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Body JSON inválido'}, status=400)
 
-    usuario       = request.usuario
-    tipo          = body.get('tipo', '').strip().upper()
-    observaciones = body.get('observaciones', '').strip()
-    evidencia     = body.get('evidencia', '').strip() or None
-    resultado     = body.get('resultado', '').strip() or None
+    usuario = request.usuario
+    try:
+        tipo          = _texto(body, 'tipo').upper()
+        observaciones = _texto(body, 'observaciones')
+        evidencia     = _texto(body, 'evidencia') or None
+        resultado     = _texto(body, 'resultado', LONGITUD_MAX_RESULTADO) or None
+    except ValueError as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
 
     # Validar campos obligatorios
     if not tipo:
@@ -207,7 +226,10 @@ def gestionar_anotaciones(request, intervencion_id):
             return JsonResponse({'error': 'Body JSON inválido'}, status=400)
 
         usuario = request.usuario
-        texto = body.get('texto', '').strip()
+        try:
+            texto = _texto(body, 'texto')
+        except ValueError as exc:
+            return JsonResponse({'error': str(exc)}, status=400)
 
         if not texto:
             return JsonResponse({'error': 'texto es obligatorio'}, status=400)
@@ -271,7 +293,10 @@ def concluir_intervencion(request, intervencion_id):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Body JSON inválido'}, status=400)
 
-    resultado = body.get('resultado', '').strip()
+    try:
+        resultado = _texto(body, 'resultado', LONGITUD_MAX_RESULTADO)
+    except ValueError as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
     if not resultado:
         return JsonResponse({'error': 'El resumen final (resultado) es obligatorio'}, status=400)
 

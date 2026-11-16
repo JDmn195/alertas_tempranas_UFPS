@@ -129,7 +129,7 @@ export default function EvidenceManagement() {
     setEnviandoAnotacion(true);
     setError(null);
     try {
-      await evidenceService.createAnotacion(id, currentUser.id, nuevaAnotacion.trim());
+      await evidenceService.createAnotacion(id, nuevaAnotacion.trim());
       setNuevaAnotacion('');
       loadAnotaciones();
     } catch (err: any) {
@@ -458,9 +458,11 @@ export default function EvidenceManagement() {
             <textarea
               value={resumenFinal}
               onChange={(e) => setResumenFinal(e.target.value)}
-              placeholder="Ej: El estudiante se comprometió a asistir a tutorías semanales y firmó el acta. Mejora esperada..."
+              maxLength={100}
+              placeholder="Ej: Se comprometió a asistir a tutorías semanales y firmó el acta."
               className="w-full h-32 px-4 py-3 bg-gray-50 border border-gray-200 rounded-[10px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm resize-none"
             />
+            <p className="text-xs text-ink-muted text-right -mt-4">{resumenFinal.length}/100 caracteres</p>
             
             <div className="flex justify-end gap-3 pt-2">
               <button
