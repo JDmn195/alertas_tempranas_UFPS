@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { formatearFechaHora } from '@/utils/formato';
 import { Link } from 'react-router';
 import { useEffect, useState } from 'react';
 import { BellRing, CalendarClock, ChevronDown, ChevronUp, Play, RefreshCw, Save } from 'lucide-react';
@@ -93,12 +94,7 @@ const ESTADO_RECORDATORIO: Record<Recordatorio['estado'], { label: string; class
 
 const baseUrl = API_BASE_URL;
 
-const formatDate = (iso: string | null) =>
-  iso
-    ? new Date(iso).toLocaleString('es-CO', {
-        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-      })
-    : '—';
+const formatDate = formatearFechaHora;
 
 function rolActual(): string[] {
   try {
@@ -193,7 +189,7 @@ function ReevaluacionPeriodica({ puedeEjecutar }: { puedeEjecutar: boolean }) {
         <CintaIndicadores
           cargando={loading && ejecuciones.length === 0}
           indicadores={[
-            { etiqueta: 'Programación', valor: <span className="text-base leading-tight">Diaria, 02:00</span>, detalle: 'Hora de Colombia, con reintentos ante fallos' },
+            { etiqueta: 'Programación', valor: <span className="text-base leading-tight">Diaria, 2:00 a. m.</span>, detalle: 'Hora de Colombia (UTC-5). GitHub puede demorar el inicio; las horas de abajo son las reales' },
             {
               etiqueta: 'Última ejecución',
               valor: <span className="text-base leading-tight">{ultima ? formatDate(ultima.fecha_inicio) : 'Sin ejecuciones'}</span>,

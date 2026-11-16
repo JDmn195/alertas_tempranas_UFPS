@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { formatearFecha } from '@/utils/formato';
 import { useState, useMemo, useEffect } from 'react';
 import { 
   FileText, 
@@ -484,7 +485,7 @@ export default function ExportReports() {
               </div>
 
               <div className="text-right text-[10px] text-ink-faint">
-                <p>Generado: {new Date().toLocaleDateString()}</p>
+                <p>Generado: {formatearFecha(new Date())}</p>
                 <p className="mt-0.5">Filtro Período: {dateFrom} al {dateTo}</p>
               </div>
             </div>
@@ -589,7 +590,7 @@ export default function ExportReports() {
                 <img src="/logo-ufps.svg" alt="UFPS" className="h-8 w-auto" />
                 <div>
                   <h2 className="font-semibold text-ink text-base">{activeReport?.title}</h2>
-                  <p className="text-xs text-ink-muted">{filteredData.length} registros · Generado {new Date().toLocaleDateString()}</p>
+                  <p className="text-xs text-ink-muted">{filteredData.length} registros · Generado {formatearFecha(new Date())}</p>
                 </div>
               </div>
               <button

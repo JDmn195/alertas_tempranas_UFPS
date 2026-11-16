@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { formatearFechaHora } from '@/utils/formato';
 import { Link } from 'react-router';
 import { API_BASE_URL } from '@/services/config';
 import { apiFetch } from '../../services/apiFetch';
@@ -81,11 +82,11 @@ export default function Ayuda() {
 
       {veProcesos && <section className="rounded-xl border border-gray-200 bg-white p-5 space-y-3" aria-labelledby="procesos-ayuda">
         <h2 id="procesos-ayuda" className="text-xl font-semibold">Procesos automáticos</h2>
-        <p>La revaluación programada se solicita cada día a las 2:00 a. m. de Colombia. Los recordatorios se solicitan cada 6 horas; su envío depende de la configuración y de los casos pendientes.</p>
+        <p>La revaluación programada se solicita cada día a las 2:00 a. m. de Colombia. Los recordatorios se solicitan cada 6 horas (1:00 a. m., 7:00 a. m., 1:00 p. m. y 7:00 p. m. de Colombia). GitHub puede demorar el inicio de cada ejecución; las horas del historial son las reales. Su envío depende de la configuración y de los casos pendientes.</p>
         <p role="status">
           {estadoConsulta === 'cargando' ? 'Consultando última revaluación…' : estadoConsulta === 'error'
             ? 'No se pudo consultar la última revaluación.'
-            : ultima ? `Última revaluación: ${new Date(ultima.fecha_inicio).toLocaleString('es-CO', { timeZone: 'America/Bogota' })} · ${ultima.estado}.`
+            : ultima ? `Última revaluación: ${formatearFechaHora(ultima.fecha_inicio)} · ${ultima.estado}.`
               : 'Todavía no hay revaluaciones registradas.'}
         </p>
       </section>}

@@ -2,7 +2,7 @@ import { toast } from 'sonner';
 import { confirmarAccion } from '../components/Confirmacion';
 import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, X, RefreshCw, AlertTriangle, Edit2, Search } from 'lucide-react';
+import { Plus, X, RefreshCw, AlertTriangle, Edit2, Search, Copy } from 'lucide-react';
 import { CintaIndicadores, EncabezadoPagina } from '../components/Panel';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -117,6 +117,17 @@ export default function UserManagement() {
     }
   };
 
+  // La clave solo vive en memoria mientras el aviso esté abierto; no se guarda en ningún almacenamiento
+  const copiarContrasena = async () => {
+    if (!credencialesNuevas) return;
+    try {
+      await navigator.clipboard.writeText(credencialesNuevas.contrasena);
+      toast.success('Contraseña copiada');
+    } catch {
+      toast.error('No se pudo copiar; selecciónala y cópiala a mano');
+    }
+  };
+
   const handleToggleStatus = async (user: User) => {
     if (!await confirmarAccion(`¿Estás seguro de que quieres ${user.activo ? 'desactivar' : 'activar'} a este usuario?`)) {
       return;
@@ -160,12 +171,19 @@ export default function UserManagement() {
       />
 
       {credencialesNuevas && (
-        <div className="p-4 bg-green-50 text-green-800 rounded-[10px] border border-green-200 flex items-start justify-between gap-4">
+        <div role="status" className="sticky top-2 z-10 p-4 bg-green-50 text-green-800 rounded-[10px] border border-green-200 flex items-start justify-between gap-4">
           <div className="text-sm">
-            <p className="font-semibold">Usuario creado. Entrégale estas credenciales; la contraseña no se volverá a mostrar.</p>
+            <p className="font-semibold">Usuario creado. Entrégale estas credenciales; la contraseña no se volverá a mostrar. Este aviso permanece hasta que lo cierres.</p>
             <p className="mt-1">Correo: <span className="tabular-nums">{credencialesNuevas.correo}</span></p>
             <p>Contraseña temporal: <span className="tabular-nums select-all">{credencialesNuevas.contrasena}</span></p>
             <p className="mt-1 text-green-700">Deberá cambiarla en su primer inicio de sesión.</p>
+            <button
+              type="button"
+              onClick={copiarContrasena}
+              className="mt-2 inline-flex items-center gap-1.5 px-3 h-8 rounded-[8px] border border-green-300 bg-white text-green-800 text-xs font-semibold hover:bg-green-100"
+            >
+              <Copy className="w-3.5 h-3.5" aria-hidden="true" /> Copiar contraseña
+            </button>
           </div>
           <button onClick={() => setCredencialesNuevas(null)} className="text-green-700 hover:text-green-900" aria-label="Cerrar">
             <X className="w-4 h-4" />

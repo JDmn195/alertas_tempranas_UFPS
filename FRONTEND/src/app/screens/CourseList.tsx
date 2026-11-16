@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { normalizarNombreMateria, normalizarCodigo, formatearFecha, formatearFechaHora } from '@/utils/formato';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import {
@@ -78,7 +79,7 @@ function CustomBarTooltip({ active, payload }: any) {
     const d = payload[0].payload;
     return (
       <div className="bg-white border border-gray-200 rounded-[10px] shadow-lg p-3 text-xs">
-        <p className="font-semibold text-gray-800 mb-1">{d.materia}</p>
+        <p className="font-semibold text-gray-800 mb-1">{normalizarNombreMateria(d.materia)}</p>
         <p className="text-gray-500">Grupo: {d.grupo}</p>
         <p className={`font-semibold mt-1 ${d.tasa >= UMBRAL_CRITICO ? 'text-red-600' : d.tasa >= 15 ? 'text-amber-600' : 'text-green-600'}`}>
           Tasa reprobación: {d.tasa.toFixed(1)}%
@@ -121,6 +122,8 @@ export default function CourseList() {
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(false);
+  // La columna Tendencia solo aparece si algún curso de la página tiene dato
+  const hayTendencia = courses.some((c) => c.tendencia_puntos !== null);
   const [error, setError] = useState<string | null>(null);
 
   // Filtros, página y orden viven en la URL: sobreviven a recargar y al botón Atrás (SDAT-340)
@@ -451,7 +454,7 @@ export default function CourseList() {
                   <EncabezadoOrdenable clave="promedio_curso" etiqueta="Promedio" align="center" sortCol={sortCol} sortDir={sortDir} onOrdenar={ordenarPor} />
                   <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">Zona Riesgo</th>
                   <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">No Present.</th>
-                  <EncabezadoOrdenable clave="tendencia_puntos" etiqueta="Tendencia" align="center" sortCol={sortCol} sortDir={sortDir} onOrdenar={ordenarPor} />
+                  {hayTendencia && <EncabezadoOrdenable clave="tendencia_puntos" etiqueta="Tendencia" align="center" sortCol={sortCol} sortDir={sortDir} onOrdenar={ordenarPor} />}
 
                   <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">Estado</th>
                   <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">Umbral Inasist.</th>
@@ -466,8 +469,8 @@ export default function CourseList() {
                       onClick={() => setSelectedCourseDetail(course.curso_id)}
                       className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${course.es_critico ? '!bg-red-50' : ''} hover:bg-red-50 transition-colors duration-100 cursor-pointer`}
                     >
-                      <td className="px-5 py-3.5 text-sm tabular-nums font-medium text-gray-700">{course.codigo_materia}</td>
-                      <td className="px-5 py-3.5 text-sm text-gray-900 max-w-[200px] truncate font-medium">{course.materia}</td>
+                      <td className="px-5 py-3.5 text-sm tabular-nums font-medium text-gray-700">{normalizarCodigo(course.codigo_materia)}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-900 max-w-[200px] truncate font-medium">{normalizarNombreMateria(course.materia)}</td>
                       <td className="px-5 py-3.5 text-sm text-gray-600">G-{course.grupo}</td>
                       <td className="px-5 py-3.5 text-sm text-gray-700 max-w-[160px] truncate">{course.docente}</td>
                       <td className="px-5 py-3.5 text-sm text-center font-semibold text-gray-900">{course.matriculados}</td>
@@ -503,14 +506,16 @@ export default function CourseList() {
                           {course.no_presentados > 0 && <span className="text-xs text-red-400">{course.tasa_no_presentados.toFixed(1)}%</span>}
                         </div>
                       </td>
-                      <td className="px-5 py-3.5 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <TendenciaIcon puntos={course.tendencia_puntos} />
-                          <span className={`text-xs font-medium ${course.tendencia_puntos === null ? 'text-gray-400 italic' : course.tendencia_puntos > 0 ? 'text-red-500' : course.tendencia_puntos < 0 ? 'text-green-600' : 'text-gray-500'}`}>
-                            {course.tendencia_puntos === null ? 'Sin datos' : course.tendencia_puntos > 0 ? `+${course.tendencia_puntos.toFixed(1)}%` : `${course.tendencia_puntos.toFixed(1)}%`}
-                          </span>
-                        </div>
-                      </td>
+                      {hayTendencia && (
+                        <td className="px-5 py-3.5 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <TendenciaIcon puntos={course.tendencia_puntos} />
+                            <span className={`text-xs font-medium ${course.tendencia_puntos === null ? 'text-gray-400 italic' : course.tendencia_puntos > 0 ? 'text-red-500' : course.tendencia_puntos < 0 ? 'text-green-600' : 'text-gray-500'}`}>
+                              {course.tendencia_puntos === null ? 'Sin datos' : course.tendencia_puntos > 0 ? `+${course.tendencia_puntos.toFixed(1)}%` : `${course.tendencia_puntos.toFixed(1)}%`}
+                            </span>
+                          </div>
+                        </td>
+                      )}
                       <td className="px-5 py-3.5 text-center">
                         {course.es_critico ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-200">
@@ -607,7 +612,7 @@ export default function CourseList() {
               <div>
                 <h2 className="text-lg font-semibold">Umbral de inasistencia</h2>
                 <p className="text-xs opacity-90">
-                  {umbralEditando.codigo_materia} G-{umbralEditando.grupo} · {umbralEditando.materia}
+                  {normalizarCodigo(umbralEditando.codigo_materia)} G-{umbralEditando.grupo} · {normalizarNombreMateria(umbralEditando.materia)}
                 </p>
               </div>
               <button aria-label="Cerrar edición de umbral" onClick={cerrarEdicionUmbral} className="text-ink-muted hover:text-ink hover:bg-wash rounded-[10px] p-1.5">
@@ -710,11 +715,11 @@ export default function CourseList() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-[10px] border border-gray-200">
                       <div>
                         <span className="text-[10px] text-gray-500 uppercase font-semibold block">Materia</span>
-                        <span className="text-sm font-semibold text-gray-900">{courseDetailData.materia}</span>
+                        <span className="text-sm font-semibold text-gray-900">{normalizarNombreMateria(courseDetailData.materia)}</span>
                       </div>
                       <div>
                         <span className="text-[10px] text-gray-500 uppercase font-semibold block">Código / Grupo</span>
-                        <span className="text-sm font-semibold text-gray-900 tabular-nums">{courseDetailData.codigo_materia} / G-{courseDetailData.grupo}</span>
+                        <span className="text-sm font-semibold text-gray-900 tabular-nums">{normalizarCodigo(courseDetailData.codigo_materia)} / G-{courseDetailData.grupo}</span>
                       </div>
                       <div>
                         <span className="text-[10px] text-gray-500 uppercase font-semibold block">Profesor</span>
@@ -750,7 +755,7 @@ export default function CourseList() {
                               courseDetailData.estudiantes.map((est, idx) => (
                                 <tr key={`${est.codigo}-${idx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-paper hover:bg-red-50 transition-colors'}>
                                   <td className="px-4 py-2.5 font-medium text-gray-900">{est.nombre}</td>
-                                  <td className="px-4 py-2.5 text-gray-600 tabular-nums">{est.codigo}</td>
+                                  <td className="px-4 py-2.5 text-gray-600 tabular-nums">{normalizarCodigo(est.codigo)}</td>
                                   <td className="px-4 py-2.5 text-center text-gray-600 font-semibold">{est.periodo}</td>
                                   <td className="px-4 py-2.5 text-center">
                                     <span className={`tabular-nums font-semibold ${est.definitiva === null ? 'text-gray-400' : est.definitiva < 3.0 ? 'text-red-600' : 'text-green-600'}`}>

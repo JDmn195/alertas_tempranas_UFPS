@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { formatearFechaHora } from '@/utils/formato';
 import { useState, useEffect } from 'react';
 import { CintaIndicadores, EncabezadoPagina } from '../components/Panel';
 import { Badge } from '../components/ui/Badge';
@@ -142,7 +143,7 @@ export default function NotificationHistory() {
                 history.map((record) => (
                   <tr key={record.id} className="hover:bg-paper">
                     <td className="px-5 py-3.5 text-sm text-ink-muted whitespace-nowrap">
-                      {new Date(record.fecha_envio).toLocaleString()}
+                      {formatearFechaHora(record.fecha_envio)}
                     </td>
                     <td className="px-5 py-3.5 text-sm font-medium text-ink">
                       {record.estudiante}
