@@ -7,6 +7,17 @@ from ..models import NotificacionHistorial, NotificacionInterna
 from usuarios.decorators import requiere_rol
 from alertas_tempranas_ufps.paginacion import paginar_si_se_pide, metadatos_pagina
 
+def mensaje_error_envio(detalle):
+    """Texto legible del fallo de envío; el detalle técnico (respuesta de Brevo) queda solo en la base."""
+    if not detalle:
+        return detalle
+    if 'BREVO_API_KEY' in detalle or 'Brevo: 401' in detalle or 'Brevo: 403' in detalle:
+        return 'El servicio de correo no está configurado o rechazó las credenciales. Avisa al equipo técnico.'
+    if 'Brevo' in detalle:
+        return 'El servicio de correo rechazó el envío. Revisa los registros del proveedor.'
+    return detalle
+
+
 @require_http_methods(["GET"])
 @requiere_rol(['ADMINISTRADOR'])
 def listar_historial_notificaciones(request):
@@ -60,7 +71,7 @@ def listar_historial_notificaciones(request):
             'tipo': n.tipo,
             'fecha_envio': n.fecha_envio.isoformat(),
             'resultado': n.resultado,
-            'detalle_error': n.detalle_error
+            'detalle_error': mensaje_error_envio(n.detalle_error)
         })
         
     return JsonResponse({'historial': data, **metadatos_pagina(pagina)})

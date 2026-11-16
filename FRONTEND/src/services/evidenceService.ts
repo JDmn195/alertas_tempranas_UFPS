@@ -31,6 +31,7 @@ export interface IntervencionDetalle {
 export const evidenceService = {
   async getByIntervencion(intervencionId: number): Promise<{ evidencias: Evidencia[], intervencion: IntervencionDetalle }> {
     const res = await apiFetch(`${API_BASE}/intervenciones/${intervencionId}/evidencias/`);
+    if (res.status === 404) throw new Error('NO_EXISTE');
     if (!res.ok) throw new Error('Error al obtener evidencias');
     const data = await res.json();
     return {

@@ -39,6 +39,7 @@ export default function EvidenceManagement() {
   const [concluding, setConcluding] = useState(false);
   const [showConcludeModal, setShowConcludeModal] = useState(false);
   
+  const [noExiste, setNoExiste] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -54,8 +55,9 @@ export default function EvidenceManagement() {
       const data = await evidenceService.getByIntervencion(id);
       setEvidencias(data.evidencias);
       setIntervencionInfo(data.intervencion);
-    } catch (err) {
-      setError('No se pudieron cargar las evidencias');
+    } catch (err: any) {
+      if (err?.message === 'NO_EXISTE') setNoExiste(true);
+      else setError('No se pudieron cargar las evidencias');
     } finally {
       setLoading(false);
     }
@@ -182,6 +184,23 @@ export default function EvidenceManagement() {
     if (tipo.includes('pdf')) return <FileText className="w-8 h-8 text-red-500" />;
     return <File className="w-8 h-8 text-ink-muted" />;
   };
+
+  if (noExiste) {
+    return (
+      <div className="space-y-5">
+        <EncabezadoPagina titulo="Intervención no encontrada">
+          <button
+            onClick={() => navigate(-1)}
+            className="h-10 px-3.5 inline-flex items-center gap-2 text-sm font-medium text-ink-soft border border-line-strong rounded-[10px] bg-white hover:border-ink-faint"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Volver
+          </button>
+        </EncabezadoPagina>
+        <AvisoError mensaje="La intervención solicitada no existe." instruccion="Vuelve a la lista de alertas y elige una intervención válida." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">

@@ -1,7 +1,7 @@
 import { toast } from 'sonner';
 import { confirmarAccion } from '../components/Confirmacion';
 import { Link } from 'react-router';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Settings, X, Trash2, AlertTriangle, Play, CheckCircle, CalendarX } from 'lucide-react';
 import { CintaIndicadores, EncabezadoPagina, Seccion } from '../components/Panel';
 import { Button } from '../components/ui/Button';
@@ -28,6 +28,7 @@ export default function RiskRules() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [errorModal, setErrorModal] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
+  const guardandoRef = useRef(false);
   const [evaluandoCortes, setEvaluandoCortes] = useState(false);
   const [evaluacionOk, setEvaluacionOk] = useState(false);
   const [errorInasistencia, setErrorInasistencia] = useState<string | null>(null);
@@ -153,11 +154,12 @@ export default function RiskRules() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (guardandoRef.current) return;
     if (!usuarioId) {
       toast.error('Debes iniciar sesión para realizar esta acción');
       return;
     }
-    if (guardando) return;
+    guardandoRef.current = true;
     setGuardando(true);
     try {
       if (editingId) {
@@ -172,6 +174,7 @@ export default function RiskRules() {
     } catch (error: any) {
       toast.error(error.message || 'Error al guardar la regla');
     } finally {
+      guardandoRef.current = false;
       setGuardando(false);
     }
   };

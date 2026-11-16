@@ -14,6 +14,7 @@ export default function ResetPassword() {
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isForced, setIsForced] = useState(false);
+  const [enlaceInvalido, setEnlaceInvalido] = useState(false);
   const [forcedToken, setForcedToken] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,8 +26,8 @@ export default function ResetPassword() {
         setForcedToken(tokenCambio);
         setIsForced(true);
       } else {
-        // Si no hay nada, redirigir a login
-        navigate('/login');
+        // Sin enlace válido ni cambio obligatorio: se explica en pantalla
+        setEnlaceInvalido(true);
       }
     }
   }, [token, navigate]);
@@ -78,6 +79,22 @@ export default function ResetPassword() {
       setIsLoading(false);
     }
   };
+
+  if (enlaceInvalido) {
+    return (
+      <AuthLayout>
+        <div role="alert">
+          <h1 className="text-2xl font-semibold text-ink">El enlace no es válido</h1>
+          <p className="mt-1.5 mb-6 text-ink-muted">
+            El enlace para restablecer la contraseña falta o ya no sirve. Solicita uno nuevo desde «¿Olvidaste tu contraseña?».
+          </p>
+          <Button onClick={() => navigate('/forgot-password')} fullWidth size="lg">
+            Solicitar un enlace nuevo
+          </Button>
+        </div>
+      </AuthLayout>
+    );
+  }
 
   if (success) {
     return (
