@@ -16,7 +16,8 @@ test.describe('Registro de asistencia (HU-33)', () => {
     await expect(page.getByText(/1 faltas? \//)).toBeVisible();
 
     await page.getByRole('button', { name: 'Guardar Asistencia' }).click();
-    await expect(page.getByText(/Asistencia guardada: \d+ nuevos/)).toBeVisible();
+    await expect(page.getByText(/Asistencia del \d{2}\/\d{2}\/\d{4} guardada: \d+ nuevos/)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Tomar Asistencia: Cálculo I' })).toHaveCount(0);
   });
 });
 

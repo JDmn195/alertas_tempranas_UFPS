@@ -11,8 +11,10 @@ import {
   BarChart3, 
   Users,
   Calendar,
-  SearchX
+  SearchX,
+  Loader2
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { EncabezadoPagina } from '../components/Panel';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -429,6 +431,7 @@ export default function ExportReports() {
               a.remove();
               URL.revokeObjectURL(url);
               setExportMessage({ ok: true, text: 'Reporte generado y descargado.' });
+              toast.success('Reporte descargado');
             } catch (err) {
               console.error('Error al descargar reporte:', err);
               setExportMessage({ ok: false, text: 'No se pudo generar el reporte. Revise el rango de fechas e intente de nuevo.' });
@@ -436,8 +439,8 @@ export default function ExportReports() {
               setIsExporting(false);
             }
           }}>
-            <Download className="w-4 h-4 mr-2" />
-            {isExporting ? 'Generando...' : 'Generar y Descargar'}
+            {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" /> : <Download className="w-4 h-4 mr-2" />}
+            {isExporting ? `Generando ${format === 'pdf' ? 'PDF' : 'Excel'}...` : 'Generar y Descargar'}
           </Button>
           {exportMessage && (
             <p role="status" className={`text-xs ${exportMessage.ok ? 'text-green-700' : 'text-red-700'}`}>

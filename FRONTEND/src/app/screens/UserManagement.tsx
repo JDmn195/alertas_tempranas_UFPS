@@ -96,6 +96,7 @@ export default function UserManagement() {
           const data = await res.json();
           throw new Error(data.error || 'Error al actualizar usuario');
         }
+        toast.success(editingUser.rol !== formData.rol ? 'Rol actualizado' : 'Usuario actualizado');
       } else {
         // Crear
         const res = await apiFetch(`${baseUrl}/api/usuarios/crear/`, {
@@ -107,6 +108,7 @@ export default function UserManagement() {
           throw new Error(data.error || 'Error al crear usuario');
         }
         setCredencialesNuevas({ correo: formData.correo, contrasena: data.contrasena_temporal });
+        toast.success('Usuario creado');
       }
       setShowDrawer(false);
       fetchUsers();
@@ -118,7 +120,8 @@ export default function UserManagement() {
   };
 
   const handleToggleStatus = async (user: User) => {
-    if (!await confirmarAccion(`¿Estás seguro de que quieres ${user.activo ? 'desactivar' : 'activar'} a este usuario?`)) {
+    const verbo = user.activo ? 'Desactivar' : 'Activar';
+    if (!await confirmarAccion(`¿${verbo} a ${user.nombre} (${user.correo})?`, { titulo: `${verbo} usuario`, confirmar: `${verbo} usuario` })) {
       return;
     }
     
@@ -130,6 +133,7 @@ export default function UserManagement() {
         const data = await res.json();
         throw new Error(data.error || 'Error al cambiar estado');
       }
+      toast.success(user.activo ? 'Usuario desactivado' : 'Usuario activado');
       fetchUsers();
     } catch (err: any) {
       toast.error(err.message);
@@ -309,7 +313,7 @@ export default function UserManagement() {
                   value={formData.nombre}
                   onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                   className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary"
-                  placeholder="e.g., Juan Carlos Pérez"
+                  placeholder="Ej.: Juan Carlos Pérez"
                 />
               </div>
 

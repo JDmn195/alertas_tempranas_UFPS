@@ -315,6 +315,7 @@ export default function AlertManagement() {
   const [conteos, setConteos] = useState<Conteos>({ activa: 0, en_seguimiento: 0, atendida: 0, cerrada: 0 });
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [cerrando, setCerrando] = useState<Array<string | number>>([]);
   const puedeReevaluar = rolGuardado() === 'ADMINISTRADOR';
   const [reevaluating, setReevaluating] = useState(false);     // 3.6
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -391,13 +392,20 @@ export default function AlertManagement() {
   };
 
   const handleCerrarAlerta = async (id: string | number) => {
+    if (cerrando.includes(id)) return;
+    setCerrando(prev => [...prev, id]);
     try {
-      await apiFetch(`${API_BASE}/${id}/cerrar/`, { method: 'POST' });
+      const res = await apiFetch(`${API_BASE}/${id}/cerrar/`, { method: 'POST' });
+      if (!res.ok) throw new Error();
       setSuccessMsg('Alerta cerrada correctamente');
+      toast.success('Alerta cerrada correctamente');
       fetchAlerts();
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (e) {
       console.error(e);
+      toast.error('No se pudo cerrar la alerta. Inténtalo de nuevo.');
+    } finally {
+      setCerrando(prev => prev.filter(x => x !== id));
     }
   };
 
@@ -431,7 +439,7 @@ export default function AlertManagement() {
         <ModalRegistrar 
           alerta={selectedAlert} 
           onClose={() => setShowModal(false)} 
-          onSuccess={() => { setSuccessMsg('Intervención registrada'); fetchAlerts(); setTimeout(() => setSuccessMsg(null), 3000); }} 
+          onSuccess={() => { setSuccessMsg('Intervención registrada. La alerta pasó a En seguimiento.'); toast.success('Intervención registrada. La alerta pasó a En seguimiento.'); fetchAlerts(); setTimeout(() => setSuccessMsg(null), 3000); }} 
         />
       )}
       {showHistory && selectedAlert && (
@@ -719,7 +727,8 @@ export default function AlertManagement() {
                                 variant="outline" 
                                 size="sm" 
                                 className="h-9 px-3 border-gray-200 text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-[10px]"
-                                onClick={async () => { if(await confirmarAccion('¿Seguro que deseas cerrar esta alerta?')) handleCerrarAlerta(alert.id); }}
+                                disabled={cerrando.includes(alert.id)}
+                                onClick={async () => { if(await confirmarAccion(`¿Cerrar la alerta «${alert.alertType}» de ${alert.studentName}?`, { titulo: 'Cerrar alerta', confirmar: 'Cerrar alerta' })) handleCerrarAlerta(alert.id); }}
                               >
                                 <X className="w-4 h-4" />
                               </Button>
@@ -740,10 +749,11 @@ export default function AlertManagement() {
                                 variant="outline" 
                                 size="sm" 
                                 className="h-9 px-4 border-gray-200 text-gray-500 hover:text-red-600 hover:bg-red-50 hover:border-red-100 rounded-[10px] flex-1 lg:flex-none"
-                                onClick={async () => { if(await confirmarAccion('¿Cerrar esta alerta? Ya no se podrán registrar más intervenciones.')) handleCerrarAlerta(alert.id); }}
+                                disabled={cerrando.includes(alert.id)}
+                                onClick={async () => { if(await confirmarAccion(`¿Cerrar la alerta «${alert.alertType}» de ${alert.studentName}? Ya no se podrán registrar más intervenciones.`, { titulo: 'Cerrar alerta', confirmar: 'Cerrar alerta' })) handleCerrarAlerta(alert.id); }}
                               >
                                 <X className="w-3.5 h-3.5 mr-2" />
-                                <span className="text-[10px] font-semibold uppercase tracking-widest">Cerrar Alerta</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-widest">{cerrando.includes(alert.id) ? 'Cerrando...' : 'Cerrar Alerta'}</span>
                               </Button>
                             </>
                           )}
