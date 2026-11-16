@@ -100,7 +100,9 @@ export default function EvidenceManagement() {
       loadEvidencias();
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
-      setError(err.message || 'Error al subir el archivo');
+      // SDAT-346: el detalle de configuración (Supabase) es para el administrador, no para el usuario
+      const detalle = String(err.message || '');
+      setError(/supabase|almacenamiento/i.test(detalle) ? 'No pudimos guardar el archivo. Avisa al administrador.' : (detalle || 'Error al subir el archivo'));
     } finally {
       setUploading(false);
       e.target.value = '';
@@ -109,7 +111,11 @@ export default function EvidenceManagement() {
 
   const handleDelete = async (evidenciaId: number) => {
     if (isClosed) return;
-    if (!await confirmarAccion('¿Estás seguro de eliminar esta evidencia?')) return;
+    const nombre = evidencias.find(e => e.id === evidenciaId)?.nombre;
+    if (!await confirmarAccion(
+      `¿Eliminar la evidencia ${nombre ? `«${nombre}»` : 'seleccionada'}? Esta acción no se puede deshacer.`,
+      { titulo: 'Eliminar evidencia', confirmar: 'Eliminar evidencia' },
+    )) return;
 
     try {
       await evidenceService.delete(evidenciaId);
@@ -143,7 +149,10 @@ export default function EvidenceManagement() {
 
   const handleDeleteAnotacion = async (anotacionId: number) => {
     if (isClosed) return;
-    if (!await confirmarAccion('¿Eliminar esta observación?')) return;
+    if (!await confirmarAccion(
+      '¿Eliminar esta observación? Esta acción no se puede deshacer.',
+      { titulo: 'Eliminar observación', confirmar: 'Eliminar observación' },
+    )) return;
 
     try {
       await evidenceService.deleteAnotacion(anotacionId);

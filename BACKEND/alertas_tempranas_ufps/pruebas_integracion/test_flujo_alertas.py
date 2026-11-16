@@ -203,7 +203,7 @@ class SeguimientoAlertaTests(IntegracionTestCase):
         self.assertEqual(historial['intervenciones'][0]['usuario'], 'Bienestar')
 
         # 5. Cerrar → cerrada, y ya no admite intervenciones
-        self.assertEqual(self.api('post', 'cerrar-alerta', self.director, args=[self.alerta.id]).status_code, 200)
+        self.assertEqual(self.api('post', 'cerrar-alerta', self.bienestar, args=[self.alerta.id]).status_code, 200)
         self.alerta.refresh_from_db()
         self.assertEqual(self.alerta.estado, 'cerrada')
         self.assertEqual(self._registrar(self.bienestar).status_code, 400)
@@ -218,7 +218,7 @@ class SeguimientoAlertaTests(IntegracionTestCase):
         self.alerta.refresh_from_db()
         self.assertEqual(self.alerta.estado, 'atendida')
 
-        self._registrar(self.director, tipo='CITACION')
+        self._registrar(self.bienestar, tipo='CITACION')
         self.alerta.refresh_from_db()
         self.assertEqual(self.alerta.estado, 'en_seguimiento')
 

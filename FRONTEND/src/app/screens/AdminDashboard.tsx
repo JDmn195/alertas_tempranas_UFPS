@@ -159,7 +159,8 @@ export default function AdminDashboard() {
     if (!await confirmarAccion(
       '¿Poblar RiesgoEstudiantePeriodo con los datos históricos?\n\n' +
       'Esto recalcula el nivel de riesgo por periodo para todos los estudiantes ' +
-      'que no tienen registros de periodo. El proceso puede tardar unos minutos.'
+      'que no tienen registros de periodo. El proceso puede tardar unos minutos.',
+      { titulo: 'Poblar riesgo por periodo', confirmar: 'Poblar datos' },
     )) return;
 
     setMigrando(true);

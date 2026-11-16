@@ -13,7 +13,7 @@ test.describe('Inicio de sesión', () => {
   });
 
   for (const [rol, destino] of [
-    ['admin', '/dashboard/admin/import'],
+    ['admin', '/dashboard/admin/resumen'],
     ['docente', '/dashboard/teacher'],
     ['director', '/dashboard/director'],
     ['bienestar', '/dashboard/students'],
