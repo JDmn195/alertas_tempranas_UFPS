@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { normalizarNombreMateria, normalizarCodigo, formatearFecha, formatearFechaHora } from '@/utils/formato';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
@@ -364,15 +365,34 @@ function TarjetaRiesgo({ datos }: { datos: RiesgoPropio }) {
 
         <p className="text-xs text-ink-muted mt-auto pt-5">
           {riesgo.periodo && <>Periodo {riesgo.periodo} · </>}
-          {riesgo.fecha_calculo && <>Calculado el {new Date(riesgo.fecha_calculo).toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short' })}</>}
+          {riesgo.fecha_calculo && <>Calculado el {formatearFechaHora(riesgo.fecha_calculo)}</>}
         </p>
       </div>
     </section>
   );
 }
 
-function Causas({ causas, nivel, fechaCalculo }: { causas: Causa[]; nivel: Nivel | null; fechaCalculo?: string | null }) {
+const PESO_NIVEL: Record<Nivel, number> = { high: 3, medium: 2, low: 1 };
+
+// Solo presentación: de cada tipo de regla se muestra la más grave (la evaluación no cambia)
+function causasSinRedundancia(causas: Causa[]): Causa[] {
+  const mejores = new Map<string, Causa>();
+  const resultado: Causa[] = [];
+  for (const causa of causas) {
+    if (!causa.tipo) { resultado.push(causa); continue; }
+    const previa = mejores.get(causa.tipo);
+    if (!previa) { mejores.set(causa.tipo, causa); resultado.push(causa); continue; }
+    if (PESO_NIVEL[causa.nivel] > PESO_NIVEL[previa.nivel]) {
+      resultado[resultado.indexOf(previa)] = causa;
+      mejores.set(causa.tipo, causa);
+    }
+  }
+  return resultado;
+}
+
+function Causas({ causas: todasLasCausas, nivel, fechaCalculo }: { causas: Causa[]; nivel: Nivel | null; fechaCalculo?: string | null }) {
   if (!nivel) return null;
+  const causas = causasSinRedundancia(todasLasCausas);
   return (
     <section className="bg-white rounded-[14px] border border-line p-6">
       <h2 className="text-lg font-semibold text-gray-900">¿Por qué tengo este nivel?</h2>
@@ -396,7 +416,7 @@ function Causas({ causas, nivel, fechaCalculo }: { causas: Causa[]; nivel: Nivel
                 <ul className="mt-2 text-sm text-gray-600 list-disc list-inside">
                   {causa.materias.map((m) => (
                     <li key={m.materia}>
-                      {m.materia}: {numero(m.porcentaje)}% de inasistencia (máximo {numero(m.umbral)}%)
+                      {normalizarNombreMateria(m.materia)}: {numero(m.porcentaje)}% de inasistencia (máximo {numero(m.umbral)}%)
                     </li>
                   ))}
                 </ul>
@@ -628,8 +648,7 @@ const OPCIONES_ESTADO: { valor: EstadoAlerta; texto: string }[] = [
   { valor: 'cerrada', texto: 'Cerradas' },
 ];
 
-const fecha = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString('es-CO', { dateStyle: 'long' }) : '—';
+const fecha = formatearFecha;
 
 function InsigniaSeveridad({ alerta }: { alerta: AlertaPortal }) {
   return (
@@ -1443,7 +1462,7 @@ function SolicitarAcompanamiento() {
         </p>
       )}
 
-      <form onSubmit={enviar} noValidate className="space-y-5">
+      {!bloqueado && <form onSubmit={enviar} noValidate className="space-y-5">
         <fieldset disabled={bloqueado || enviando} className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="text-sm text-ink-soft">
@@ -1497,7 +1516,7 @@ function SolicitarAcompanamiento() {
             {enviando ? 'Enviando…' : 'Enviar solicitud'}
           </button>
         </fieldset>
-      </form>
+      </form>}
 
       <h3 className="text-sm font-semibold text-gray-900 mt-6 mb-3">Mis solicitudes</h3>
       {historial}
@@ -1514,6 +1533,7 @@ const ESTILO_REGISTRO: Record<EstadoAsistencia, string> = {
 
 function TarjetaAsistencia({ curso }: { curso: CursoAsistencia }) {
   const [abierta, setAbierta] = useState(false);
+  const [explicacion, setExplicacion] = useState(false);
   const sinClases = curso.porcentaje === null;
   const tono = curso.supera_umbral ? 'red' : curso.cerca_del_limite ? 'amber' : 'green';
   const colorBarra = { red: 'bg-red-500', amber: 'bg-amber-500', green: 'bg-green-500' }[tono];
@@ -1526,16 +1546,22 @@ function TarjetaAsistencia({ curso }: { curso: CursoAsistencia }) {
     <li className={`border rounded-[10px] p-4 bg-white transition-shadow duration-150 hover:shadow-md ${colorBorde}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-medium text-gray-900 truncate">{curso.materia}</p>
-          <p className="text-xs text-gray-500">{curso.codigo_materia} · Grupo {curso.grupo}</p>
+          <p className="font-medium text-gray-900 truncate">{normalizarNombreMateria(curso.materia)}</p>
+          <p className="text-xs text-gray-500">{normalizarCodigo(curso.codigo_materia)} · Grupo {curso.grupo}</p>
         </div>
         <div className="text-right shrink-0">
           <p className={`text-2xl font-semibold tabular-nums ${curso.supera_umbral ? 'text-red-700' : curso.cerca_del_limite ? 'text-amber-700' : 'text-gray-900'}`}>
             {sinClases ? '—' : `${numero(curso.porcentaje)} %`}
           </p>
-          <p className="text-xs text-gray-500">de inasistencia · <Link to="/dashboard/ayuda#asistencia-ayuda" className="font-medium text-primary underline">Cómo se calcula</Link></p>
+          <p className="text-xs text-gray-500">de inasistencia · <button type="button" onClick={() => setExplicacion((v) => !v)} aria-expanded={explicacion} className="font-medium text-primary underline">Cómo se calcula</button></p>
         </div>
       </div>
+
+      {explicacion && (
+        <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-[10px] px-3 py-2 mt-3">
+          Inasistencia = faltas sin justificar ÷ clases registradas × 100. Una falta justificada cuenta como clase, pero no como falta.
+        </p>
+      )}
 
       {sinClases ? (
         <p className="text-sm text-gray-500 mt-3">Aún no hay clases registradas en esta materia.</p>
@@ -1548,7 +1574,7 @@ function TarjetaAsistencia({ curso }: { curso: CursoAsistencia }) {
           <div className="mt-2">
             <div className="h-2.5 w-full bg-gray-100 rounded-full overflow-hidden" role="progressbar"
               aria-valuemin={0} aria-valuemax={escala} aria-valuenow={curso.porcentaje ?? 0}
-              aria-label={`Inasistencia de ${curso.materia}`}>
+              aria-label={`Inasistencia de ${normalizarNombreMateria(curso.materia)}`}>
               <div className={`h-full rounded-full transition-[width] duration-700 ease-out ${colorBarra}`} style={{ width: `${ancho}%` }} />
             </div>
             <p className="flex justify-between text-xs text-gray-500 mt-1">
@@ -1585,7 +1611,7 @@ function TarjetaAsistencia({ curso }: { curso: CursoAsistencia }) {
               {curso.detalle.map((d) => (
                 <li key={d.fecha} className="flex items-center justify-between px-3 py-1.5">
                   <span className="text-gray-700">
-                    {new Date(`${d.fecha}T00:00:00`).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'long' })}
+                    {formatearFecha(d.fecha)}
                   </span>
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTILO_REGISTRO[d.estado] ?? 'bg-gray-100 text-gray-600'}`}>
                     {d.estado_texto}
@@ -1805,7 +1831,7 @@ export default function StudentPortal() {
       <AccesosPortal />
       <Indicadores indicadores={datos.indicadores} />
       <Causas causas={datos.causas} nivel={datos.riesgo.nivel}
-        fechaCalculo={datos.riesgo.fecha_calculo ? new Date(datos.riesgo.fecha_calculo).toLocaleDateString('es-CO', { dateStyle: 'long' }) : null} />
+        fechaCalculo={datos.riesgo.fecha_calculo ? formatearFecha(datos.riesgo.fecha_calculo) : null} />
       <EvolucionAcademica />
     </div>
   );

@@ -8,6 +8,7 @@ de alertas y de los reportes).
 from django.http import JsonResponse
 
 from academico.models import Curso, Nota
+from usuarios.utils import registrar_auditoria
 
 
 def estudiantes_del_docente(usuario):
@@ -33,3 +34,21 @@ def denegar_acceso_alerta():
         {'error': 'No tiene acceso a esta alerta: el estudiante no pertenece a sus cursos.'},
         status=403,
     )
+
+
+def filtrar_intervenciones_visibles(usuario, queryset):
+    """Un DOCENTE solo ve las intervenciones que él registró (no las de Bienestar ni de otros docentes)."""
+    return queryset.filter(usuario=usuario) if usuario.rol == 'DOCENTE' else queryset
+
+
+def puede_ver_intervencion(usuario, intervencion):
+    return usuario.rol != 'DOCENTE' or intervencion.usuario_id == usuario.id
+
+
+def denegar_acceso_intervencion(usuario, intervencion):
+    registrar_auditoria(
+        usuario, 'ACCESO_DENEGADO',
+        f"Docente intentó ver la intervención {intervencion.id} registrada por otro usuario",
+    )
+    return JsonResponse({'error': 'No tiene acceso a esta intervención.'}, status=403)
+

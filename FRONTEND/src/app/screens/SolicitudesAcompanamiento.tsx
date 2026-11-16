@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { formatearFechaHora } from '@/utils/formato';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Clock, HandHelping, Inbox, MessageSquareReply, UserCheck } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
@@ -42,8 +43,7 @@ const INSIGNIA_ESTADO: Record<EstadoSolicitud, string> = {
   CANCELADA: 'bg-wash text-ink-muted',
 };
 
-const fecha = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+const fecha = formatearFechaHora;
 
 type Accion = 'responder' | 'cerrar';
 

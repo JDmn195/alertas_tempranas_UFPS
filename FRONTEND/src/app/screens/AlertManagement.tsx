@@ -81,6 +81,7 @@ interface Conteos {
   en_seguimiento: number;
   atendida: number;
   cerrada: number;
+  abiertas?: number;
 }
 
 // ─── Modal Registrar Intervención ─────────────────────────────────────────────
@@ -476,6 +477,10 @@ export default function AlertManagement() {
           <p className="text-sm font-medium text-green-800">{successMsg}</p>
         </div>
       )}
+
+      <p className="text-sm text-ink-muted" data-testid="total-abiertas">
+        Alertas activas (no cerradas): <strong className="text-ink">{conteos.abiertas ?? 0}</strong>. Es el mismo total que muestran el panel y el directorio; las pestañas separan esas alertas por estado.
+      </p>
 
       {/* Estados de la alerta como pestañas; búsqueda y tipo filtran la pestaña abierta */}
       <div className="bg-white rounded-[14px] border border-line overflow-hidden">

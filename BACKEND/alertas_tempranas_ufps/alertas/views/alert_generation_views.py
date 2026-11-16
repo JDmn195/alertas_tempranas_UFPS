@@ -10,7 +10,7 @@ from academico.models import Estudiante, Nota, Curso, Periodo
 from alertas.alertas_inasistencia import factor_inasistencia, obtener_regla_inasistencia, periodos_con_asistencia
 from alertas.evaluacion import ORDEN_NIVELES, actualizar_promedio, calcular_indicadores, evaluar_regla, nivel_de_riesgo
 from alertas.permisos import denegar_acceso_alerta, puede_acceder_alerta
-from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, Regla, Alerta, RiesgoEstudiante, RiesgoEstudiantePeriodo
+from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, alertas_abiertas, Regla, Alerta, RiesgoEstudiante, RiesgoEstudiantePeriodo
 
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
@@ -282,7 +282,7 @@ def generar_alertas(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
+@requiere_rol(['ADMINISTRADOR'])
 def reevaluar_alertas(request):
     """
     POST /api/alertas/reevaluar/
@@ -432,6 +432,7 @@ def listar_alertas(request):
         qs = filtrar_sin_tildes(qs, search, ['estudiante__nombre', 'estudiante__codigo'])
         
     conteos = {
+        'abiertas': alertas_abiertas(total_qs).count(),
         'activa': total_qs.filter(estado__in=['activa', 'active']).count(),
         'en_seguimiento': total_qs.filter(estado='en_seguimiento').count(),
         'atendida': total_qs.filter(estado='atendida').count(),
