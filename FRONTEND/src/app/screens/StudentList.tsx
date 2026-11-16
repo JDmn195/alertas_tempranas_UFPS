@@ -24,6 +24,7 @@ interface ApiResponse {
   page_size: number;
   pages: number;
   results: Student[];
+  resumen?: { total: number; high: number; medium: number; low: number; sin_dato: number; alertas_activas: number; inactivos: number };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -76,17 +77,15 @@ export default function StudentList() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // Summary counts per risk level and other indicators
-  const countHigh     = students.filter(s => s.nivel_riesgo === 'high').length;
-  const countMedium   = students.filter(s => s.nivel_riesgo === 'medium').length;
-  const countLow      = students.filter(s => s.nivel_riesgo === 'low').length;
-  const countAlerts   = students.reduce((sum, s) => sum + (s.alertas_activas || 0), 0);
+  // SDAT-333: los totales vienen del servidor (toda la población filtrada), no de la página visible
+  const [resumen, setResumen] = useState({ total: 0, high: 0, medium: 0, low: 0, sin_dato: 0, alertas_activas: 0, inactivos: 0 });
+  const countHigh     = resumen.high;
+  const countMedium   = resumen.medium;
+  const countLow      = resumen.low;
+  const countAlerts   = resumen.alertas_activas;
   
   // Lógica corregida: Considerar inactivos solo estados terminales (Retirado, Graduado, Cancelado)
-  const countInactive = students.filter(s => {
-    if (!s.estado_matricula) return false;
-    const est = s.estado_matricula.toLowerCase();
-    return est.includes('retirado') || est.includes('graduado') || est.includes('cancelado');
-  }).length;
+  const countInactive = resumen.inactivos;
 
   // ── Debounce search input ──────────────────────────────────────────────────
   useEffect(() => {
@@ -116,6 +115,7 @@ export default function StudentList() {
       if (!res.ok) throw new Error(`Error ${res.status}`);
       const data: ApiResponse = await res.json();
       setStudents(data.results);
+      if (data.resumen) setResumen(data.resumen);
       setTotal(data.total);
       setPages(data.pages);
     } catch (err) {
@@ -170,7 +170,7 @@ export default function StudentList() {
             className={`flex-1 min-w-[8rem] text-left px-4 py-3 ${riskFilter === '' ? 'bg-primary-tint' : 'bg-white hover:bg-paper'}`}
           >
             <span className="block text-sm font-medium text-ink-muted">Todos</span>
-            <span className="block mt-1 text-xl font-semibold text-ink leading-none">{loading ? '—' : students.length}</span>
+            <span className="block mt-1 text-xl font-semibold text-ink leading-none">{loading ? '—' : resumen.total}</span>
           </button>
           {tarjetasRiesgo.map(({ nivel, etiqueta, valor }) => (
             <button
@@ -228,9 +228,9 @@ export default function StudentList() {
             className={`${campo} flex-1 sm:flex-none min-w-[220px] lg:hidden`}
           >
             <option value="">Todos los Niveles de Riesgo</option>
-            <option value="high">Riesgo Alto   (Promedio &lt; 3.0)</option>
-            <option value="medium">Riesgo Medio  (3.0 – 3.4)</option>
-            <option value="low">Riesgo Bajo   (Promedio ≥ 3.5)</option>
+            <option value="high">Riesgo Alto</option>
+            <option value="medium">Riesgo Medio</option>
+            <option value="low">Riesgo Bajo</option>
           </select>
 
           {hayFiltros && (
