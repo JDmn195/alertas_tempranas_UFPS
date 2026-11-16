@@ -3,6 +3,9 @@ import { useState, useEffect } from 'react';
 import { ShieldAlert, RefreshCw, Search, Calendar, Filter } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { apiFetch } from '../../services/apiFetch';
+import { Paginacion } from '../components/Paginacion';
+
+const TAMANO_PAGINA = 25;
 
 import { CargandoBloque, EstadoVacio } from '../components/Estados';
 import { CintaIndicadores, EncabezadoPagina } from '../components/Panel';
@@ -20,6 +23,9 @@ export default function AuditLog() {
   const [records, setRecords] = useState<AuditRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pagina, setPagina] = useState(1);
+  const [paginas, setPaginas] = useState(1);
+  const [total, setTotal] = useState(0);
 
   // Filtros
   const [filterAction, setFilterAction] = useState('');
@@ -32,7 +38,7 @@ export default function AuditLog() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({ page: String(pagina), page_size: String(TAMANO_PAGINA) });
       if (filterAction) params.append('tipo_accion', filterAction);
       if (filterStartDate) params.append('fecha_inicio', filterStartDate);
       if (filterEndDate) params.append('fecha_fin', filterEndDate);
@@ -42,6 +48,8 @@ export default function AuditLog() {
       
       const data = await res.json();
       setRecords(data.registros || []);
+      setPaginas(data.pages || 1);
+      setTotal(data.total ?? (data.registros || []).length);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -50,8 +58,12 @@ export default function AuditLog() {
   };
 
   useEffect(() => {
-    fetchAuditLogs();
+    setPagina(1);
   }, [filterAction, filterStartDate, filterEndDate]);
+
+  useEffect(() => {
+    fetchAuditLogs();
+  }, [filterAction, filterStartDate, filterEndDate, pagina]);
 
   const formatDate = (isoString: string) => {
     const date = new Date(isoString);
@@ -171,7 +183,7 @@ export default function AuditLog() {
       <div className="bg-white border border-line rounded-[14px] overflow-hidden">
         <div className="border-b border-line px-5 py-4">
           <h2 className="text-base font-semibold text-ink">
-            {loading && records.length === 0 ? 'Cargando...' : `${records.length} registro${records.length !== 1 ? 's' : ''}`}
+            {loading && records.length === 0 ? 'Cargando...' : `${total} registro${total !== 1 ? 's' : ''}`}
           </h2>
         </div>
         <div className="overflow-x-auto">
@@ -219,6 +231,7 @@ export default function AuditLog() {
             </tbody>
           </table>
         </div>
+        <Paginacion pagina={pagina} paginas={paginas} total={total} onCambio={setPagina} />
       </div>
     </div>
   );
