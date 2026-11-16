@@ -44,7 +44,7 @@ class ErroresPublicosTests(TestCase):
         with self.assertLogs('alertas.views.rule_views', level='WARNING'):
             respuesta = self.client.post(
                 reverse('listar_crear_reglas'),
-                data=json.dumps({'tipo': 'INASISTENCIA', 'valor_umbral': 200}),
+                data=json.dumps({'nombre': 'Inasistencia', 'tipo': 'INASISTENCIA', 'valor_umbral': 200}),
                 content_type='application/json', **_auth(self.admin),
             )
         self.assertEqual(respuesta.status_code, 400)

@@ -42,6 +42,7 @@ import {
 import { Button } from '../components/ui/Button';
 import { NivelRiesgoChip } from '../components/Riesgo';
 import { apiFetch } from '../../services/apiFetch';
+import { rolGuardado } from '../../services/session';
 
 interface StudentDetail {
   codigo: string;
@@ -287,6 +288,7 @@ function IndicadoresSection({
   studentName?: string;
   historial?: HistorialPeriodo[] | null;
 }) {
+  const esDirector = rolGuardado() === 'DIRECTOR';
   const navigate = useNavigate();
   const [showReprobadas, setShowReprobadas] = useState(false); // 4.3
   const indicadores = [
@@ -314,11 +316,12 @@ function IndicadoresSection({
     {
       icon: AlertTriangle,
       label: 'Alertas Activas',
-      sublabel: 'Ver en gestión de alertas',    // 4.2
+      sublabel: esDirector ? 'Alertas abiertas del estudiante' : 'Ver en gestión de alertas',    // 4.2
       color: 'red',
       value: data?.alertas_activas ?? 0,
       // 4.2: navegar a alertas buscando por nombre
-      onClick: studentName
+      // SDAT-338: el director no tiene acceso a Gestión de Alertas
+      onClick: studentName && !esDirector
         ? () => navigate(`/dashboard/alerts?search=${encodeURIComponent(studentName)}`)
         : undefined,
     },
@@ -333,7 +336,7 @@ function IndicadoresSection({
     {
       icon: Activity,
       label: 'Materias Reprobadas',
-      sublabel: 'Clic para ver detalle',        // 4.3
+      sublabel: 'Intentos perdidos (la regla de riesgo cuenta materias pendientes). Clic para ver detalle',        // 4.3
       color: 'orange',
       value: data?.reprobadas,
       onClick: () => setShowReprobadas(true),    // 4.3
@@ -736,6 +739,8 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
   }, [data, activeTab]);
 
   const activePeriodData = data?.find(p => p.periodo === activeTab);
+  // Sin definitivas aún (periodo en curso): el promedio y los créditos no son 0, todavía no existen
+  const periodoEnCurso = !!activePeriodData && activePeriodData.materias.length > 0 && activePeriodData.creditos_intentados === 0;
 
   return (
     <div className="bg-white rounded-[14px] border border-line overflow-hidden">
@@ -879,13 +884,13 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
           <div>
             <p className="text-[10px] uppercase font-semibold text-gray-400">Promedio del Semestre</p>
             <p className="text-lg font-semibold text-gray-800">
-              {loading ? <span className="text-gray-300 animate-pulse">--</span> : activePeriodData?.promedio_semestre.toFixed(2) || '0.00'}
+              {loading ? <span className="text-gray-300 animate-pulse">--</span> : periodoEnCurso ? 'En curso' : activePeriodData?.promedio_semestre.toFixed(2) || '0.00'}
             </p>
           </div>
           <div>
             <p className="text-[10px] uppercase font-semibold text-gray-400">Créditos Cursados</p>
             <p className="text-lg font-semibold text-gray-800">
-              {loading ? <span className="text-gray-300 animate-pulse">--</span> : activePeriodData?.creditos_intentados || 0}
+              {loading ? <span className="text-gray-300 animate-pulse">--</span> : periodoEnCurso ? 'En curso' : activePeriodData?.creditos_intentados || 0}
             </p>
           </div>
           <div>

@@ -181,14 +181,14 @@ export default function DirectorDashboard() {
             </dt>
             <dd className="text-2xl font-semibold text-ink">{kpiValue(data?.total_estudiantes_activos)}</dd>
           </div>
-          <Link to="/dashboard/alerts" className="group px-5 sm:px-6 py-4 flex items-center justify-between gap-4 hover:bg-paper">
+          {/* SDAT-338: el director no tiene acceso a Gestión de Alertas; el total no es un enlace. */}
+          <div className="px-5 sm:px-6 py-4 flex items-center justify-between gap-4">
             <dt className="flex items-center gap-2.5 text-sm text-ink-soft">
               <AlertCircle className="w-4 h-4 text-riesgo-critico" aria-hidden="true" />
               Total Alertas Activas
-              <ArrowUpRight className="w-4 h-4 text-ink-faint group-hover:text-ink" aria-hidden="true" />
             </dt>
             <dd className="text-2xl font-semibold text-ink">{kpiValue(data?.alertas_activas)}</dd>
-          </Link>
+          </div>
           <Link to="/dashboard/courses" className="group px-5 sm:px-6 py-4 flex items-center justify-between gap-4 hover:bg-paper lg:rounded-br-[14px]">
             <dt className="flex items-center gap-2.5 text-sm text-ink-soft">
               <BookX className="w-4 h-4 text-riesgo-alto" aria-hidden="true" />

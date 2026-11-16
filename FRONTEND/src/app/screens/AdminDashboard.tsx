@@ -7,6 +7,9 @@ import { EncabezadoPagina, Seccion } from '../components/Panel';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { apiFetch } from '../../services/apiFetch';
+import { Paginacion } from '../components/Paginacion';
+
+const TAMANO_PAGINA = 20;
 
 
 const ORDEN_CARGA = [
@@ -26,6 +29,9 @@ export default function AdminDashboard() {
   const [responseErrors, setResponseErrors] = useState<any[]>([]);
   const [responseAdvertencias, setResponseAdvertencias] = useState<any[]>([]);
   const [importHistory, setImportHistory] = useState<any[]>([]);
+  const [paginaHist, setPaginaHist] = useState(1);
+  const [paginasHist, setPaginasHist] = useState(1);
+  const [totalHist, setTotalHist] = useState(0);
 
   // ── Migración de RiesgoEstudiantePeriodo ──────────────────────────────────
   const [migrando, setMigrando]         = useState(false);
@@ -36,10 +42,12 @@ export default function AdminDashboard() {
   const fetchHistory = async () => {
     try {
       const baseUrl = API_BASE_URL;
-      const response = await apiFetch(`${baseUrl}/api/academico/bitacora/`);
+      const response = await apiFetch(`${baseUrl}/api/academico/bitacora/?page=${paginaHist}&page_size=${TAMANO_PAGINA}`);
       const result = await response.json();
       if (result.status === 'success') {
         setImportHistory(result.data);
+        setPaginasHist(result.pages || 1);
+        setTotalHist(result.total ?? result.data.length);
       }
     } catch (error) {
       console.error("Error fetching history:", error);
@@ -48,7 +56,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchHistory();
-  }, []);
+  }, [paginaHist]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -457,6 +465,7 @@ export default function AdminDashboard() {
             </tbody>
           </table>
         </div>
+        <Paginacion pagina={paginaHist} paginas={paginasHist} total={totalHist} onCambio={setPaginaHist} />
       </div>
     </div>
   );

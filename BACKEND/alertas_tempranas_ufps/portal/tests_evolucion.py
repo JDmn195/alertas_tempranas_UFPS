@@ -6,7 +6,7 @@ from decimal import Decimal
 from django.test import TestCase
 from django.urls import reverse
 
-from academico.models import Estudiante, Nota
+from academico.models import Curso, Docente, Estudiante, Materia, Nota, Periodo
 from academico.tests_historial_promedios import EscenarioHistorial
 from usuarios.models import Auditoria, Usuario
 
@@ -98,6 +98,21 @@ class EvolucionPropiaTests(EscenarioHistorial, TestCase):
                 self.assertEqual(punto['creditos_aprobados'], historial_ficha[punto['periodo']]['creditos_aprobados'])
                 self.assertEqual(punto['creditos_cursados'], historial_ficha[punto['periodo']]['creditos_intentados'])
         self.assertEqual(portal['promedio_actual'], ficha['indicadores']['promedio_acumulado'])
+
+    def test_pps_y_ppa_de_inicio_coinciden_con_la_tabla_de_evolucion(self):
+        """SDAT-339 (B37): un empate exacto en el tercer decimal (2.825) no puede redondear distinto."""
+        estudiante = self.crear_escenario(usuario=self.cuenta)
+        Nota.objects.filter(estudiante=estudiante).delete()
+        for codigo, creditos, definitiva in (('XA', 3, '0.2'), ('XB', 5, '4.4')):
+            materia = Materia.objects.create(codigo=codigo, nombre=codigo, creditos=creditos, semestre=1)
+            curso = Curso.objects.create(materia=materia, grupo='A', docente=Docente.objects.first())
+            Nota.objects.create(estudiante=estudiante, curso=curso, periodo=Periodo.objects.first(),
+                                definitiva=Decimal(definitiva))
+
+        serie = self._get().json()['serie']
+        indicadores = self.client.get(reverse('portal-riesgo'), **_auth(self.cuenta)).json()['indicadores']
+        self.assertEqual(indicadores['pps'], serie[-1]['pps'])
+        self.assertEqual(indicadores['ppa'], serie[-1]['ppa'])
 
     def test_solo_su_propia_evolucion(self):
         self.crear_escenario(usuario=self.cuenta)

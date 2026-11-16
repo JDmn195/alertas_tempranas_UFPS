@@ -6,10 +6,15 @@ import { Mail, Bell, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
 
 import { CargandoFilas, EstadoVacio } from '../components/Estados';
+import { Paginacion } from '../components/Paginacion';
+const TAMANO_PAGINA = 25;
 export default function NotificationHistory() {
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [pagina, setPagina] = useState(1);
+  const [paginas, setPaginas] = useState(1);
+  const [total, setTotal] = useState(0);
   const [filter, setFilter] = useState({
     resultado: '',
     canal: ''
@@ -20,7 +25,7 @@ export default function NotificationHistory() {
     setError('');
     try {
       const baseUrl = API_BASE_URL;
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({ page: String(pagina), page_size: String(TAMANO_PAGINA) });
       if (filter.resultado) params.append('resultado', filter.resultado);
       if (filter.canal) params.append('canal', filter.canal);
       
@@ -28,6 +33,8 @@ export default function NotificationHistory() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudo cargar el historial.');
       setHistory(data.historial || []);
+      setPaginas(data.pages || 1);
+      setTotal(data.total ?? (data.historial || []).length);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'No se pudo cargar el historial.');
     } finally {
@@ -36,8 +43,12 @@ export default function NotificationHistory() {
   };
 
   useEffect(() => {
-    fetchHistory();
+    setPagina(1);
   }, [filter]);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [filter, pagina]);
 
   const campo = 'h-10 px-3.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink';
   const exitosos = history.filter((r) => r.resultado === 'exitoso').length;
@@ -62,8 +73,8 @@ export default function NotificationHistory() {
       <CintaIndicadores
         cargando={isLoading && history.length === 0}
         indicadores={[
-          { etiqueta: 'Envíos', valor: history.length, detalle: hayFiltros ? 'Con los filtros aplicados' : 'Más recientes' },
-          { etiqueta: 'Exitosos', valor: exitosos, tono: 'bien' },
+          { etiqueta: 'Envíos', valor: total, detalle: hayFiltros ? 'Con los filtros aplicados' : 'En total' },
+          { etiqueta: 'Exitosos', valor: exitosos, tono: 'bien', detalle: 'En esta página' },
           { etiqueta: 'Fallidos', valor: fallidos, tono: fallidos > 0 ? 'alerta' : undefined, detalle: fallidos > 0 ? 'Revisa el detalle del error' : undefined },
           { etiqueta: 'Pendientes', valor: pendientes, tono: pendientes > 0 ? 'aviso' : undefined },
         ]}
@@ -108,7 +119,7 @@ export default function NotificationHistory() {
 
       <div className="bg-white border border-line rounded-[14px] overflow-hidden">
         <div className="border-b border-line px-5 py-4">
-          <h2 className="text-base font-semibold text-ink">{isLoading && history.length === 0 ? 'Cargando...' : `${history.length} envío${history.length !== 1 ? 's' : ''}`}</h2>
+          <h2 className="text-base font-semibold text-ink">{isLoading && history.length === 0 ? 'Cargando...' : `${total} envío${total !== 1 ? 's' : ''}`}</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="tabular-nums w-full min-w-[760px]">
@@ -175,6 +186,7 @@ export default function NotificationHistory() {
             </tbody>
           </table>
         </div>
+        <Paginacion pagina={pagina} paginas={paginas} total={total} onCambio={setPagina} />
       </div>
     </div>
   );

@@ -297,7 +297,7 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
               </Button>
               <Button 
                 onClick={handleSave} 
-                disabled={saving || loading || !attendanceData?.estudiantes || attendanceData.estudiantes.length === 0}
+                disabled={saving || loading || !selectedDate || !attendanceData?.estudiantes || attendanceData.estudiantes.length === 0}
                 className="bg-primary hover:bg-primary-strong text-white"
               >
                 {saving ? (

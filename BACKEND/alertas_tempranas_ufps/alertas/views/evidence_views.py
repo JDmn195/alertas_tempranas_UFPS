@@ -10,6 +10,7 @@ from django.views.decorators.http import require_http_methods
 from alertas.models import Intervencion, Evidencia
 from alertas.permisos import denegar_acceso_alerta, puede_acceder_alerta
 from usuarios.decorators import requiere_rol
+from usuarios.utils import fecha_local
 from alertas_tempranas_ufps.validacion_archivos import firma_valida
 
 logger = logging.getLogger(__name__)
@@ -170,7 +171,7 @@ def upload_evidence(request, intervencion_id):
                 'url': signed_url,
                 'nombre': evidencia.nombre_archivo,
                 'tipo': evidencia.tipo_archivo,
-                'fecha': evidencia.fecha_subida.strftime('%Y-%m-%d %H:%M')
+                'fecha': fecha_local(evidencia.fecha_subida)
             }
         }, status=201)
 
@@ -213,7 +214,7 @@ def list_evidence(request, intervencion_id):
                     'url': _url_firmada(supabase, e.archivo_url),
                     'nombre': e.nombre_archivo,
                     'tipo': e.tipo_archivo,
-                    'fecha': e.fecha_subida.strftime('%Y-%m-%d %H:%M')
+                    'fecha': fecha_local(e.fecha_subida)
                 })
         except (httpx.TransportError, OSError, ValueError, KeyError):
             logger.exception('No se pudo firmar una evidencia de la intervención %s', intervencion_id)

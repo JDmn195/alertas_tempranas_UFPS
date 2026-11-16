@@ -3,6 +3,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.timezone import localtime
 from academico.models import BitacoraImportacion
 from usuarios.decorators import requiere_rol
+from alertas_tempranas_ufps.paginacion import paginar_si_se_pide, metadatos_pagina
 
 @csrf_exempt
 @requiere_rol(['ADMINISTRADOR'])
@@ -12,9 +13,10 @@ def listar_bitacoras(request):
     No incluye el detalle completo de errores por rendimiento.
     """
     if request.method == 'GET':
-        bitacoras = BitacoraImportacion.objects.select_related('usuario').order_by('-fecha')
+        bitacoras = BitacoraImportacion.objects.select_related('usuario').order_by('-fecha', '-id')
+        pagina = paginar_si_se_pide(request, bitacoras)
         data = []
-        for b in bitacoras:
+        for b in (pagina if pagina is not None else bitacoras):
             data.append({
                 "id": b.id,
                 "fecha": localtime(b.fecha).strftime("%Y-%m-%d %H:%M:%S"),
@@ -25,7 +27,7 @@ def listar_bitacoras(request):
                 "exitoso": b.exitoso,
                 "usuario": b.usuario.nombre if b.usuario else "Desconocido"
             })
-        return JsonResponse({"status": "success", "data": data}, safe=False)
+        return JsonResponse({"status": "success", "data": data, **metadatos_pagina(pagina)}, safe=False)
     return JsonResponse({"error": "Método no permitido"}, status=405)
 
 
