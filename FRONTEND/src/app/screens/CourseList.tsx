@@ -225,9 +225,9 @@ export default function CourseList() {
     }));
 
   const donaData = [
-    { name: 'Crítico', value: countCriticos, color: '#B02A2B' },
-    { name: 'En observación', value: countMedio, color: '#C98A12' },
-    { name: 'Estable', value: countOk, color: '#2F8F6B' },
+    { name: 'Crítico', value: countCriticos, color: 'var(--riesgo-critico)' },
+    { name: 'En observación', value: countMedio, color: 'var(--riesgo-medio)' },
+    { name: 'Estable', value: countOk, color: 'var(--riesgo-bajo)' },
   ].filter(d => d.value > 0);
 
   useEffect(() => {
@@ -346,9 +346,9 @@ export default function CourseList() {
             <BarraDistribucion
               unidad="cursos"
               tramos={[
-                { etiqueta: `Cursos Críticos (≥ ${UMBRAL_CRITICO}%)`, valor: countCriticos, color: '#B02A2B' },
-                { etiqueta: 'Riesgo Medio (15–29%)', valor: countMedio, color: '#C98A12' },
-                { etiqueta: 'Sin Riesgo (< 15%)', valor: countOk, color: '#2F8F6B' },
+                { etiqueta: `Cursos Críticos (≥ ${UMBRAL_CRITICO}%)`, valor: countCriticos, color: 'var(--riesgo-critico)' },
+                { etiqueta: 'Riesgo Medio (15–29%)', valor: countMedio, color: 'var(--riesgo-medio)' },
+                { etiqueta: 'Sin Riesgo (< 15%)', valor: countOk, color: 'var(--riesgo-bajo)' },
               ]}
             />
           )}
@@ -358,12 +358,12 @@ export default function CourseList() {
           {allCourses.length > 0 ? (
             <ResponsiveContainer width="100%" height={Math.max(120, Math.min(barData.length, 10) * 34 + 30)}>
               <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 20, top: 0, bottom: 0 }} barCategoryGap="28%">
-                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12, fill: '#6E5F5C' }} tickFormatter={v => `${v}%`} axisLine={{ stroke: '#E8D6D2' }} tickLine={false} />
-                <YAxis type="category" dataKey="materia" tick={{ fontSize: 12, fill: '#4A3C3A' }} width={130} axisLine={false} tickLine={false} />
-                <Tooltip content={<CustomBarTooltip />} cursor={{ fill: '#FAF1EF' }} />
+                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12, fill: 'var(--ink-muted)' }} tickFormatter={v => `${v}%`} axisLine={{ stroke: 'var(--line)' }} tickLine={false} />
+                <YAxis type="category" dataKey="materia" tick={{ fontSize: 12, fill: 'var(--ink-soft)' }} width={130} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomBarTooltip />} cursor={{ fill: 'var(--paper)' }} />
                 <Bar dataKey="tasa" radius={[0, 3, 3, 0]} maxBarSize={18}>
                   {barData.map((entry, index) => (
-                    <Cell key={index} fill={entry.tasa >= UMBRAL_CRITICO ? '#B02A2B' : entry.tasa >= 15 ? '#C98A12' : '#2F8F6B'} />
+                    <Cell key={index} fill={entry.tasa >= UMBRAL_CRITICO ? 'var(--riesgo-critico)' : entry.tasa >= 15 ? 'var(--riesgo-medio)' : 'var(--riesgo-bajo)'} />
                   ))}
                 </Bar>
               </BarChart>

@@ -204,8 +204,8 @@ const ESTILO_NIVEL: Record<Nivel, { tarjeta: string; texto: string; icono: strin
     texto: 'text-red-700',
     icono: 'text-red-500',
     consejo: 'Tu situación académica necesita atención. Te recomendamos acercarte a Bienestar Universitario o a la dirección de tu programa para recibir acompañamiento.',
-    fondo: 'from-[#FEF3F4] via-white to-white border-primary-tint',
-    insignia: 'bg-primary text-white',
+    fondo: 'from-red-50 via-gray-50 to-gray-50 border-red-200',
+    insignia: 'bg-red-600 text-white',
     paso: 'Tu siguiente paso: pide acompañamiento. Es gratis, confidencial y toma un minuto.',
     pasoRuta: '/dashboard/portal/acompanamiento',
     pasoBoton: 'Solicitar acompañamiento',
@@ -215,7 +215,7 @@ const ESTILO_NIVEL: Record<Nivel, { tarjeta: string; texto: string; icono: strin
     texto: 'text-amber-700',
     icono: 'text-amber-500',
     consejo: 'Hay aspectos de tu rendimiento que conviene revisar. Estás a tiempo de mejorar: organiza tu semestre y busca apoyo si lo necesitas.',
-    fondo: 'from-amber-50 via-white to-white border-amber-200',
+    fondo: 'from-amber-50 via-gray-50 to-gray-50 border-amber-200',
     insignia: 'bg-amber-500 text-white',
     paso: 'Tu siguiente paso: revisa tus alertas y decide si te conviene pedir apoyo.',
     pasoRuta: '/dashboard/portal/alertas',
@@ -226,7 +226,7 @@ const ESTILO_NIVEL: Record<Nivel, { tarjeta: string; texto: string; icono: strin
     texto: 'text-green-700',
     icono: 'text-green-500',
     consejo: 'Vas por buen camino. Sigue así y revisa tu situación periódicamente.',
-    fondo: 'from-green-50 via-white to-white border-green-200',
+    fondo: 'from-green-50 via-gray-50 to-gray-50 border-green-200',
     insignia: 'bg-green-500 text-white',
     paso: null,
     pasoRuta: '/dashboard/portal/alertas',
@@ -484,8 +484,8 @@ function Indicadores({ indicadores }: { indicadores: RiesgoPropio['indicadores']
 }
 
 const configGrafica = {
-  pps: { label: 'Promedio del semestre (PPS)', color: '#2563eb' },
-  ppa: { label: 'Promedio acumulado (PPA)', color: '#C8102E' },
+  pps: { label: 'Promedio del semestre (PPS)', color: '#0F766E' },
+  ppa: { label: 'Promedio acumulado (PPA)', color: 'var(--brand)' },
 } satisfies ChartConfig;
 
 const TENDENCIA: Record<NonNullable<Evolucion['tendencia']>, { icono: React.ElementType; color: string; verbo: string }> = {
@@ -593,23 +593,25 @@ function EvolucionAcademica() {
   } else {
     contenido = (
       <div className="space-y-5">
-        <ChartContainer config={configGrafica} className="aspect-auto h-72 w-full">
+        <div className="overflow-x-auto" role="region" aria-label="Evolución académica por periodo" tabIndex={0}>
+        <ChartContainer config={configGrafica} className="aspect-auto h-72 w-full" style={{ minWidth: Math.max(280, evolucion.serie.length * 72) }}>
           <LineChart data={evolucion.serie} margin={{ top: 10, right: 16, left: -16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="periodo" tickLine={false} axisLine={false} dy={8} />
-            <YAxis domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} tickLine={false} axisLine={false} />
+            <XAxis dataKey="periodo" interval={0} tick={{ fontSize: 12, fill: 'var(--ink-muted)' }} tickLine={false} axisLine={false} dy={8} />
+            <YAxis domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} interval={0} tick={{ fontSize: 12, fill: 'var(--ink-muted)' }} tickLine={false} axisLine={false} />
             <ChartTooltip content={<ChartTooltipContent />} />
             <ChartLegend content={<ChartLegendContent />} />
             <ReferenceLine
               y={NOTA_APROBATORIA}
-              stroke="#9C8D8A"
+              stroke="var(--ink-faint)"
               strokeDasharray="4 4"
-              label={{ value: 'Nota aprobatoria (3.0)', position: 'insideBottomRight', fontSize: 11, fill: '#6b7280' }}
+              label={{ value: 'Nota aprobatoria (3.0)', position: 'insideBottomRight', fontSize: 12, fill: 'var(--ink-muted)' }}
             />
             <Line type="monotone" dataKey="pps" stroke="var(--color-pps)" strokeWidth={2} dot={{ r: 4 }} />
             <Line type="monotone" dataKey="ppa" stroke="var(--color-ppa)" strokeWidth={3} dot={{ r: 4 }} />
           </LineChart>
         </ChartContainer>
+        </div>
         <FraseTendencia evolucion={evolucion} />
         <TablaEvolucion serie={evolucion.serie} />
       </div>

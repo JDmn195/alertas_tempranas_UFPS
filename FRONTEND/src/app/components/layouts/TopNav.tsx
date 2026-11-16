@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Bell, ChevronRight, Menu } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 import { ubicacionDePagina } from './Sidebar';
+import { ToggleTema } from '../ToggleTema';
 import { apiFetch } from '../../../services/apiFetch';
 
 /** Avisos internos sin leer del usuario (mismo endpoint de la bandeja). */
@@ -51,6 +52,7 @@ export function TopNav({ onMenu, menuAbierto = false }: { onMenu?: () => void; m
 
       <div className="flex items-center gap-3 shrink-0">
         <p className="hidden md:block text-sm text-ink-muted first-letter:uppercase">{hoy}</p>
+        <ToggleTema />
         <Link
           to="/dashboard/notifications"
           aria-label={sinLeer > 0 ? `Notificaciones, ${sinLeer} sin leer` : 'Notificaciones'}

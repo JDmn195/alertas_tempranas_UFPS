@@ -464,31 +464,32 @@ function IndicadoresSection({
             </div>
           </div>
           
-          <div className="h-64 w-full">
+          <div className="h-64 w-full overflow-x-auto" role="region" aria-label="Evolución del promedio" tabIndex={0}>
             {loading ? (
               <div className="w-full h-full bg-wash animate-pulse rounded-[10px]" />
             ) : data && data.evolucion.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" minWidth={Math.max(280, data.evolucion.length * 72)} height="100%">
                 <AreaChart data={data.evolucion} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorPpa" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#C8102E" stopOpacity={0.1}/>
-                      <stop offset="95%" stopColor="#C8102E" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="var(--brand)" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="var(--brand)" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
                   <XAxis 
+                    interval={0}
                     dataKey="periodo" 
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9C8D8A' }}
+                    tick={{ fontSize: 12, fontWeight: 600, fill: 'var(--ink-muted)' }}
                     dy={10}
                   />
                   <YAxis 
                     domain={[2, 5]} 
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9C8D8A' }}
+                    tick={{ fontSize: 12, fontWeight: 600, fill: 'var(--ink-muted)' }}
                   />
                   <Tooltip 
                     contentStyle={{ 
@@ -501,15 +502,15 @@ function IndicadoresSection({
                   <Area 
                     type="linear" 
                     dataKey="ppa" 
-                    stroke="#C8102E" 
+                    stroke="var(--brand)"
                     strokeWidth={3}
                     fillOpacity={1} 
                     fill="url(#colorPpa)"
                     name="Acumulado"
-                    dot={{ r: 4, fill: '#C8102E', strokeWidth: 2, stroke: '#fff' }}
+                    dot={{ r: 4, fill: 'var(--brand)', strokeWidth: 2, stroke: 'var(--surface)' }}
                     activeDot={{ r: 6, strokeWidth: 0 }}
                   />
-                  <ReferenceLine y={3} stroke="#fee2e2" strokeDasharray="3 3" />
+                  <ReferenceLine y={3} stroke="var(--riesgo-critico)" strokeDasharray="3 3" />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
@@ -531,8 +532,8 @@ function IndicadoresSection({
               Evolución del Nivel de Riesgo por Periodo
             </h3>
             {/* Gráfica de línea con niveles numéricos */}
-            <div className="mb-4">
-              <ResponsiveContainer width="100%" height={160}>
+            <div className="mb-4 overflow-x-auto" role="region" aria-label="Evolución del riesgo" tabIndex={0}>
+              <ResponsiveContainer width="100%" minWidth={Math.max(280, data.riesgo_evolucion.length * 72)} height={160}>
                 <LineChart
                   data={data.riesgo_evolucion.map(item => ({
                     periodo: item.periodo,
@@ -543,10 +544,11 @@ function IndicadoresSection({
                 >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
                   <XAxis
+                    interval={0}
                     dataKey="periodo"
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9C8D8A' }}
+                    tick={{ fontSize: 12, fontWeight: 600, fill: 'var(--ink-muted)' }}
                     dy={8}
                   />
                   <YAxis
@@ -555,7 +557,7 @@ function IndicadoresSection({
                     tickFormatter={(v) => v === 3 ? 'Alto' : v === 2 ? 'Medio' : v === 1 ? 'Bajo' : ''}
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 10, fontWeight: 600, fill: '#9C8D8A' }}
+                    tick={{ fontSize: 12, fontWeight: 600, fill: 'var(--ink-muted)' }}
                   />
                   <Tooltip
                     contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }}
@@ -564,17 +566,17 @@ function IndicadoresSection({
                       return [labels[value] ?? value, 'Nivel de riesgo'];
                     }}
                   />
-                  <ReferenceLine y={3} stroke="#fca5a5" strokeDasharray="4 4" strokeWidth={1} />
-                  <ReferenceLine y={2} stroke="#fcd34d" strokeDasharray="4 4" strokeWidth={1} />
+                  <ReferenceLine y={3} stroke="var(--riesgo-critico)" strokeDasharray="4 4" strokeWidth={1} />
+                  <ReferenceLine y={2} stroke="var(--riesgo-medio)" strokeDasharray="4 4" strokeWidth={1} />
                   <Line
                     type="stepAfter"
                     dataKey="valor"
-                    stroke="#C8102E"
+                    stroke="var(--brand)"
                     strokeWidth={2.5}
                     dot={(props: any) => {
                       const { cx, cy, payload, index } = props;
-                      const colors: Record<string, string> = { high: '#B02A2B', medium: '#C98A12', low: '#2F8F6B', unknown: '#9C8D8A' };
-                      return <circle key={index} cx={cx} cy={cy} r={5} fill={colors[payload.nivel] ?? '#9C8D8A'} stroke="#fff" strokeWidth={2} />;
+                      const colors: Record<string, string> = { high: 'var(--riesgo-critico)', medium: 'var(--riesgo-medio)', low: 'var(--riesgo-bajo)', unknown: 'var(--ink-faint)' };
+                      return <circle key={index} cx={cx} cy={cy} r={5} fill={colors[payload.nivel] ?? 'var(--ink-faint)'} stroke="var(--surface)" strokeWidth={2} />;
                     }}
                     activeDot={{ r: 7 }}
                   />

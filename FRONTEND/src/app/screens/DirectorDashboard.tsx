@@ -54,9 +54,9 @@ interface DashboardData {
 
 // ─── Estilo común de gráficos ────────────────────────────────────────────────
 
-const COLOR_ALTO = '#B02A2B';
-const COLOR_MEDIO = '#C98A12';
-const COLOR_BAJO = '#2F8F6B';
+const COLOR_ALTO = 'var(--riesgo-critico)';
+const COLOR_MEDIO = 'var(--riesgo-medio)';
+const COLOR_BAJO = 'var(--riesgo-bajo)';
 
 function TooltipLimpio({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string }) {
   if (!active || !payload?.length) return null;
@@ -254,12 +254,13 @@ export default function DirectorDashboard() {
           ) : (data?.distribucion_riesgo ?? []).length === 0 ? (
             <SinDatos>Todavía no hay estudiantes clasificados por riesgo. Cuando se importen historiales, aquí verás cómo se reparten por semestre.</SinDatos>
           ) : (
-            <ResponsiveContainer width="100%" height={280}>
+            <div className="overflow-x-auto" role="region" aria-label="Distribución de riesgo por semestre" tabIndex={0}>
+            <ResponsiveContainer width="100%" minWidth={Math.max(280, (data?.distribucion_riesgo.length ?? 0) * 56)} height={280}>
               <BarChart data={data?.distribucion_riesgo ?? []} barCategoryGap="30%">
-                <CartesianGrid strokeDasharray="3 3" stroke="#F3E4E1" vertical={false} />
-                <XAxis dataKey="semester" interval={0} stroke="#9C8D8A" tickLine={false} axisLine={{ stroke: '#E8D6D2' }} style={{ fontSize: '12px' }} />
-                <YAxis stroke="#9C8D8A" tickLine={false} axisLine={false} allowDecimals={false} style={{ fontSize: '12px' }} />
-                <Tooltip content={<TooltipLimpio />} cursor={{ fill: '#FAF1EF' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--wash)" vertical={false} />
+                <XAxis dataKey="semester" interval={0} tick={{ fill: 'var(--ink-muted)', fontSize: 12 }} stroke="var(--ink-faint)" tickLine={false} axisLine={{ stroke: 'var(--line)' }} style={{ fontSize: '12px' }} />
+                <YAxis tick={{ fill: 'var(--ink-muted)', fontSize: 12 }} stroke="var(--ink-faint)" tickLine={false} axisLine={false} allowDecimals={false} style={{ fontSize: '12px' }} />
+                <Tooltip content={<TooltipLimpio />} cursor={{ fill: 'var(--paper)' }} />
                 <Legend iconType="square" wrapperStyle={{ fontSize: '12px', paddingTop: 8 }} />
                 <Bar dataKey="high" stackId="a" fill={COLOR_ALTO} name="Riesgo Alto" />
                 <Bar dataKey="medium" stackId="a" fill={COLOR_MEDIO} name="Riesgo Medio" />
@@ -267,6 +268,7 @@ export default function DirectorDashboard() {
                 <Bar dataKey="sin_dato" stackId="a" fill="#9C8D8A" name="Sin dato" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            </div>
           )}
         </div>
 
@@ -278,23 +280,25 @@ export default function DirectorDashboard() {
           ) : (data?.tendencia_gpa ?? []).length === 0 ? (
             <SinDatos>Aún no hay promedios por cohorte. Aparecerán al registrar notas de al menos un periodo.</SinDatos>
           ) : (
-            <ResponsiveContainer width="100%" height={280}>
+            <div className="overflow-x-auto" role="region" aria-label="Promedio por cohorte" tabIndex={0}>
+            <ResponsiveContainer width="100%" minWidth={Math.max(280, (data?.tendencia_gpa.length ?? 0) * 72)} height={280}>
               <LineChart data={data?.tendencia_gpa ?? []}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F3E4E1" vertical={false} />
-                <XAxis dataKey="cohort" stroke="#9C8D8A" tickLine={false} axisLine={{ stroke: '#E8D6D2' }} style={{ fontSize: '12px' }} />
-                <YAxis domain={[0, 5]} stroke="#9C8D8A" tickLine={false} axisLine={false} style={{ fontSize: '12px' }} />
-                <Tooltip content={<TooltipLimpio />} cursor={{ stroke: '#D5BFBA' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--wash)" vertical={false} />
+                <XAxis dataKey="cohort" interval={0} tick={{ fill: 'var(--ink-muted)', fontSize: 12 }} stroke="var(--ink-faint)" tickLine={false} axisLine={{ stroke: 'var(--line)' }} style={{ fontSize: '12px' }} />
+                <YAxis domain={[0, 5]} tick={{ fill: 'var(--ink-muted)', fontSize: 12 }} stroke="var(--ink-faint)" tickLine={false} axisLine={false} style={{ fontSize: '12px' }} />
+                <Tooltip content={<TooltipLimpio />} cursor={{ stroke: 'var(--line-strong)' }} />
                 <Line
                   type="monotone"
                   dataKey="gpa"
                   name="Promedio"
-                  stroke="#C8102E"
+                  stroke="var(--brand)"
                   strokeWidth={2}
-                  dot={{ fill: '#fff', stroke: '#C8102E', strokeWidth: 2, r: 4 }}
-                  activeDot={{ r: 6, fill: '#C8102E', stroke: '#fff', strokeWidth: 2 }}
+                  dot={{ fill: 'var(--surface)', stroke: 'var(--brand)', strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6, fill: 'var(--brand)', stroke: 'var(--surface)', strokeWidth: 2 }}
                 />
               </LineChart>
             </ResponsiveContainer>
+            </div>
           )}
         </div>
       </div>
@@ -342,7 +346,7 @@ export default function DirectorDashboard() {
               ) : (
                 (data?.cursos_criticos ?? []).map((course, index) => {
                   const critico = course.failureRate >= 30;
-                  const color = critico ? '#B02A2B' : '#C98A12';
+                  const color = critico ? 'var(--riesgo-critico)' : 'var(--riesgo-medio)';
                   return (
                     <tr key={index} className="transition-colors hover:bg-paper">
                       <td className="px-6 py-3.5 text-sm font-semibold text-ink">{course.course}</td>
