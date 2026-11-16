@@ -448,7 +448,7 @@ def listar_auditoria(request):
     fecha_inicio = request.GET.get('fecha_inicio')
     fecha_fin = request.GET.get('fecha_fin')
     
-    qs = Auditoria.objects.select_related('usuario').all()
+    qs = Auditoria.objects.select_related('usuario').order_by('-fecha_hora', '-id')
     
     if tipo_accion:
         qs = qs.filter(tipo_accion=tipo_accion)
@@ -459,8 +459,9 @@ def listar_auditoria(request):
     if fecha_fin:
         qs = qs.filter(fecha_hora__lte=fecha_fin)
         
+    pagina = paginar_si_se_pide(request, qs)
     data = []
-    for a in qs:
+    for a in (pagina if pagina is not None else qs):
         data.append({
             'id': a.id,
             'usuario_nombre': a.usuario.nombre if a.usuario else 'Sistema',
@@ -471,7 +472,7 @@ def listar_auditoria(request):
             'detalle': a.detalle
         })
         
-    return JsonResponse({'registros': data}, status=200)
+    return JsonResponse({'registros': data, **metadatos_pagina(pagina)}, status=200)
 
 
 # --- Cuentas de estudiantes (HU-37) ---
