@@ -142,6 +142,7 @@ interface SolicitudPortal {
 interface ListadoSolicitudes {
   solicitudes: SolicitudPortal[];
   en_curso: number | null;
+  cantidad_en_curso: number;
   puede_solicitar: boolean;
   mensaje_bloqueo: string | null;
   motivos: { valor: string; texto: string }[];
@@ -351,7 +352,7 @@ function TarjetaRiesgo({ datos }: { datos: RiesgoPropio }) {
   );
 }
 
-function Causas({ causas, nivel }: { causas: Causa[]; nivel: Nivel | null }) {
+function Causas({ causas, nivel, fechaCalculo }: { causas: Causa[]; nivel: Nivel | null; fechaCalculo?: string | null }) {
   if (!nivel) return null;
   return (
     <section className="bg-white rounded-[14px] border border-line p-6">
@@ -376,10 +377,15 @@ function Causas({ causas, nivel }: { causas: Causa[]; nivel: Nivel | null }) {
                 <ul className="mt-2 text-sm text-gray-600 list-disc list-inside">
                   {causa.materias.map((m) => (
                     <li key={m.materia}>
-                      {m.materia}: {numero(m.porcentaje, 1)}% de inasistencia (máximo {numero(m.umbral, 1)}%)
+                      {m.materia}: {numero(m.porcentaje)}% de inasistencia (máximo {numero(m.umbral)}%)
                     </li>
                   ))}
                 </ul>
+              )}
+              {causa.materias && causa.materias.length > 0 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {fechaCalculo ? `Valor calculado el ${fechaCalculo}. ` : ''}El porcentaje actual está en «Mi asistencia».
+                </p>
               )}
             </li>
           ))}
@@ -1679,7 +1685,7 @@ function AccesosPortal() {
   const pendientes = alertas ? alertas.conteos.activa + alertas.conteos.en_seguimiento : null;
   const sinAsistencia = asistencia !== null && !asistencia.hay_registros;
   const enRiesgo = asistencia ? asistencia.cursos.filter((c) => c.supera_umbral || c.cerca_del_limite).length : null;
-  const enCurso = solicitudes ? solicitudes.en_curso ?? 0 : null;
+  const enCurso = solicitudes ? solicitudes.cantidad_en_curso ?? 0 : null;
 
   const tarjetas = [
     {
@@ -1779,7 +1785,8 @@ export default function StudentPortal() {
       <TarjetaRiesgo datos={datos} />
       <AccesosPortal />
       <Indicadores indicadores={datos.indicadores} />
-      <Causas causas={datos.causas} nivel={datos.riesgo.nivel} />
+      <Causas causas={datos.causas} nivel={datos.riesgo.nivel}
+        fechaCalculo={datos.riesgo.fecha_calculo ? new Date(datos.riesgo.fecha_calculo).toLocaleDateString('es-CO', { dateStyle: 'long' }) : null} />
       <EvolucionAcademica />
     </div>
   );

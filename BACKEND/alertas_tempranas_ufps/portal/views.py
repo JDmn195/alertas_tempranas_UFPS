@@ -23,7 +23,7 @@ from academico.asistencia import (
 from academico.models import Asistencia, Estudiante, Materia, Nota, Periodo
 from academico.services.asistencia import periodo_actual
 from academico.services.historial_promedios import serie_promedios_por_periodo, tendencia_promedio
-from alertas.evaluacion import NOTA_APROBATORIA, calcular_indicadores, calcular_ppa
+from alertas.evaluacion import NOTA_APROBATORIA, calcular_indicadores
 from alertas.models import Alerta, Intervencion, Regla, RiesgoEstudiante, SolicitudAcompanamiento
 from alertas.solicitudes import (
     DESCRIPCION_MIN, MOTIVOS, notificar_nueva_solicitud, programar_notificacion, solicitud_en_curso,
@@ -104,16 +104,11 @@ def _indicadores(estudiante):
     notas = Nota.objects.filter(estudiante=estudiante)
     indicadores = calcular_indicadores(estudiante)
 
-    ultima = (
-        notas.filter(definitiva__isnull=False)
-        .select_related('periodo')
-        .order_by('-periodo__anio', '-periodo__semestre')
-        .first()
-    )
-    pps, periodo_pps = None, None
-    if ultima is not None:
-        pps = calcular_ppa(notas.filter(periodo=ultima.periodo))
-        periodo_pps = f"{ultima.periodo.anio}-{ultima.periodo.semestre}"
+    # Mismo origen y redondeo que la tabla de evolución (SDAT-339, B37)
+    serie = [p for p in serie_promedios_por_periodo(estudiante) if p['pps'] is not None]
+    pps, periodo_pps, ppa = None, None, indicadores['ppa']
+    if serie:
+        pps, periodo_pps, ppa = serie[-1]['pps'], serie[-1]['periodo'], serie[-1]['ppa']
 
     # Cada materia aprobada cuenta una vez, aunque tenga varias notas aprobatorias
     creditos = Materia.objects.filter(
@@ -121,9 +116,9 @@ def _indicadores(estudiante):
     ).aggregate(total=Sum('creditos'))['total'] or 0
 
     return {
-        'pps': float(pps) if pps is not None else None,
+        'pps': pps,
         'periodo_pps': periodo_pps,
-        'ppa': indicadores['ppa'],
+        'ppa': ppa,
         'materias_reprobadas': indicadores['reprobadas'],
         'lista_materias_reprobadas': indicadores['materias_reprobadas'],
         'creditos_aprobados': creditos,
@@ -485,6 +480,7 @@ def _listar_solicitudes(estudiante):
     return JsonResponse({
         'solicitudes': solicitudes,
         'en_curso': en_curso['id'] if en_curso else None,
+        'cantidad_en_curso': sum(1 for s in solicitudes if s['estado'] in SolicitudAcompanamiento.ESTADOS_EN_CURSO),
         'puede_solicitar': en_curso is None,
         'mensaje_bloqueo': MENSAJE_SOLICITUD_EN_CURSO if en_curso else None,
         'motivos': [{'valor': valor, 'texto': texto} for valor, texto in MOTIVOS.items()],

@@ -176,6 +176,8 @@ class ConsultarYCancelarTests(SolicitudesBase):
         data = self.listar().json()
         self.assertEqual([s['id'] for s in data['solicitudes']], [reciente.id, antigua.id])
         self.assertEqual(data['en_curso'], reciente.id)
+        # SDAT-339 (B12): la tarjeta de Inicio necesita una cantidad, no el id
+        self.assertEqual(data['cantidad_en_curso'], 1)
         self.assertFalse(data['puede_solicitar'])
         self.assertIn('en curso', data['mensaje_bloqueo'])
         self.assertEqual({m['valor'] for m in data['motivos']},
