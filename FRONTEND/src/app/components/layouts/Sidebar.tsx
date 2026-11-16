@@ -36,13 +36,14 @@ export type NavItem = {
 };
 
 export const navItems: NavItem[] = [
+  { path: '/dashboard/admin/resumen', label: 'Resumen', icon: Home, roles: ['ADMINISTRADOR'], section: 'Seguimiento' },
   { path: '/dashboard/teacher', label: 'Panel del Docente', icon: GraduationCap, roles: ['DOCENTE'], section: 'Seguimiento' },
   { path: '/dashboard/director', label: 'Panel Estratégico', icon: BarChart3, roles: ['ADMINISTRADOR', 'DIRECTOR'], section: 'Seguimiento' },
   { path: '/dashboard/students', label: 'Estudiantes', icon: Users, roles: ['ADMINISTRADOR', 'DIRECTOR', 'DOCENTE', 'BIENESTAR'], section: 'Seguimiento' },
   { path: '/dashboard/courses', label: 'Cursos', icon: BookOpen, roles: ['ADMINISTRADOR', 'DIRECTOR', 'DOCENTE'], section: 'Seguimiento' },
-  { path: '/dashboard/alerts', label: 'Gestión de Alertas', icon: AlertTriangle, roles: ['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR'], section: 'Alertas y apoyo' },
+  { path: '/dashboard/alerts', label: 'Gestión de Alertas', icon: AlertTriangle, roles: ['ADMINISTRADOR', 'DIRECTOR', 'DOCENTE', 'BIENESTAR'], section: 'Alertas y apoyo' },
   { path: '/dashboard/solicitudes', label: 'Solicitudes de Acompañamiento', icon: HandHelping, roles: ['ADMINISTRADOR', 'DIRECTOR', 'BIENESTAR'], section: 'Alertas y apoyo' },
-  { path: '/dashboard/reports', label: 'Exportar Reportes', icon: FileDown, roles: ['ADMINISTRADOR', 'BIENESTAR', 'DOCENTE'], section: 'Alertas y apoyo' },
+  { path: '/dashboard/reports', label: 'Exportar Reportes', icon: FileDown, roles: ['ADMINISTRADOR', 'DIRECTOR', 'BIENESTAR', 'DOCENTE'], section: 'Alertas y apoyo' },
   { path: '/dashboard/admin/import', label: 'Importar Módulo', icon: Upload, roles: ['ADMINISTRADOR'], section: 'Datos y reglas' },
   { path: '/dashboard/admin/risk-rules', label: 'Reglas de Riesgo', icon: SlidersHorizontal, roles: ['ADMINISTRADOR'], section: 'Datos y reglas' },
   { path: '/dashboard/admin/automatic-processes', label: 'Procesos Automáticos', icon: CalendarClock, roles: ['ADMINISTRADOR', 'DIRECTOR'], section: 'Datos y reglas' },

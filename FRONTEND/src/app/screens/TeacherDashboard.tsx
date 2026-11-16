@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { normalizarNombreMateria, normalizarCodigo } from '@/utils/formato';
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
@@ -210,7 +211,7 @@ export default function TeacherDashboard() {
       value: data?.promedio_general != null ? data.promedio_general.toFixed(2) : '—',
       icon: BarChart2,
       color: 'green',
-      sublabel: 'PPA de mis estudiantes',
+      sublabel: 'Promedio acumulado de mis estudiantes',
       onClick: undefined,
     },
     {
@@ -354,7 +355,7 @@ export default function TeacherDashboard() {
                 const pct = Math.round((m.reprobaciones / maxRep) * 100);
                 return (
                   <li key={i} className="grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] items-center gap-3">
-                    <span className="text-sm font-medium text-ink truncate">{m.materia}</span>
+                    <span className="text-sm font-medium text-ink truncate">{normalizarNombreMateria(m.materia)}</span>
                     <span className="h-2 bg-wash rounded-full overflow-hidden">
                       <span className="block h-2 rounded-full bg-riesgo-alto" style={{ width: `${pct}%` }} />
                     </span>
@@ -406,7 +407,7 @@ export default function TeacherDashboard() {
                       {curso.codigo} · Grupo {curso.grupo}
                     </p>
                     <h3 className="font-semibold text-ink text-base leading-snug line-clamp-2 group-hover:text-primary transition-colors">
-                      {curso.materia}
+                      {normalizarNombreMateria(curso.materia)}
                     </h3>
                   </div>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-semibold whitespace-nowrap flex-shrink-0 ${estadoBadgeClass(curso.estado)}`}>
@@ -489,8 +490,8 @@ export default function TeacherDashboard() {
             <div className="bg-white rounded-[14px] shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
               <div className="bg-white text-ink border-b border-line px-6 py-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold">{selectedCurso.materia}</h2>
-                  <p className="text-sm text-ink-muted">{selectedCurso.codigo} · Grupo {selectedCurso.grupo}</p>
+                  <h2 className="text-xl font-semibold">{normalizarNombreMateria(selectedCurso.materia)}</h2>
+                  <p className="text-sm text-ink-muted">{normalizarCodigo(selectedCurso.codigo)} · Grupo {selectedCurso.grupo}</p>
                 </div>
                 <button aria-label="Cerrar detalle del curso" onClick={() => setSelectedCurso(null)} className="p-1.5 rounded-[10px] text-ink-muted hover:text-ink hover:bg-wash transition-colors">
                   <X className="w-6 h-6" />
@@ -521,7 +522,7 @@ export default function TeacherDashboard() {
                           {modalStudents.map((est, idx) => (
                             <tr key={est.codigo} className="transition-colors hover:bg-paper">
                               <td className="px-4 py-3 font-semibold text-gray-900">{est.nombre}</td>
-                              <td className="px-4 py-3 text-gray-500 tabular-nums text-xs">{est.codigo}</td>
+                              <td className="px-4 py-3 text-gray-500 tabular-nums text-xs">{normalizarCodigo(est.codigo)}</td>
                               <td className="px-4 py-3">
                                 {est.nivel_riesgo === 'high'   && <Badge variant="high">ALTO</Badge>}
                                 {est.nivel_riesgo === 'medium' && <Badge variant="medium">MEDIO</Badge>}

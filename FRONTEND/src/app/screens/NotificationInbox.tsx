@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { formatearFechaHora } from '@/utils/formato';
 import { useState, useEffect } from 'react';
 import { Badge } from '../components/ui/Badge';
 import { Mail, Check, Bell, Calendar, Filter } from 'lucide-react';
@@ -122,7 +123,7 @@ export default function NotificationInbox() {
                     )}
                     <span className="text-xs text-ink-muted flex items-center gap-1">
                       <Calendar className="w-3 h-3" aria-hidden="true" />
-                      {new Date(notif.fecha).toLocaleString()}
+                      {formatearFechaHora(notif.fecha)}
                     </span>
                   </div>
                   <p className={`text-sm ${notif.leida ? 'text-ink-muted' : 'text-ink font-medium'}`}>

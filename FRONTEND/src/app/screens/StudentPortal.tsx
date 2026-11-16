@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { normalizarNombreMateria, normalizarCodigo, formatearFecha, formatearFechaHora } from '@/utils/formato';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
@@ -14,6 +15,25 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
 const baseUrl = API_BASE_URL;
+
+// SDAT-346: el portal le habla al estudiante; solo cambia el texto mostrado, no la regla ni su valor almacenado.
+const NOMBRE_REGLA_PORTAL: Record<string, string> = {
+  'Promedio Crítico': 'Promedio acumulado crítico',
+  'Promedio Bajo': 'Promedio acumulado menor que 3.0',
+  'Promedio En Riesgo': 'Promedio acumulado en riesgo',
+  'Múltiples Reprobadas Crítico': 'Cuatro o más materias perdidas',
+  'Reprobadas Moderado': 'Dos o más materias perdidas',
+  'Una Reprobada': 'Una materia perdida',
+  'Atraso Severo': 'Atraso severo en tu plan de estudios',
+  'Atraso Moderado': 'Atraso moderado en tu plan de estudios',
+  'Atraso Leve': 'Atraso leve en tu plan de estudios',
+  'Dos cortes perdidos: no tiene asegurado aprobar': 'Perdiste dos cortes: aún no tienes asegurada la materia',
+  'Posible pérdida de la materia: evaluar cancelación': 'Posible pérdida de la materia: consulta si te conviene cancelarla',
+  'Caída de rendimiento en el segundo corte': 'Bajó tu rendimiento en el segundo corte',
+  'Necesita X en el examen final para aprobar': 'Necesitas una nota alta en el examen final para aprobar',
+  'Materia perdida: aunque saque 5.0 en el examen no alcanza': 'Materia perdida: aunque saques 5.0 en el examen final no alcanzas a aprobar',
+};
+const nombreRegla = (nombre: string) => NOMBRE_REGLA_PORTAL[nombre] ?? nombre;
 
 type Nivel = 'high' | 'medium' | 'low';
 
@@ -345,15 +365,34 @@ function TarjetaRiesgo({ datos }: { datos: RiesgoPropio }) {
 
         <p className="text-xs text-ink-muted mt-auto pt-5">
           {riesgo.periodo && <>Periodo {riesgo.periodo} · </>}
-          {riesgo.fecha_calculo && <>Calculado el {new Date(riesgo.fecha_calculo).toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short' })}</>}
+          {riesgo.fecha_calculo && <>Calculado el {formatearFechaHora(riesgo.fecha_calculo)}</>}
         </p>
       </div>
     </section>
   );
 }
 
-function Causas({ causas, nivel, fechaCalculo }: { causas: Causa[]; nivel: Nivel | null; fechaCalculo?: string | null }) {
+const PESO_NIVEL: Record<Nivel, number> = { high: 3, medium: 2, low: 1 };
+
+// Solo presentación: de cada tipo de regla se muestra la más grave (la evaluación no cambia)
+function causasSinRedundancia(causas: Causa[]): Causa[] {
+  const mejores = new Map<string, Causa>();
+  const resultado: Causa[] = [];
+  for (const causa of causas) {
+    if (!causa.tipo) { resultado.push(causa); continue; }
+    const previa = mejores.get(causa.tipo);
+    if (!previa) { mejores.set(causa.tipo, causa); resultado.push(causa); continue; }
+    if (PESO_NIVEL[causa.nivel] > PESO_NIVEL[previa.nivel]) {
+      resultado[resultado.indexOf(previa)] = causa;
+      mejores.set(causa.tipo, causa);
+    }
+  }
+  return resultado;
+}
+
+function Causas({ causas: todasLasCausas, nivel, fechaCalculo }: { causas: Causa[]; nivel: Nivel | null; fechaCalculo?: string | null }) {
   if (!nivel) return null;
+  const causas = causasSinRedundancia(todasLasCausas);
   return (
     <section className="bg-white rounded-[14px] border border-line p-6">
       <h2 className="text-lg font-semibold text-gray-900">¿Por qué tengo este nivel?</h2>
@@ -367,7 +406,7 @@ function Causas({ causas, nivel, fechaCalculo }: { causas: Causa[]; nivel: Nivel
           {causas.map((causa, i) => (
             <li key={`${causa.regla}-${i}`} className={`border border-line rounded-[10px] p-4 border-l-4 transition-shadow duration-150 hover:shadow-md ${causa.nivel === 'high' ? 'border-l-primary' : causa.nivel === 'medium' ? 'border-l-amber-400' : 'border-l-emerald-400'}`}>
               <div className="flex items-center justify-between gap-3">
-                <p className="font-medium text-gray-900">{causa.regla}</p>
+                <p className="font-medium text-gray-900">{nombreRegla(causa.regla)}</p>
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${ESTILO_NIVEL[causa.nivel]?.tarjeta ?? ''} ${ESTILO_NIVEL[causa.nivel]?.texto ?? ''}`}>
                   Riesgo {causa.nivel === 'high' ? 'alto' : causa.nivel === 'medium' ? 'medio' : 'bajo'}
                 </span>
@@ -377,7 +416,7 @@ function Causas({ causas, nivel, fechaCalculo }: { causas: Causa[]; nivel: Nivel
                 <ul className="mt-2 text-sm text-gray-600 list-disc list-inside">
                   {causa.materias.map((m) => (
                     <li key={m.materia}>
-                      {m.materia}: {numero(m.porcentaje)}% de inasistencia (máximo {numero(m.umbral)}%)
+                      {normalizarNombreMateria(m.materia)}: {numero(m.porcentaje)}% de inasistencia (máximo {numero(m.umbral)}%)
                     </li>
                   ))}
                 </ul>
@@ -609,8 +648,7 @@ const OPCIONES_ESTADO: { valor: EstadoAlerta; texto: string }[] = [
   { valor: 'cerrada', texto: 'Cerradas' },
 ];
 
-const fecha = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString('es-CO', { dateStyle: 'long' }) : '—';
+const fecha = formatearFecha;
 
 function InsigniaSeveridad({ alerta }: { alerta: AlertaPortal }) {
   return (
@@ -766,7 +804,7 @@ function ModalAlerta({ alertaId, onCerrar }: { alertaId: number | null; onCerrar
         <CabeceraModal
           icono={cerrada ? CheckCircle2 : AlertTriangle}
           tono={cerrada ? 'bg-green-50 text-green-700' : TONO_SEVERIDAD[detalle.severidad] ?? 'bg-gray-100 text-gray-600'}
-          titulo={detalle.tipo}
+          titulo={nombreRegla(detalle.tipo)}
           descripcion={detalle.resumen}
         >
           <InsigniaSeveridad alerta={detalle} />
@@ -913,7 +951,7 @@ function MisAlertas() {
               className="group w-full text-left px-4 py-3.5 flex items-center gap-3 transition-colors duration-150 hover:bg-paper focus:outline-none focus-visible:bg-paper focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
             >
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-gray-900 truncate">{alerta.tipo}</p>
+                <p className="font-medium text-gray-900 truncate">{nombreRegla(alerta.tipo)}</p>
                 <p className="text-xs text-gray-500 truncate">
                   {alerta.resumen} · {fecha(alerta.fecha_generacion)}
                 </p>
@@ -990,7 +1028,7 @@ const INSIGNIA_ESTADO_INTERVENCION: Record<EstadoIntervencion, string> = {
 };
 
 const alertaTexto = (alerta: IntervencionPortal['alerta']) =>
-  alerta.materia ? `${alerta.tipo} · ${alerta.materia}` : alerta.tipo;
+  alerta.materia ? `${nombreRegla(alerta.tipo)} · ${alerta.materia}` : nombreRegla(alerta.tipo);
 
 function InsigniaEstadoIntervencion({ intervencion }: { intervencion: IntervencionPortal }) {
   return (
@@ -1424,7 +1462,7 @@ function SolicitarAcompanamiento() {
         </p>
       )}
 
-      <form onSubmit={enviar} noValidate className="space-y-5">
+      {!bloqueado && <form onSubmit={enviar} noValidate className="space-y-5">
         <fieldset disabled={bloqueado || enviando} className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="text-sm text-ink-soft">
@@ -1446,7 +1484,7 @@ function SolicitarAcompanamiento() {
                 aria-invalid={!!errores.alerta} aria-describedby="ayuda-alerta">
                 <option value="">Ninguna</option>
                 {alertas.map((a) => (
-                  <option key={a.id} value={a.id}>{a.materia ? `${a.tipo} · ${a.materia}` : a.tipo}</option>
+                  <option key={a.id} value={a.id}>{a.materia ? `${nombreRegla(a.tipo)} · ${a.materia}` : nombreRegla(a.tipo)}</option>
                 ))}
               </select>
               <span id="ayuda-alerta" className={`block text-xs mt-1.5 ${errores.alerta ? 'text-red-700 font-medium' : 'text-ink-muted'}`}>
@@ -1468,7 +1506,7 @@ function SolicitarAcompanamiento() {
                 <span className={errores.descripcion ? 'text-red-700 font-medium' : 'text-ink-muted'}>
                   {errores.descripcion || (progreso >= 100 ? 'Listo, ya puedes enviarla.' : 'Cuéntanos qué pasa y cómo podemos ayudarte.')}
                 </span>
-                <span className="text-ink-muted tabular-nums shrink-0">{escritos} / mínimo {minimo}</span>
+                <span className="text-ink-muted tabular-nums shrink-0">{escritos} / 2000 (mínimo {minimo})</span>
               </span>
             </span>
           </label>
@@ -1478,7 +1516,7 @@ function SolicitarAcompanamiento() {
             {enviando ? 'Enviando…' : 'Enviar solicitud'}
           </button>
         </fieldset>
-      </form>
+      </form>}
 
       <h3 className="text-sm font-semibold text-gray-900 mt-6 mb-3">Mis solicitudes</h3>
       {historial}
@@ -1495,6 +1533,7 @@ const ESTILO_REGISTRO: Record<EstadoAsistencia, string> = {
 
 function TarjetaAsistencia({ curso }: { curso: CursoAsistencia }) {
   const [abierta, setAbierta] = useState(false);
+  const [explicacion, setExplicacion] = useState(false);
   const sinClases = curso.porcentaje === null;
   const tono = curso.supera_umbral ? 'red' : curso.cerca_del_limite ? 'amber' : 'green';
   const colorBarra = { red: 'bg-red-500', amber: 'bg-amber-500', green: 'bg-green-500' }[tono];
@@ -1507,16 +1546,22 @@ function TarjetaAsistencia({ curso }: { curso: CursoAsistencia }) {
     <li className={`border rounded-[10px] p-4 bg-white transition-shadow duration-150 hover:shadow-md ${colorBorde}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-medium text-gray-900 truncate">{curso.materia}</p>
-          <p className="text-xs text-gray-500">{curso.codigo_materia} · Grupo {curso.grupo}</p>
+          <p className="font-medium text-gray-900 truncate">{normalizarNombreMateria(curso.materia)}</p>
+          <p className="text-xs text-gray-500">{normalizarCodigo(curso.codigo_materia)} · Grupo {curso.grupo}</p>
         </div>
         <div className="text-right shrink-0">
           <p className={`text-2xl font-semibold tabular-nums ${curso.supera_umbral ? 'text-red-700' : curso.cerca_del_limite ? 'text-amber-700' : 'text-gray-900'}`}>
             {sinClases ? '—' : `${numero(curso.porcentaje)} %`}
           </p>
-          <p className="text-xs text-gray-500">de inasistencia · <Link to="/dashboard/ayuda#asistencia-ayuda" className="font-medium text-primary underline">Cómo se calcula</Link></p>
+          <p className="text-xs text-gray-500">de inasistencia · <button type="button" onClick={() => setExplicacion((v) => !v)} aria-expanded={explicacion} className="font-medium text-primary underline">Cómo se calcula</button></p>
         </div>
       </div>
+
+      {explicacion && (
+        <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-[10px] px-3 py-2 mt-3">
+          Inasistencia = faltas sin justificar ÷ clases registradas × 100. Una falta justificada cuenta como clase, pero no como falta.
+        </p>
+      )}
 
       {sinClases ? (
         <p className="text-sm text-gray-500 mt-3">Aún no hay clases registradas en esta materia.</p>
@@ -1529,7 +1574,7 @@ function TarjetaAsistencia({ curso }: { curso: CursoAsistencia }) {
           <div className="mt-2">
             <div className="h-2.5 w-full bg-gray-100 rounded-full overflow-hidden" role="progressbar"
               aria-valuemin={0} aria-valuemax={escala} aria-valuenow={curso.porcentaje ?? 0}
-              aria-label={`Inasistencia de ${curso.materia}`}>
+              aria-label={`Inasistencia de ${normalizarNombreMateria(curso.materia)}`}>
               <div className={`h-full rounded-full transition-[width] duration-700 ease-out ${colorBarra}`} style={{ width: `${ancho}%` }} />
             </div>
             <p className="flex justify-between text-xs text-gray-500 mt-1">
@@ -1566,7 +1611,7 @@ function TarjetaAsistencia({ curso }: { curso: CursoAsistencia }) {
               {curso.detalle.map((d) => (
                 <li key={d.fecha} className="flex items-center justify-between px-3 py-1.5">
                   <span className="text-gray-700">
-                    {new Date(`${d.fecha}T00:00:00`).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'long' })}
+                    {formatearFecha(d.fecha)}
                   </span>
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTILO_REGISTRO[d.estado] ?? 'bg-gray-100 text-gray-600'}`}>
                     {d.estado_texto}
@@ -1786,7 +1831,7 @@ export default function StudentPortal() {
       <AccesosPortal />
       <Indicadores indicadores={datos.indicadores} />
       <Causas causas={datos.causas} nivel={datos.riesgo.nivel}
-        fechaCalculo={datos.riesgo.fecha_calculo ? new Date(datos.riesgo.fecha_calculo).toLocaleDateString('es-CO', { dateStyle: 'long' }) : null} />
+        fechaCalculo={datos.riesgo.fecha_calculo ? formatearFecha(datos.riesgo.fecha_calculo) : null} />
       <EvolucionAcademica />
     </div>
   );

@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { formatearFechaHora } from '@/utils/formato';
 import { useState, useEffect } from 'react';
 import { ShieldAlert, RefreshCw, Search, Calendar, Filter } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -65,13 +66,7 @@ export default function AuditLog() {
     fetchAuditLogs();
   }, [filterAction, filterStartDate, filterEndDate, pagina]);
 
-  const formatDate = (isoString: string) => {
-    const date = new Date(isoString);
-    return date.toLocaleString('es-CO', {
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit'
-    });
-  };
+  const formatDate = formatearFechaHora;
 
   const campo = 'h-10 px-3.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink';
   const hayFiltros = Boolean(filterAction || filterStartDate || filterEndDate);
