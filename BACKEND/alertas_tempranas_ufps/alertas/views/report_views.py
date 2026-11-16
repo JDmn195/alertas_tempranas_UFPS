@@ -10,7 +10,7 @@ from django.db.models import Count, Avg, Q
 from alertas.models import alertas_abiertas, Alerta, Intervencion, RiesgoEstudiante, RiesgoEstudiantePeriodo
 from academico.models import Estudiante, Curso, Nota
 from alertas_tempranas_ufps.paginacion import paginar_si_se_pide, metadatos_pagina
-from usuarios.utils import fecha_local
+from usuarios.utils import fecha_local, registrar_auditoria
 
 logger = logging.getLogger(__name__)
 
@@ -444,6 +444,8 @@ def exportar_reporte(request):
 
     estudiantes_ids = _get_docente_filter(request)
     cursos_ids = _get_docente_cursos(request)
+    if request.usuario.rol == 'DIRECTOR':  # SDAT-349
+        registrar_auditoria(request.usuario, 'EXPORTAR_REPORTE', f"El director exportó el reporte '{tipo}' en formato {formato}.")
 
     try:
         data_list = _traducir_niveles(

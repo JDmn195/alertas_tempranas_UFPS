@@ -386,7 +386,7 @@ class CancelacionTests(RecordatoriosBaseTestCase):
         self.assertEqual(self._estados(tipo_caso='INTERVENCION'), {'CANCELADO'})
 
     def test_cerrar_alerta_cancela_recordatorios(self):
-        resp = self.client.post(reverse('cerrar-alerta', args=[self.alerta_sin_interv.id]), **self._auth(self.director))
+        resp = self.client.post(reverse('cerrar-alerta', args=[self.alerta_sin_interv.id]), **self._auth(self.bienestar))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(self._estados(alerta=self.alerta_sin_interv), {'CANCELADO'})
 
