@@ -4,7 +4,7 @@ from django.views.decorators.http import require_GET
 from django.db.models import Count, Avg, Q
 
 from academico.models import Curso, Nota, Periodo, Estudiante, Materia
-from alertas.models import Alerta, RiesgoEstudiante, RiesgoEstudiantePeriodo
+from alertas.models import alertas_abiertas, Alerta, RiesgoEstudiante, RiesgoEstudiantePeriodo
 from alertas.riesgo_actual import ultimo_riesgo_por_estudiante
 from usuarios.decorators import requiere_rol
 from academico.asistencia import (
@@ -210,8 +210,7 @@ def teacher_dashboard(request):
 
     # Alertas por estudiante en una sola query
     alertas_por_est = dict(
-        Alerta.objects
-        .filter(estudiante__in=estudiantes_docente, estado__in=['activa', 'active'])
+        alertas_abiertas(Alerta.objects.filter(estudiante__in=estudiantes_docente))
         .values('estudiante_id')
         .annotate(total=Count('id'))
         .values_list('estudiante_id', 'total')
@@ -313,9 +312,7 @@ def teacher_course_students(request, curso_id):
 
     # Alertas no cerradas por estudiante
     alertas_map = dict(
-        Alerta.objects
-        .filter(estudiante_id__in=estudiantes_ids)
-        .exclude(estado__in=['cerrada', 'closed'])
+        alertas_abiertas(Alerta.objects.filter(estudiante_id__in=estudiantes_ids))
         .values('estudiante_id')
         .annotate(total=Count('id'))
         .values_list('estudiante_id', 'total')

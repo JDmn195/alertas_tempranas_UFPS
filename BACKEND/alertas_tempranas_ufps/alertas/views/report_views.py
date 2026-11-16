@@ -7,10 +7,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db.models import Count, Avg, Q
 
-from alertas.models import Alerta, Intervencion, RiesgoEstudiante, RiesgoEstudiantePeriodo
+from alertas.models import alertas_abiertas, Alerta, Intervencion, RiesgoEstudiante, RiesgoEstudiantePeriodo
 from academico.models import Estudiante, Curso, Nota
 from alertas_tempranas_ufps.paginacion import paginar_si_se_pide, metadatos_pagina
-from usuarios.utils import fecha_local
+from usuarios.utils import fecha_local, registrar_auditoria
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ def _get_docente_cursos(request):
 
 # ─── Lógica de consulta desacoplada del request ───────────────────────────────
 
-def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
+def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None, usuario_docente=None):
     """
     Retorna la lista de registros para el tipo de reporte indicado.
     Fix 6.1: si estudiantes_ids no es None, filtra solo esos estudiantes.
@@ -113,9 +113,7 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
             riesgos_snap.values_list('estudiante_id', flat=True)
         )
         alertas_map = dict(
-            Alerta.objects
-            .filter(estudiante_id__in=todos_ids)
-            .exclude(estado__in=['cerrada', 'closed'])
+            alertas_abiertas(Alerta.objects.filter(estudiante_id__in=todos_ids))
             .values('estudiante_id')
             .annotate(total=Count('id'))
             .values_list('estudiante_id', 'total')
@@ -273,6 +271,8 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
         qs = Intervencion.objects.all().select_related('alerta__estudiante', 'usuario').order_by('-fecha')
         if estudiantes_ids is not None:
             qs = qs.filter(alerta__estudiante_id__in=estudiantes_ids)
+        if usuario_docente is not None:  # SDAT-338: el docente solo ve las intervenciones que registró
+            qs = qs.filter(usuario=usuario_docente)
         data = []
         for i in qs:
             tipo_friendly = {'CITACION': 'Citación', 'REMISION': 'Remisión'}.get(i.tipo, 'Tutoría')
@@ -412,7 +412,8 @@ def export_report_data(request):
     estudiantes_ids = _get_docente_filter(request)
     cursos_ids = _get_docente_cursos(request)
     try:
-        data = _traducir_niveles(_get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids))
+        data = _traducir_niveles(_get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids,
+                         usuario_docente=request.usuario if request.usuario.rol == 'DOCENTE' else None))
         pagina = paginar_si_se_pide(request, data)
         return JsonResponse({'data': list(pagina) if pagina is not None else data, **metadatos_pagina(pagina)})
     except ValueError as e:
@@ -445,10 +446,13 @@ def exportar_reporte(request):
 
     estudiantes_ids = _get_docente_filter(request)
     cursos_ids = _get_docente_cursos(request)
+    if request.usuario.rol == 'DIRECTOR':  # SDAT-349
+        registrar_auditoria(request.usuario, 'EXPORTAR_REPORTE', f"El director exportó el reporte '{tipo}' en formato {formato}.")
 
     try:
         data_list = _traducir_niveles(
-            _get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids)
+            _get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids,
+                         usuario_docente=request.usuario if request.usuario.rol == 'DOCENTE' else None)
         )
     except ValueError as e:
         logger.warning("Solicitud de exportación inválida: %s", e)

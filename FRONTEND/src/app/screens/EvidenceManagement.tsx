@@ -39,6 +39,7 @@ export default function EvidenceManagement() {
   const [concluding, setConcluding] = useState(false);
   const [showConcludeModal, setShowConcludeModal] = useState(false);
   
+  const [noExiste, setNoExiste] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -54,8 +55,9 @@ export default function EvidenceManagement() {
       const data = await evidenceService.getByIntervencion(id);
       setEvidencias(data.evidencias);
       setIntervencionInfo(data.intervencion);
-    } catch (err) {
-      setError('No se pudieron cargar las evidencias');
+    } catch (err: any) {
+      if (err?.message === 'NO_EXISTE') setNoExiste(true);
+      else setError('No se pudieron cargar las evidencias');
     } finally {
       setLoading(false);
     }
@@ -98,7 +100,9 @@ export default function EvidenceManagement() {
       loadEvidencias();
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
-      setError(err.message || 'Error al subir el archivo');
+      // SDAT-346: el detalle de configuración (Supabase) es para el administrador, no para el usuario
+      const detalle = String(err.message || '');
+      setError(/supabase|almacenamiento/i.test(detalle) ? 'No pudimos guardar el archivo. Avisa al administrador.' : (detalle || 'Error al subir el archivo'));
     } finally {
       setUploading(false);
       e.target.value = '';
@@ -107,7 +111,11 @@ export default function EvidenceManagement() {
 
   const handleDelete = async (evidenciaId: number) => {
     if (isClosed) return;
-    if (!await confirmarAccion('¿Estás seguro de eliminar esta evidencia?')) return;
+    const nombre = evidencias.find(e => e.id === evidenciaId)?.nombre;
+    if (!await confirmarAccion(
+      `¿Eliminar la evidencia ${nombre ? `«${nombre}»` : 'seleccionada'}? Esta acción no se puede deshacer.`,
+      { titulo: 'Eliminar evidencia', confirmar: 'Eliminar evidencia' },
+    )) return;
 
     try {
       await evidenceService.delete(evidenciaId);
@@ -141,7 +149,10 @@ export default function EvidenceManagement() {
 
   const handleDeleteAnotacion = async (anotacionId: number) => {
     if (isClosed) return;
-    if (!await confirmarAccion('¿Eliminar esta observación?')) return;
+    if (!await confirmarAccion(
+      '¿Eliminar esta observación? Esta acción no se puede deshacer.',
+      { titulo: 'Eliminar observación', confirmar: 'Eliminar observación' },
+    )) return;
 
     try {
       await evidenceService.deleteAnotacion(anotacionId);
@@ -173,6 +184,23 @@ export default function EvidenceManagement() {
     if (tipo.includes('pdf')) return <FileText className="w-8 h-8 text-red-500" />;
     return <File className="w-8 h-8 text-ink-muted" />;
   };
+
+  if (noExiste) {
+    return (
+      <div className="space-y-5">
+        <EncabezadoPagina titulo="Intervención no encontrada">
+          <button
+            onClick={() => navigate(-1)}
+            className="h-10 px-3.5 inline-flex items-center gap-2 text-sm font-medium text-ink-soft border border-line-strong rounded-[10px] bg-white hover:border-ink-faint"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Volver
+          </button>
+        </EncabezadoPagina>
+        <AvisoError mensaje="La intervención solicitada no existe." instruccion="Vuelve a la lista de alertas y elige una intervención válida." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">

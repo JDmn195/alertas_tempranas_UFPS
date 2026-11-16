@@ -1,10 +1,19 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { Navigate, useLocation } from 'react-router';
 import { type ResultadoSesion, rutaInicio, sesionVerificada, verificarSesion } from '../../services/session';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   allowedRoles?: string[];
+}
+
+// El control de acceso no cambia: solo se añade el aviso antes de la misma redirección a /dashboard.
+function AccesoDenegado() {
+  useEffect(() => {
+    toast.error('No tienes acceso a esta sección', { id: 'acceso-denegado' });
+  }, []);
+  return <Navigate to="/dashboard" replace />;
 }
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
@@ -65,8 +74,8 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
           />
         );
       }
-      // Si ningún rol está permitido, redirigir al dashboard principal del usuario
-      return <Navigate to="/dashboard" replace />;
+      // Si ningún rol está permitido, redirigir al dashboard principal del usuario con un aviso (SDAT-346)
+      return <AccesoDenegado />;
     }
   }
 

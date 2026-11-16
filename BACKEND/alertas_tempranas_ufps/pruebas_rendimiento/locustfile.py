@@ -77,7 +77,10 @@ class UsuarioSAT(HttpUser):
         self.get(f'{ACADEMICO}/students/{codigo}/intervenciones/', 'ficha: intervenciones')
 
     def ver_alertas(self, estado='activa', tipo='all'):
-        resp = self.get(f'{ALERTAS}/?estado={estado}&tipo_regla={tipo}', 'alertas: listado')
+        # Igual que AlertManagement.tsx: página 1 de 20, con nivel de alerta 'all' (SDAT-349)
+        pagina = random.choice([1, 1, 1, 2, 3])
+        resp = self.get(f'{ALERTAS}/?estado={estado}&tipo_regla={tipo}&nivel=all&page={pagina}&page_size=20',
+                        'alertas: listado')
         if resp.ok:
             self.estudiantes = codigos_estudiantes(resp.json()) or self.estudiantes
         return resp
@@ -204,8 +207,8 @@ class Administrador(UsuarioSAT):
 
     @task(1)
     def bitacoras(self):
-        self.get(f'{ACADEMICO}/bitacora/', 'admin: bitácora importaciones')
-        self.get('/api/usuarios/auditoria/', 'admin: auditoría')
+        self.get(f'{ACADEMICO}/bitacora/?page=1&page_size=20', 'admin: bitácora importaciones')
+        self.get('/api/usuarios/auditoria/?page=1&page_size=25', 'admin: auditoría')
 
     @task(1)
     def reglas_y_procesos(self):

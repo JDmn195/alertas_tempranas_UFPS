@@ -211,8 +211,10 @@ class AnotacionesYResultadoTests(BaseAlertas):
     """SDAT-332: anotaciones con tipos inválidos y longitud del resumen final."""
 
     def _post(self, nombre_url, kwargs, cuerpo):
+        # SDAT-349: el director solo consulta; quien escribe es un administrador
+        admin, _ = Usuario.objects.get_or_create(correo='admin349@ufps.edu.co', defaults={'nombre': 'Admin', 'rol': 'ADMINISTRADOR'})
         return self.client.post(reverse(nombre_url, kwargs=kwargs), data=json.dumps(cuerpo),
-                                content_type='application/json', **_auth(self.director))
+                                content_type='application/json', **_auth(admin))
 
     def test_anotacion_valida_se_guarda(self):
         resp = self._post('gestionar-anotaciones', {'intervencion_id': self.interv_propia.id},

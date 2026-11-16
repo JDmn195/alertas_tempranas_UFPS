@@ -1,7 +1,7 @@
 import { toast } from 'sonner';
 import { confirmarAccion } from '../components/Confirmacion';
 import { Link } from 'react-router';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Settings, X, Trash2, AlertTriangle, Play, CheckCircle, CalendarX } from 'lucide-react';
 import { CintaIndicadores, EncabezadoPagina, Seccion } from '../components/Panel';
 import { Button } from '../components/ui/Button';
@@ -28,9 +28,11 @@ export default function RiskRules() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [errorModal, setErrorModal] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
+  const guardandoRef = useRef(false);
   const [evaluandoCortes, setEvaluandoCortes] = useState(false);
   const [evaluacionOk, setEvaluacionOk] = useState(false);
   const [errorInasistencia, setErrorInasistencia] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
 
   // Obtener usuario de la sesión real (localStorage)
   const getSessionUser = () => {
@@ -74,6 +76,7 @@ export default function RiskRules() {
     }
     try {
       await ruleService.updateRule(rule.id, { activo: !rule.activo });
+      toast.success(rule.activo ? 'Regla desactivada' : 'Regla activada');
       loadRules();
     } catch (error) {
       toast.error('Error al cambiar estado de la regla');
@@ -81,13 +84,18 @@ export default function RiskRules() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!await confirmarAccion('¿Estás seguro de eliminar esta regla?')) return;
+    const regla = rules.find(r => r.id === id);
+    if (!await confirmarAccion(
+      `¿Eliminar la regla «${regla?.nombre ?? 'seleccionada'}»? Esta acción no se puede deshacer.`,
+      { titulo: 'Eliminar regla', confirmar: 'Eliminar regla' },
+    )) return;
     if (!usuarioId) {
       toast.error('Debes iniciar sesión para realizar esta acción');
       return;
     }
     try {
       await ruleService.deleteRule(id);
+      toast.success('Regla eliminada');
       loadRules();
     } catch (error: any) {
       const msg = error.message || '';
@@ -109,6 +117,7 @@ export default function RiskRules() {
         valor_umbral: rule.valor_umbral,
         parametros: rule.parametros,
       });
+      toast.success('Umbral actualizado');
       loadRules();
     } catch (error: any) {
       toast.error(error.message || 'Error al actualizar el umbral');
@@ -145,21 +154,28 @@ export default function RiskRules() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (guardandoRef.current) return;
     if (!usuarioId) {
       toast.error('Debes iniciar sesión para realizar esta acción');
       return;
     }
+    guardandoRef.current = true;
+    setGuardando(true);
     try {
       if (editingId) {
         await ruleService.updateRule(editingId, formData);
       } else {
         await ruleService.createRule(formData);
       }
+      toast.success(editingId ? 'Regla actualizada' : 'Regla creada');
       setShowModal(false);
       resetForm();
       loadRules();
     } catch (error: any) {
       toast.error(error.message || 'Error al guardar la regla');
+    } finally {
+      guardandoRef.current = false;
+      setGuardando(false);
     }
   };
 
@@ -461,7 +477,7 @@ export default function RiskRules() {
                     value={formData.nombre}
                     onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                     className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary"
-                    placeholder="e.g., Bajo Promedio - Crítico"
+                    placeholder="Ej.: Bajo promedio - Crítico"
                   />
                 </div>
 
@@ -512,10 +528,10 @@ export default function RiskRules() {
                     type="number"
                     step="0.01"
                     required
-                    value={formData.valor_umbral}
+                    value={Number.isNaN(formData.valor_umbral) ? '' : formData.valor_umbral}
                     onChange={(e) => setFormData({ ...formData, valor_umbral: parseFloat(e.target.value) })}
                     className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary"
-                    placeholder="e.g., 3.0"
+                    placeholder="Ej.: 3.0"
                   />
                   {formData.tipo === 'INASISTENCIA' && (
                     <p className="text-xs text-gray-500 mt-1">Porcentaje entre 0 y 100.</p>
@@ -533,7 +549,7 @@ export default function RiskRules() {
                       min="1"
                       max="50"
                       required
-                      value={formData.parametros?.min_clases ?? ''}
+                      value={Number.isNaN(formData.parametros?.min_clases) ? '' : (formData.parametros?.min_clases ?? '')}
                       onChange={(e) => setFormData({
                         ...formData,
                         parametros: { ...(formData.parametros || {}), min_clases: parseInt(e.target.value, 10) },
@@ -587,8 +603,8 @@ export default function RiskRules() {
                 <Button variant="secondary" type="button" onClick={() => setShowModal(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit">
-                  {editingId ? 'Actualizar Regla' : 'Guardar Regla'}
+                <Button type="submit" disabled={guardando}>
+                  {guardando ? 'Guardando...' : editingId ? 'Actualizar Regla' : 'Guardar Regla'}
                 </Button>
               </div>
             </form>
@@ -655,7 +671,7 @@ function UmbralInline({ rule, onSave }: { rule: Rule; onSave: (r: Rule) => void 
         step="0.1"
         min="0"
         max="5"
-        value={val}
+        value={Number.isNaN(val) ? '' : val}
         autoFocus
         onChange={(e) => setVal(parseFloat(e.target.value))}
         className="w-16 text-sm border border-amber-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-amber-400"

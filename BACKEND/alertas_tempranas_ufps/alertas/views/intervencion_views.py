@@ -4,7 +4,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from alertas.models import Alerta, Intervencion
-from alertas.permisos import denegar_acceso_alerta, puede_acceder_alerta
+from alertas.permisos import (
+    denegar_acceso_alerta, denegar_acceso_intervencion, filtrar_intervenciones_visibles,
+    puede_acceder_alerta, puede_ver_intervencion,
+)
 from usuarios.decorators import requiere_rol
 from usuarios.utils import fecha_local, registrar_auditoria
 
@@ -56,7 +59,7 @@ def recalcular_estado_alerta(alerta):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR'])  # SDAT-349: el DIRECTOR solo consulta
 def registrar_intervencion(request, alerta_id):
     """
     POST /api/alertas/<alerta_id>/intervenciones/
@@ -165,7 +168,9 @@ def listar_intervenciones(request, alerta_id):
     if not puede_acceder_alerta(request.usuario, alerta):
         return denegar_acceso_alerta()
 
-    intervenciones = Intervencion.objects.filter(alerta=alerta).order_by('-fecha')
+    intervenciones = filtrar_intervenciones_visibles(
+        request.usuario, Intervencion.objects.filter(alerta=alerta)
+    ).order_by('-fecha')
 
     results = []
     for i in intervenciones:
@@ -207,6 +212,8 @@ def gestionar_anotaciones(request, intervencion_id):
         return denegar_acceso_alerta()
 
     if request.method == "GET":
+        if not puede_ver_intervencion(request.usuario, intervencion):
+            return denegar_acceso_intervencion(request.usuario, intervencion)
         anotaciones = AnotacionIntervencion.objects.filter(intervencion=intervencion).order_by('-fecha')
         results = []
         for a in anotaciones:
@@ -270,7 +277,7 @@ def eliminar_anotacion(request, anotacion_id):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR'])  # SDAT-349: el DIRECTOR solo consulta
 def concluir_intervencion(request, intervencion_id):
     """
     POST /api/alertas/intervenciones/<id>/concluir/

@@ -61,7 +61,7 @@ function EstructuraPortal({ nombre, contenido, pathname }: { nombre?: string; co
         <div className="mx-auto max-w-6xl h-16 px-4 sm:px-6 flex items-center justify-between gap-4">
           <Link to="/dashboard/portal" className="flex items-center gap-3 min-w-0 rounded-[10px]">
             <img src="/logo-ufps.svg" alt="Universidad Francisco de Paula Santander" className="h-9 w-auto shrink-0" />
-            <span className="hidden xl:block border-l border-line-strong pl-3 text-sm font-semibold text-ink leading-tight whitespace-nowrap">Mi seguimiento académico</span>
+            <span className="hidden 2xl:block border-l border-line-strong pl-3 text-sm font-semibold text-ink leading-tight whitespace-nowrap">Mi seguimiento académico</span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-1" aria-label="Secciones del portal">
@@ -107,7 +107,7 @@ function EstructuraPortal({ nombre, contenido, pathname }: { nombre?: string; co
       </main>
 
       {/* Teléfono: las cuatro secciones quedan al alcance del pulgar */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-white border-t border-line grid grid-cols-4 pb-[env(safe-area-inset-bottom)]" aria-label="Secciones del portal">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-white border-t border-line grid grid-cols-5 pb-[env(safe-area-inset-bottom)]" aria-label="Secciones del portal">
         {items.map((item) => {
           const Icon = item.icon;
           const activo = estaActivo(item, pathname);
@@ -121,7 +121,7 @@ function EstructuraPortal({ nombre, contenido, pathname }: { nombre?: string; co
               <span className={`flex items-center justify-center w-12 h-7 rounded-full ${activo ? 'bg-primary-tint' : ''}`}>
                 <Icon className="w-[18px] h-[18px]" aria-hidden="true" />
               </span>
-              <span className="max-w-full truncate">{item.label.replace(/^Mis? /, '').replace(/^./, (c) => c.toUpperCase()).replace('Acompañamiento', 'Apoyo')}</span>
+              <span className="max-w-full truncate">{item.label.replace(/^Mis? /, '').replace(/^./, (c) => c.toUpperCase()).replace('Acompañamiento', 'Apoyo').replace('¿Cómo funciona?', 'Ayuda')}</span>
             </Link>
           );
         })}

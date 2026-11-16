@@ -6,8 +6,7 @@ from django.db.models import Q, Count, Avg, Subquery, OuterRef
 
 from academico.busqueda import filtrar_sin_tildes, normalizar_texto
 from academico.models import Curso, Nota, Periodo, Estudiante
-from alertas.riesgo_actual import ultimo_riesgo_por_estudiante
-from alertas.models import RiesgoEstudiante, RiesgoEstudiantePeriodo, Alerta, Regla
+from alertas.models import alertas_abiertas, RiesgoEstudiante, RiesgoEstudiantePeriodo, Alerta, Regla
 from usuarios.decorators import requiere_rol
 from academico.asistencia import numero_o_none, obtener_umbral_general, umbral_efectivo
 
@@ -416,6 +415,39 @@ def detalle_curso(request, curso_id):
 
 # ─── Vista KPIs globales para el Director ─────────────────────────────────────
 
+def _filtros_director(request):
+    """SDAT-349: lee `periodo` (AAAA-S) y `semestre`; devuelve (Periodo|None, int|None, error|None)."""
+    periodo_obj = semestre = None
+    texto = request.GET.get('periodo', '').strip()
+    if texto and texto != 'todos':
+        try:
+            anio, sem = texto.split('-')
+            periodo_obj = Periodo.objects.filter(anio=int(anio), semestre=int(sem)).first()
+        except ValueError:
+            periodo_obj = None
+        if periodo_obj is None:
+            return None, None, 'Periodo no válido. Use el formato AAAA-S, por ejemplo 2026-2.'
+    texto = request.GET.get('semestre', '').strip()
+    if texto and texto != 'todos':
+        try:
+            semestre = int(texto)
+        except ValueError:
+            return None, None, 'Semestre no válido.'
+    return periodo_obj, semestre, None
+
+
+def _ids_estudiantes_filtro(periodo_obj, semestre):
+    """Códigos de los estudiantes del semestre pedido y/o con notas o riesgo en el periodo pedido."""
+    estudiantes = Estudiante.objects.all()
+    if semestre is not None:
+        estudiantes = estudiantes.filter(semestre=semestre)
+    if periodo_obj is not None:
+        con_notas = Nota.objects.filter(periodo=periodo_obj).values('estudiante_id')
+        con_riesgo = RiesgoEstudiantePeriodo.objects.filter(periodo=periodo_obj).values('estudiante_id')
+        estudiantes = estudiantes.filter(Q(pk__in=con_notas) | Q(pk__in=con_riesgo))
+    return set(estudiantes.values_list('pk', flat=True))
+
+
 @csrf_exempt
 @require_GET
 @requiere_rol(['ADMINISTRADOR', 'DIRECTOR'])
@@ -425,26 +457,49 @@ def director_indicadores(request):
 
     Retorna los KPIs globales del panel estratégico del director.
     Optimizado: usa aggregations SQL en lugar de loops Python (N+1 → O(1) queries).
+
+    SDAT-349: filtros opcionales `periodo` (AAAA-S) y `semestre` (número del estudiante).
     """
     from collections import defaultdict
 
     try:
+        periodo_obj, semestre_filtro, error_filtro = _filtros_director(request)
+        if error_filtro:
+            return JsonResponse({'error': error_filtro}, status=400)
+        filtrando = periodo_obj is not None or semestre_filtro is not None
+        ids_filtro = _ids_estudiantes_filtro(periodo_obj, semestre_filtro) if filtrando else None
+
+        def acotar(qs, campo='estudiante_id'):
+            return qs.filter(**{f'{campo}__in': ids_filtro}) if filtrando else qs
+
+        def riesgo_por_periodo():
+            """Riesgo por estudiante: el del periodo pedido o, sin periodo, el más reciente."""
+            qs = RiesgoEstudiantePeriodo.objects.all()
+            if periodo_obj is not None:
+                return acotar(qs.filter(periodo=periodo_obj))
+            sq = (RiesgoEstudiantePeriodo.objects.filter(estudiante_id=OuterRef('estudiante_id'))
+                  .order_by('-periodo__anio', '-periodo__semestre').values('id')[:1])
+            return acotar(qs.filter(id=Subquery(sq)))
+
         # ── KPI 1: Total estudiantes activos ─────────────────────────────────
-        total_activos = Estudiante.objects.exclude(
+        total_activos = acotar(Estudiante.objects.exclude(
             Q(estado_matricula__icontains='retirado') |
             Q(estado_matricula__icontains='graduado') |
             Q(estado_matricula__icontains='cancelado')
-        ).count()
+        ), 'pk').count()
 
         # ── KPI 2: Porcentaje en riesgo ───────────────────────────────────────
         # Combina ambas fuentes igual que la distribución por semestre.
-        # SDAT-303: último riesgo de cada estudiante en una sola lectura (antes 3 subconsultas correlacionadas)
-        riesgo_ultimo = ultimo_riesgo_por_estudiante()
         # Estudiantes con RiesgoEstudiantePeriodo en riesgo
-        ids_en_riesgo_con_periodo = {est for est, nivel in riesgo_ultimo.items() if nivel in ('high', 'medium')}
+        ids_en_riesgo_con_periodo = set(
+            riesgo_por_periodo()
+            .filter(nivel_riesgo__in=['high', 'medium'])
+            .values_list('estudiante_id', flat=True)
+        )
         # Estudiantes sin RiesgoEstudiantePeriodo pero con snapshot en riesgo
-        ids_en_riesgo_sin_periodo = set(
-            RiesgoEstudiante.objects
+        # (con un periodo elegido no se usa el snapshot: no pertenece a ningún periodo)
+        ids_en_riesgo_sin_periodo = set() if periodo_obj is not None else set(
+            acotar(RiesgoEstudiante.objects)
             .exclude(estudiante_id__in=ids_en_riesgo_con_periodo)
             .filter(nivel_riesgo__in=['high', 'medium'])
             .values_list('estudiante_id', flat=True)
@@ -453,14 +508,16 @@ def director_indicadores(request):
         porcentaje_riesgo = round((en_riesgo / total_activos * 100), 2) if total_activos > 0 else 0.0
 
         # ── KPI 3: Total alertas activas ─────────────────────────────────────
-        alertas_activas = Alerta.objects.filter(
-            estado__in=['activa', 'active']
-        ).count()
+        alertas_activas = alertas_abiertas(acotar(Alerta.objects.all())).count()
 
         # ── KPIs 4 + tabla cursos críticos: una sola query agregada ──────────
         # Agrupa todas las notas por curso y calcula reprobados/matriculados en SQL
+        notas_filtradas = Nota.objects.all()
+        if periodo_obj is not None:
+            notas_filtradas = notas_filtradas.filter(periodo=periodo_obj)
+        notas_filtradas = acotar(notas_filtradas)
         stats_por_curso = (
-            Nota.objects
+            notas_filtradas
             .values('curso_id', 'curso__materia__nombre', 'curso__cantidad_matriculados')
             .annotate(
                 total_notas=Count('id'),
@@ -490,47 +547,41 @@ def director_indicadores(request):
         cursos_criticos_list.sort(key=lambda x: x['failureRate'], reverse=True)
 
         # ── Distribución de riesgo por semestre ──────────────────────────────
-        # Fuente 1: estudiantes CON historial de notas → usar el nivel del
-        # RiesgoEstudiantePeriodo más reciente (más preciso).
-        # Fuente 2: estudiantes SIN notas → usar RiesgoEstudiante (snapshot).
-        # Combinamos ambas para no dejar fuera a los estudiantes recién importados.
-
-        # Estudiantes con RiesgoEstudiantePeriodo
-        estudiantes_con_periodo = set(riesgo_ultimo)
-
-        dist_map = defaultdict(lambda: {'low': 0, 'medium': 0, 'high': 0})
-
-        # Fuente 1: nivel del periodo más reciente
-        semestre_de = dict(Estudiante.objects.values_list('codigo', 'semestre'))
-        for est_id, nivel in riesgo_ultimo.items():
-            if nivel in ('low', 'medium', 'high') and est_id in semestre_de:
-                dist_map[semestre_de[est_id]][nivel] += 1
-
-        # Fuente 2: snapshot de estudiantes sin RiesgoEstudiantePeriodo
-        dist_snapshot = (
-            RiesgoEstudiante.objects
-            .exclude(estudiante_id__in=estudiantes_con_periodo)
-            .filter(nivel_riesgo__in=['low', 'medium', 'high'])
-            .values('nivel_riesgo', 'estudiante__semestre')
-            .annotate(total=Count('id'))
+        # Nivel del RiesgoEstudiantePeriodo más reciente (o el del periodo pedido); sin periodo
+        # pedido, si no hay, el snapshot RiesgoEstudiante. Quien no tiene ninguno cuenta como
+        # «sin dato», de modo que las barras suman los estudiantes activos. El eje cubre del 1 al 10.
+        nivel_por_estudiante = {}
+        if periodo_obj is None:
+            nivel_por_estudiante.update(
+                acotar(RiesgoEstudiante.objects).values_list('estudiante_id', 'nivel_riesgo')
+            )
+        nivel_por_estudiante.update(
+            riesgo_por_periodo().values_list('estudiante_id', 'nivel_riesgo')
         )
-        for row in dist_snapshot:
-            sem = row['estudiante__semestre']
-            dist_map[sem][row['nivel_riesgo']] += row['total']
 
+        activos = acotar(Estudiante.objects.exclude(
+            Q(estado_matricula__icontains='retirado') |
+            Q(estado_matricula__icontains='graduado') |
+            Q(estado_matricula__icontains='cancelado')
+        ), 'pk').values_list('pk', 'semestre')
+        dist_map = defaultdict(lambda: {'low': 0, 'medium': 0, 'high': 0, 'sin_dato': 0})
+        for est_id, sem in activos:
+            nivel = nivel_por_estudiante.get(est_id)
+            dist_map[sem][nivel if nivel in ('low', 'medium', 'high') else 'sin_dato'] += 1
+
+        semestres = sorted(
+            set(range(1, 11)) | {s for s in dist_map if s is not None}
+        )
+        if semestre_filtro is not None:
+            semestres = [semestre_filtro]
         distribucion_riesgo = [
-            {
-                'semester': f'Sem {sem}',
-                'low': counts['low'],
-                'medium': counts['medium'],
-                'high': counts['high'],
-            }
-            for sem, counts in sorted(dist_map.items())
+            {'semester': f'Sem {sem}', **dist_map[sem]}
+            for sem in semestres
         ]
 
         # ── Tendencia GPA por periodo: una query agregada ─────────────────────
         tendencia_raw = (
-            Nota.objects
+            acotar(Nota.objects.all())
             .exclude(definitiva__isnull=True)
             .values('periodo__anio', 'periodo__semestre')
             .annotate(gpa=Avg('definitiva'))
@@ -553,6 +604,11 @@ def director_indicadores(request):
             'distribucion_riesgo': distribucion_riesgo,
             'tendencia_gpa': tendencia_gpa,
             'cursos_criticos': cursos_criticos_list,
+            'filtros': {
+                'periodos': [f'{p.anio}-{p.semestre}' for p in Periodo.objects.order_by('-anio', '-semestre')],
+                'semestres': sorted(set(Estudiante.objects.exclude(semestre__isnull=True)
+                                        .values_list('semestre', flat=True))),
+            },
         })
 
     except Exception:

@@ -128,8 +128,9 @@ export default function AttendanceModal({ curso, onClose }: AttendanceModalProps
         throw new Error(json.mensaje || json.error || 'Error al guardar');
       }
       
-      toast.success(`Asistencia guardada: ${json.creados} nuevos, ${json.actualizados} actualizados.`);
-      fetchAttendance(); // Refresca "ya_registrada" y las fechas registradas
+      const [anio, mes, dia] = String(selectedDate).split('-');
+      toast.success(`Asistencia del ${dia}/${mes}/${anio} guardada: ${json.creados} nuevos, ${json.actualizados} actualizados.`);
+      onClose();
     } catch (err: any) {
       toast.error(err.message);
     } finally {
