@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 
 import { CargandoBloque } from '../components/Estados';
 import { EncabezadoPagina } from '../components/Panel';
+import { etiquetaEstadoAlerta } from '../../services/etiquetas';
 const baseUrl = API_BASE_URL;
 
 type EstadoSolicitud = 'PENDIENTE' | 'EN_ATENCION' | 'ATENDIDA' | 'CANCELADA';
@@ -183,7 +184,7 @@ export default function SolicitudesAcompanamiento() {
             </div>
             <p className="text-sm text-gray-700 mt-3 whitespace-pre-line">{s.descripcion}</p>
             <div className="text-xs text-gray-500 mt-2 space-y-0.5">
-              {s.alerta && <p>Alerta relacionada: {s.alerta.tipo} (ID {s.alerta.id}, {s.alerta.estado})</p>}
+              {s.alerta && <p>Alerta relacionada: {s.alerta.tipo} (ID {s.alerta.id}, {etiquetaEstadoAlerta(s.alerta.estado)})</p>}
               {s.estudiante.correo && <p>Correo: {s.estudiante.correo}</p>}
               {s.responsable && <p>Responsable: {s.responsable.nombre}</p>}
             </div>

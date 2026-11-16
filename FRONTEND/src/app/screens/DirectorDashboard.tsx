@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import { Link } from 'react-router';
 import { EncabezadoPagina } from '../components/Panel';
 import { Button } from '../components/ui/Button';
@@ -89,6 +90,7 @@ export default function DirectorDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false); // 5.1
+  const [actualizado, setActualizado] = useState<string | null>(null);
   // SDAT-349: filtros por periodo (AAAA-S) y semestre del estudiante
   const [periodo, setPeriodo] = useState('todos');
   const [semestre, setSemestre] = useState('todos');
@@ -109,6 +111,9 @@ export default function DirectorDashboard() {
       const json: DashboardData = await res.json();
       setData(json);
       if (json.filtros) setOpciones(json.filtros);
+      const hora = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false });
+      setActualizado(hora);
+      if (isRefresh) toast.success(`Actualizado a las ${hora}`);
     } catch (err) {
       console.error('Error al cargar indicadores del director:', err);
       setError(true);
@@ -151,6 +156,7 @@ export default function DirectorDashboard() {
           <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
           {refreshing ? 'Actualizando...' : 'Actualizar datos'}
         </Button>
+        {actualizado && <span className="text-xs text-ink-muted self-center" role="status">Actualizado a las {actualizado}</span>}
       </EncabezadoPagina>
 
       {/* SDAT-349: filtros del panel */}

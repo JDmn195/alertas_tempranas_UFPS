@@ -31,6 +31,7 @@ export default function RiskRules() {
   const [evaluandoCortes, setEvaluandoCortes] = useState(false);
   const [evaluacionOk, setEvaluacionOk] = useState(false);
   const [errorInasistencia, setErrorInasistencia] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
 
   // Obtener usuario de la sesión real (localStorage)
   const getSessionUser = () => {
@@ -74,6 +75,7 @@ export default function RiskRules() {
     }
     try {
       await ruleService.updateRule(rule.id, { activo: !rule.activo });
+      toast.success(rule.activo ? 'Regla desactivada' : 'Regla activada');
       loadRules();
     } catch (error) {
       toast.error('Error al cambiar estado de la regla');
@@ -81,13 +83,18 @@ export default function RiskRules() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!await confirmarAccion('¿Estás seguro de eliminar esta regla?')) return;
+    const regla = rules.find(r => r.id === id);
+    if (!await confirmarAccion(
+      `¿Eliminar la regla «${regla?.nombre ?? 'seleccionada'}»? Esta acción no se puede deshacer.`,
+      { titulo: 'Eliminar regla', confirmar: 'Eliminar regla' },
+    )) return;
     if (!usuarioId) {
       toast.error('Debes iniciar sesión para realizar esta acción');
       return;
     }
     try {
       await ruleService.deleteRule(id);
+      toast.success('Regla eliminada');
       loadRules();
     } catch (error: any) {
       const msg = error.message || '';
@@ -109,6 +116,7 @@ export default function RiskRules() {
         valor_umbral: rule.valor_umbral,
         parametros: rule.parametros,
       });
+      toast.success('Umbral actualizado');
       loadRules();
     } catch (error: any) {
       toast.error(error.message || 'Error al actualizar el umbral');
@@ -149,17 +157,22 @@ export default function RiskRules() {
       toast.error('Debes iniciar sesión para realizar esta acción');
       return;
     }
+    if (guardando) return;
+    setGuardando(true);
     try {
       if (editingId) {
         await ruleService.updateRule(editingId, formData);
       } else {
         await ruleService.createRule(formData);
       }
+      toast.success(editingId ? 'Regla actualizada' : 'Regla creada');
       setShowModal(false);
       resetForm();
       loadRules();
     } catch (error: any) {
       toast.error(error.message || 'Error al guardar la regla');
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -461,7 +474,7 @@ export default function RiskRules() {
                     value={formData.nombre}
                     onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                     className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary"
-                    placeholder="e.g., Bajo Promedio - Crítico"
+                    placeholder="Ej.: Bajo promedio - Crítico"
                   />
                 </div>
 
@@ -515,7 +528,7 @@ export default function RiskRules() {
                     value={Number.isNaN(formData.valor_umbral) ? '' : formData.valor_umbral}
                     onChange={(e) => setFormData({ ...formData, valor_umbral: parseFloat(e.target.value) })}
                     className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary"
-                    placeholder="e.g., 3.0"
+                    placeholder="Ej.: 3.0"
                   />
                   {formData.tipo === 'INASISTENCIA' && (
                     <p className="text-xs text-gray-500 mt-1">Porcentaje entre 0 y 100.</p>
@@ -587,8 +600,8 @@ export default function RiskRules() {
                 <Button variant="secondary" type="button" onClick={() => setShowModal(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit">
-                  {editingId ? 'Actualizar Regla' : 'Guardar Regla'}
+                <Button type="submit" disabled={guardando}>
+                  {guardando ? 'Guardando...' : editingId ? 'Actualizar Regla' : 'Guardar Regla'}
                 </Button>
               </div>
             </form>

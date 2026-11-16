@@ -16,6 +16,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 
 const baseUrl = API_BASE_URL;
 
+// SDAT-346: el portal le habla al estudiante; solo cambia el texto mostrado, no la regla ni su valor almacenado.
+const NOMBRE_REGLA_PORTAL: Record<string, string> = {
+  'Promedio Crítico': 'Promedio acumulado crítico',
+  'Promedio Bajo': 'Promedio acumulado menor que 3.0',
+  'Promedio En Riesgo': 'Promedio acumulado en riesgo',
+  'Múltiples Reprobadas Crítico': 'Cuatro o más materias perdidas',
+  'Reprobadas Moderado': 'Dos o más materias perdidas',
+  'Una Reprobada': 'Una materia perdida',
+  'Atraso Severo': 'Atraso severo en tu plan de estudios',
+  'Atraso Moderado': 'Atraso moderado en tu plan de estudios',
+  'Atraso Leve': 'Atraso leve en tu plan de estudios',
+  'Dos cortes perdidos: no tiene asegurado aprobar': 'Perdiste dos cortes: aún no tienes asegurada la materia',
+  'Posible pérdida de la materia: evaluar cancelación': 'Posible pérdida de la materia: consulta si te conviene cancelarla',
+  'Caída de rendimiento en el segundo corte': 'Bajó tu rendimiento en el segundo corte',
+  'Necesita X en el examen final para aprobar': 'Necesitas una nota alta en el examen final para aprobar',
+  'Materia perdida: aunque saque 5.0 en el examen no alcanza': 'Materia perdida: aunque saques 5.0 en el examen final no alcanzas a aprobar',
+};
+const nombreRegla = (nombre: string) => NOMBRE_REGLA_PORTAL[nombre] ?? nombre;
+
 type Nivel = 'high' | 'medium' | 'low';
 
 interface Causa {
@@ -387,7 +406,7 @@ function Causas({ causas: todasLasCausas, nivel, fechaCalculo }: { causas: Causa
           {causas.map((causa, i) => (
             <li key={`${causa.regla}-${i}`} className={`border border-line rounded-[10px] p-4 border-l-4 transition-shadow duration-150 hover:shadow-md ${causa.nivel === 'high' ? 'border-l-primary' : causa.nivel === 'medium' ? 'border-l-amber-400' : 'border-l-emerald-400'}`}>
               <div className="flex items-center justify-between gap-3">
-                <p className="font-medium text-gray-900">{causa.regla}</p>
+                <p className="font-medium text-gray-900">{nombreRegla(causa.regla)}</p>
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${ESTILO_NIVEL[causa.nivel]?.tarjeta ?? ''} ${ESTILO_NIVEL[causa.nivel]?.texto ?? ''}`}>
                   Riesgo {causa.nivel === 'high' ? 'alto' : causa.nivel === 'medium' ? 'medio' : 'bajo'}
                 </span>
@@ -785,7 +804,7 @@ function ModalAlerta({ alertaId, onCerrar }: { alertaId: number | null; onCerrar
         <CabeceraModal
           icono={cerrada ? CheckCircle2 : AlertTriangle}
           tono={cerrada ? 'bg-green-50 text-green-700' : TONO_SEVERIDAD[detalle.severidad] ?? 'bg-gray-100 text-gray-600'}
-          titulo={detalle.tipo}
+          titulo={nombreRegla(detalle.tipo)}
           descripcion={detalle.resumen}
         >
           <InsigniaSeveridad alerta={detalle} />
@@ -932,7 +951,7 @@ function MisAlertas() {
               className="group w-full text-left px-4 py-3.5 flex items-center gap-3 transition-colors duration-150 hover:bg-paper focus:outline-none focus-visible:bg-paper focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
             >
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-gray-900 truncate">{alerta.tipo}</p>
+                <p className="font-medium text-gray-900 truncate">{nombreRegla(alerta.tipo)}</p>
                 <p className="text-xs text-gray-500 truncate">
                   {alerta.resumen} · {fecha(alerta.fecha_generacion)}
                 </p>
@@ -1009,7 +1028,7 @@ const INSIGNIA_ESTADO_INTERVENCION: Record<EstadoIntervencion, string> = {
 };
 
 const alertaTexto = (alerta: IntervencionPortal['alerta']) =>
-  alerta.materia ? `${alerta.tipo} · ${alerta.materia}` : alerta.tipo;
+  alerta.materia ? `${nombreRegla(alerta.tipo)} · ${alerta.materia}` : nombreRegla(alerta.tipo);
 
 function InsigniaEstadoIntervencion({ intervencion }: { intervencion: IntervencionPortal }) {
   return (
@@ -1465,7 +1484,7 @@ function SolicitarAcompanamiento() {
                 aria-invalid={!!errores.alerta} aria-describedby="ayuda-alerta">
                 <option value="">Ninguna</option>
                 {alertas.map((a) => (
-                  <option key={a.id} value={a.id}>{a.materia ? `${a.tipo} · ${a.materia}` : a.tipo}</option>
+                  <option key={a.id} value={a.id}>{a.materia ? `${nombreRegla(a.tipo)} · ${a.materia}` : nombreRegla(a.tipo)}</option>
                 ))}
               </select>
               <span id="ayuda-alerta" className={`block text-xs mt-1.5 ${errores.alerta ? 'text-red-700 font-medium' : 'text-ink-muted'}`}>
@@ -1487,7 +1506,7 @@ function SolicitarAcompanamiento() {
                 <span className={errores.descripcion ? 'text-red-700 font-medium' : 'text-ink-muted'}>
                   {errores.descripcion || (progreso >= 100 ? 'Listo, ya puedes enviarla.' : 'Cuéntanos qué pasa y cómo podemos ayudarte.')}
                 </span>
-                <span className="text-ink-muted tabular-nums shrink-0">{escritos} / mínimo {minimo}</span>
+                <span className="text-ink-muted tabular-nums shrink-0">{escritos} / 2000 (mínimo {minimo})</span>
               </span>
             </span>
           </label>

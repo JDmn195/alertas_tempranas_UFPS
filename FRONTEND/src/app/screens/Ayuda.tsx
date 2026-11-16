@@ -5,6 +5,10 @@ import { API_BASE_URL } from '@/services/config';
 import { apiFetch } from '../../services/apiFetch';
 import { sesionVerificada } from '../../services/session';
 
+const ESTADO_EJECUCION_AYUDA: Record<string, string> = {
+  EN_CURSO: 'en curso', EXITOSA: 'exitosa', PARCIAL: 'parcial', FALLIDA: 'fallida',
+};
+
 type Ejecucion = { estado: string; fecha_inicio: string };
 
 const nombres: Record<string, string> = {
@@ -71,11 +75,11 @@ export default function Ayuda() {
         <h2 id="notas-ayuda" className="text-xl font-semibold">Notas y alertas de corte</h2>
         <p>Definitiva = promedio de los tres cortes × 0,7 + examen final × 0,3. Solo se calcula cuando existen las cuatro notas. Se aprueba desde 3,0.</p>
         <ul className="list-disc space-y-1 pl-5">
-          <li>C1: primer corte menor que 2,0.</li>
-          <li>C2A: segundo corte menor que 3,0 y primero menor que 3,0.</li>
-          <li>C2B: segundo corte menor que 3,0 y primero de 3,0 o más.</li>
-          <li>C3: con tres cortes, necesita más de 4,0 en el examen para aprobar.</li>
-          <li>C4: con tres cortes, necesitaría más de 5,0; tiene prioridad sobre C3.</li>
+          <li>Corte 1: primer corte menor que 2,0.</li>
+          <li>Corte 2, sostenido bajo: segundo corte menor que 3,0 y primero menor que 3,0.</li>
+          <li>Corte 2, caída de rendimiento: segundo corte menor que 3,0 y primero de 3,0 o más.</li>
+          <li>Nota necesaria alta: con tres cortes, necesita más de 4,0 en el examen para aprobar.</li>
+          <li>Materia perdida: con tres cortes, necesitaría más de 5,0; tiene prioridad sobre la nota necesaria alta.</li>
         </ul>
         <p>Nota necesaria en el examen = (3,0 − promedio de cortes × 0,7) ÷ 0,3.</p>
       </section>}
@@ -86,12 +90,11 @@ export default function Ayuda() {
         <p role="status">
           {estadoConsulta === 'cargando' ? 'Consultando última revaluación…' : estadoConsulta === 'error'
             ? 'No se pudo consultar la última revaluación.'
-            : ultima ? `Última revaluación: ${formatearFechaHora(ultima.fecha_inicio)} · ${ultima.estado}.`
+            : ultima ? `Última revaluación: ${formatearFechaHora(ultima.fecha_inicio)} · ${ESTADO_EJECUCION_AYUDA[ultima.estado] ?? ultima.estado}.`
               : 'Todavía no hay revaluaciones registradas.'}
         </p>
       </section>}
 
-      <footer className="pb-6 text-sm text-gray-600">Revisión de esta interfaz: {__REVISION_INTERFAZ__}. Esta revisión identifica la compilación actual; no certifica por sí sola el despliegue del backend.</footer>
     </div>
   );
 }
