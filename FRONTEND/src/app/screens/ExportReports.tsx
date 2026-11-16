@@ -35,10 +35,22 @@ interface ReportConfig {
   data: any[];
 }
 
+// Rango inicial: el semestre calendario en curso (I: ene-jun, II: jul-dic).
+function periodoActual() {
+  const hoy = new Date();
+  const anio = hoy.getFullYear();
+  return hoy.getMonth() < 6
+    ? { desde: `${anio}-01-01`, hasta: `${anio}-06-30` }
+    : { desde: `${anio}-07-01`, hasta: `${anio}-12-31` };
+}
+
 export default function ExportReports() {
   const [selectedReportId, setSelectedReportId] = useState('riesgo-estudiantil');
-  const [dateFrom, setDateFrom] = useState('2026-01-01');
-  const [dateTo, setDateTo] = useState('2026-06-30');
+  const [dateFrom, setDateFrom] = useState(() => periodoActual().desde);
+  const [dateTo, setDateTo] = useState(() => periodoActual().hasta);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportMessage, setExportMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const rangoInvalido = !dateFrom || !dateTo || dateFrom > dateTo;
   const [selectedRisk, setSelectedRisk] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [format, setFormat] = useState<'pdf' | 'excel'>('pdf');
@@ -337,6 +349,11 @@ export default function ExportReports() {
               />
             </div>
           </div>
+          {rangoInvalido && (
+            <p role="alert" className="text-xs text-red-700">
+              Indique ambas fechas y que la fecha desde no sea posterior a la fecha hasta.
+            </p>
+          )}
 
           {/* Nivel de Riesgo */}
           <div className="space-y-1.5">
@@ -387,7 +404,10 @@ export default function ExportReports() {
           </div>
 
           {/* Botón principal */}
-          <Button fullWidth size="lg" className="w-full font-semibold" onClick={async () => {
+          <Button fullWidth size="lg" className="w-full font-semibold" disabled={rangoInvalido || isExporting} onClick={async () => {
+            if (rangoInvalido || isExporting) return;
+            setIsExporting(true);
+            setExportMessage(null);
             const baseUrl = API_BASE_URL;
             const params = new URLSearchParams({
               tipo: selectedReportId,
@@ -403,18 +423,27 @@ export default function ExportReports() {
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
-              a.download = `reporte-${selectedReportId}-${dateFrom}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+              a.download = `reporte-${selectedReportId}-${dateFrom}_${dateTo}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
               document.body.appendChild(a);
               a.click();
               a.remove();
               URL.revokeObjectURL(url);
+              setExportMessage({ ok: true, text: 'Reporte generado y descargado.' });
             } catch (err) {
               console.error('Error al descargar reporte:', err);
+              setExportMessage({ ok: false, text: 'No se pudo generar el reporte. Revise el rango de fechas e intente de nuevo.' });
+            } finally {
+              setIsExporting(false);
             }
           }}>
             <Download className="w-4 h-4 mr-2" />
-            Generar y Descargar
+            {isExporting ? 'Generando...' : 'Generar y Descargar'}
           </Button>
+          {exportMessage && (
+            <p role="status" className={`text-xs ${exportMessage.ok ? 'text-green-700' : 'text-red-700'}`}>
+              {exportMessage.text}
+            </p>
+          )}
         </div>
 
 
@@ -635,6 +664,7 @@ export default function ExportReports() {
               </button>
               <button
                 type="button"
+                disabled={rangoInvalido}
                 onClick={() => {
                   const baseUrl = API_BASE_URL;
                   const params = new URLSearchParams({
