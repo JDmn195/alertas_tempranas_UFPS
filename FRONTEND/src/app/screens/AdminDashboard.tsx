@@ -7,6 +7,9 @@ import { EncabezadoPagina, Seccion } from '../components/Panel';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { apiFetch } from '../../services/apiFetch';
+import { Paginacion } from '../components/Paginacion';
+
+const TAMANO_PAGINA = 20;
 
 
 const ORDEN_CARGA = [
@@ -26,6 +29,10 @@ export default function AdminDashboard() {
   const [responseErrors, setResponseErrors] = useState<any[]>([]);
   const [responseAdvertencias, setResponseAdvertencias] = useState<any[]>([]);
   const [importHistory, setImportHistory] = useState<any[]>([]);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [paginaHist, setPaginaHist] = useState(1);
+  const [paginasHist, setPaginasHist] = useState(1);
+  const [totalHist, setTotalHist] = useState(0);
 
   // ── Migración de RiesgoEstudiantePeriodo ──────────────────────────────────
   const [migrando, setMigrando]         = useState(false);
@@ -36,10 +43,12 @@ export default function AdminDashboard() {
   const fetchHistory = async () => {
     try {
       const baseUrl = API_BASE_URL;
-      const response = await apiFetch(`${baseUrl}/api/academico/bitacora/`);
+      const response = await apiFetch(`${baseUrl}/api/academico/bitacora/?page=${paginaHist}&page_size=${TAMANO_PAGINA}`);
       const result = await response.json();
       if (result.status === 'success') {
         setImportHistory(result.data);
+        setPaginasHist(result.pages || 1);
+        setTotalHist(result.total ?? result.data.length);
       }
     } catch (error) {
       console.error("Error fetching history:", error);
@@ -48,7 +57,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchHistory();
-  }, []);
+  }, [paginaHist]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -62,7 +71,15 @@ export default function AdminDashboard() {
     }
   };
 
+  const cancelPending = () => {
+    setPendingFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const uploadFile = async (file: File) => {
+    if (validationStatus === 'validating') return; // evita el doble envío
+    setPendingFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
     const formData = new FormData();
     formData.append("file", file);
     // El usuario que importa lo identifica el backend por el token
@@ -126,7 +143,7 @@ export default function AdminDashboard() {
     e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      uploadFile(e.dataTransfer.files[0]);
+      setPendingFile(e.dataTransfer.files[0]);
     }
   };
 
@@ -134,7 +151,7 @@ export default function AdminDashboard() {
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     if (e.target.files && e.target.files[0]) {
-      uploadFile(e.target.files[0]);
+      setPendingFile(e.target.files[0]);
     }
   };
 
@@ -297,6 +314,30 @@ export default function AdminDashboard() {
                   </span>
                   <input ref={fileInputRef} type="file" className="hidden" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} />
                 </label>
+                {pendingFile && (
+                  <div className="mt-5 w-full max-w-md border border-line rounded-[10px] bg-paper p-4 text-left">
+                    <p className="text-sm font-medium text-ink break-all">{pendingFile.name}</p>
+                    <p className="text-xs text-ink-muted mt-0.5">
+                      {(pendingFile.size / 1024).toFixed(1)} KB · {pendingFile.name.split('.').pop()?.toUpperCase()}
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => uploadFile(pendingFile)}
+                        className="px-4 py-2 text-sm font-semibold text-white bg-primary rounded-[10px] hover:bg-primary-strong transition-colors"
+                      >
+                        Importar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelPending}
+                        className="px-4 py-2 text-sm font-medium text-ink-muted border border-line-strong rounded-[10px] hover:bg-white transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -457,6 +498,7 @@ export default function AdminDashboard() {
             </tbody>
           </table>
         </div>
+        <Paginacion pagina={paginaHist} paginas={paginasHist} total={totalHist} onCambio={setPaginaHist} />
       </div>
     </div>
   );

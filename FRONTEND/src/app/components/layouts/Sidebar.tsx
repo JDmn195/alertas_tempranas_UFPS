@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router';
 import {
   BookOpen,
@@ -133,19 +133,45 @@ export function Sidebar({ abierto = false, onCerrar = () => {} }: { abierto?: bo
     return acc;
   }, []);
 
+  const asideRef = useRef<HTMLElement>(null);
+  const cerrarRef = useRef<HTMLButtonElement>(null);
+  const onCerrarRef = useRef(onCerrar);
+  onCerrarRef.current = onCerrar;
+
+  // Con el panel abierto: foco dentro, Tab atrapado, Esc cierra y el foco vuelve al botón de apertura.
   useEffect(() => {
     if (!abierto) return;
-    const alPresionar = (e: KeyboardEvent) => e.key === 'Escape' && onCerrar();
+    const apertura = document.activeElement as HTMLElement | null;
+    cerrarRef.current?.focus();
+    const alPresionar = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return onCerrarRef.current();
+      if (e.key !== 'Tab' || !asideRef.current) return;
+      const focales = asideRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled])');
+      if (!focales.length) return;
+      const primero = focales[0];
+      const ultimo = focales[focales.length - 1];
+      if (e.shiftKey && document.activeElement === primero) {
+        e.preventDefault();
+        ultimo.focus();
+      } else if (!e.shiftKey && document.activeElement === ultimo) {
+        e.preventDefault();
+        primero.focus();
+      }
+    };
     window.addEventListener('keydown', alPresionar);
-    return () => window.removeEventListener('keydown', alPresionar);
-  }, [abierto, onCerrar]);
+    return () => {
+      window.removeEventListener('keydown', alPresionar);
+      apertura?.focus();
+    };
+  }, [abierto]);
 
   return (
     <>
       {abierto && <div className="fixed inset-0 z-30 bg-ink/40 lg:hidden" onClick={onCerrar} aria-hidden="true" />}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-[17rem] bg-desk h-dvh flex flex-col transition-transform duration-200 lg:static lg:z-auto lg:w-[15.5rem] lg:translate-x-0 lg:shrink-0 ${
-          abierto ? 'translate-x-0 shadow-[var(--shadow-pop)]' : '-translate-x-full'
+        ref={asideRef}
+        className={`fixed inset-y-0 left-0 z-40 w-[17rem] bg-desk h-dvh flex flex-col transition-transform duration-200 lg:static lg:z-auto lg:w-[15.5rem] lg:translate-x-0 lg:shrink-0 lg:visible ${
+          abierto ? 'translate-x-0 shadow-[var(--shadow-pop)]' : '-translate-x-full invisible'
         }`}
         aria-label="Menú principal"
       >
@@ -158,7 +184,7 @@ export function Sidebar({ abierto = false, onCerrar = () => {} }: { abierto?: bo
               <span className="block text-xs text-ink-muted leading-tight mt-0.5 whitespace-nowrap">Seguimiento académico</span>
             </span>
           </Link>
-          <button onClick={onCerrar} aria-label="Cerrar menú" className="lg:hidden p-2 rounded-[10px] text-ink-muted hover:bg-wash hover:text-ink">
+          <button ref={cerrarRef} onClick={onCerrar} aria-label="Cerrar menú" className="lg:hidden p-2 rounded-[10px] text-ink-muted hover:bg-wash hover:text-ink">
             <X className="w-5 h-5" />
           </button>
         </div>

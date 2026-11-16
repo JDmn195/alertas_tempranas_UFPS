@@ -5,6 +5,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from ..models import NotificacionHistorial, NotificacionInterna
 from usuarios.decorators import requiere_rol
+from alertas_tempranas_ufps.paginacion import paginar_si_se_pide, metadatos_pagina
 
 @require_http_methods(["GET"])
 @requiere_rol(['ADMINISTRADOR'])
@@ -42,8 +43,10 @@ def listar_historial_notificaciones(request):
             return JsonResponse({'error': f'{param} inválida; usa el formato YYYY-MM-DD.'}, status=400)
         qs = qs.filter(**{lookup: fecha})
 
+    qs = qs.order_by('-fecha_envio', '-id')
+    pagina = paginar_si_se_pide(request, qs)
     data = []
-    for n in qs:
+    for n in (pagina if pagina is not None else qs):
         # HU-41: las notificaciones de una solicitud de acompañamiento pueden no tener alerta
         origen = n.alerta or n.solicitud
         data.append({
@@ -60,7 +63,7 @@ def listar_historial_notificaciones(request):
             'detalle_error': n.detalle_error
         })
         
-    return JsonResponse({'historial': data})
+    return JsonResponse({'historial': data, **metadatos_pagina(pagina)})
 
 @require_http_methods(["GET"])
 @requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])

@@ -11,6 +11,7 @@ from django.core import signing
 from django.core.cache import cache
 from django.db.models import F
 from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.core.mail import send_mail
 from django.conf import settings
 from django.utils.crypto import constant_time_compare, salted_hmac
@@ -336,9 +337,19 @@ def crear_usuario(request):
         nombre = data.get('nombre')
         correo = data.get('correo')
         rol = data.get('rol')
-        
+
+        if not isinstance(nombre, str) or not isinstance(correo, str):
+            return JsonResponse({'error': 'Nombre y correo deben ser texto.'}, status=400)
+        nombre = nombre.strip()
+        correo = correo.strip()
         if not all([nombre, correo, rol]):
             return JsonResponse({'error': 'Faltan campos obligatorios'}, status=400)
+        try:
+            validate_email(correo)
+        except ValidationError:
+            return JsonResponse({'error': 'El correo electrónico no es válido.'}, status=400)
+        if '.' not in correo.rsplit('@', 1)[-1]:
+            return JsonResponse({'error': 'El correo electrónico debe incluir el dominio completo.'}, status=400)
 
         rol = str(rol).strip().upper()
         error_rol = _validar_rol(rol)
@@ -448,7 +459,7 @@ def listar_auditoria(request):
     fecha_inicio = request.GET.get('fecha_inicio')
     fecha_fin = request.GET.get('fecha_fin')
     
-    qs = Auditoria.objects.select_related('usuario').all()
+    qs = Auditoria.objects.select_related('usuario').order_by('-fecha_hora', '-id')
     
     if tipo_accion:
         qs = qs.filter(tipo_accion=tipo_accion)
@@ -459,8 +470,9 @@ def listar_auditoria(request):
     if fecha_fin:
         qs = qs.filter(fecha_hora__lte=fecha_fin)
         
+    pagina = paginar_si_se_pide(request, qs)
     data = []
-    for a in qs:
+    for a in (pagina if pagina is not None else qs):
         data.append({
             'id': a.id,
             'usuario_nombre': a.usuario.nombre if a.usuario else 'Sistema',
@@ -471,7 +483,7 @@ def listar_auditoria(request):
             'detalle': a.detalle
         })
         
-    return JsonResponse({'registros': data}, status=200)
+    return JsonResponse({'registros': data, **metadatos_pagina(pagina)}, status=200)
 
 
 # --- Cuentas de estudiantes (HU-37) ---

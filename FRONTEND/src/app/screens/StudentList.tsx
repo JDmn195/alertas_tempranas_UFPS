@@ -1,7 +1,7 @@
 import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Link, useNavigate } from 'react-router';
-import { Search, AlertTriangle, CheckCircle, Activity, RefreshCw, ChevronLeft, ChevronRight, Bell, UserMinus } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Search, AlertTriangle, CheckCircle, Activity, RefreshCw, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Bell, UserMinus } from 'lucide-react';
 import { EncabezadoPagina } from '../components/Panel';
 import { MedidorRiesgo, NivelRiesgoChip } from '../components/Riesgo';
 import { Button } from '../components/ui/Button';
@@ -24,6 +24,7 @@ interface ApiResponse {
   page_size: number;
   pages: number;
   results: Student[];
+  resumen?: { total: number; high: number; medium: number; low: number; sin_dato: number; alertas_activas: number; inactivos: number };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -36,6 +37,15 @@ const RISK_LABEL: Record<string, string> = {
   low: 'BAJO',
   unknown: 'SIN DATO',
 };
+
+const COLUMNAS = [
+  { clave: 'codigo', etiqueta: 'Código' },
+  { clave: 'nombre', etiqueta: 'Nombre' },
+  { clave: 'semestre', etiqueta: 'Semestre' },
+  { clave: 'promedio', etiqueta: 'Promedio' },
+  { clave: 'nivel_riesgo', etiqueta: 'Nivel de Riesgo' },
+  { clave: 'alertas_activas', etiqueta: 'Alertas Activas' },
+];
 
 const SEMESTRES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
@@ -62,41 +72,57 @@ export default function StudentList() {
   const [students, setStudents] = useState<Student[]>([]);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
-  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters
-  const [searchTerm, setSearchTerm] = useState('');
-  const [semesterFilter, setSemesterFilter] = useState('');
-  const [riskFilter, setRiskFilter] = useState('');
+  // Filtros, página y orden viven en la URL: sobreviven a recargar y al botón Atrás (SDAT-340)
+  const [urlParams, setUrlParams] = useSearchParams();
+  const debouncedSearch = urlParams.get('search') ?? '';
+  const semesterFilter = urlParams.get('semester') ?? '';
+  const riskFilter = urlParams.get('risk') ?? '';
+  const sortCol = urlParams.get('sort') ?? '';
+  const sortDir = urlParams.get('dir') === 'desc' ? 'desc' : 'asc';
+  const currentPage = Math.max(1, parseInt(urlParams.get('page') ?? '1', 10) || 1);
 
-  // Debounce ref for search
+  const actualizarUrl = useCallback((cambios: Record<string, string>, reemplazar = false) => {
+    setUrlParams((previos) => {
+      const siguientes = new URLSearchParams(previos);
+      Object.entries(cambios).forEach(([clave, valor]) => {
+        if (valor) siguientes.set(clave, valor); else siguientes.delete(clave);
+      });
+      return siguientes;
+    }, { replace: reemplazar });
+  }, [setUrlParams]);
+  const setCurrentPage = (actualizar: number | ((p: number) => number)) => {
+    const nueva = typeof actualizar === 'function' ? actualizar(currentPage) : actualizar;
+    actualizarUrl({ page: nueva > 1 ? String(nueva) : '' });
+  };
+
+  const [searchTerm, setSearchTerm] = useState(debouncedSearch);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // Summary counts per risk level and other indicators
-  const countHigh     = students.filter(s => s.nivel_riesgo === 'high').length;
-  const countMedium   = students.filter(s => s.nivel_riesgo === 'medium').length;
-  const countLow      = students.filter(s => s.nivel_riesgo === 'low').length;
-  const countAlerts   = students.reduce((sum, s) => sum + (s.alertas_activas || 0), 0);
+  // SDAT-333: los totales vienen del servidor (toda la población filtrada), no de la página visible
+  const [resumen, setResumen] = useState({ total: 0, high: 0, medium: 0, low: 0, sin_dato: 0, alertas_activas: 0, inactivos: 0 });
+  const countHigh     = resumen.high;
+  const countMedium   = resumen.medium;
+  const countLow      = resumen.low;
+  const countAlerts   = resumen.alertas_activas;
   
   // Lógica corregida: Considerar inactivos solo estados terminales (Retirado, Graduado, Cancelado)
-  const countInactive = students.filter(s => {
-    if (!s.estado_matricula) return false;
-    const est = s.estado_matricula.toLowerCase();
-    return est.includes('retirado') || est.includes('graduado') || est.includes('cancelado');
-  }).length;
+  const countInactive = resumen.inactivos;
+
+  // Atrás/Adelante cambian la URL: el campo de búsqueda debe reflejarla
+  useEffect(() => { setSearchTerm(debouncedSearch); }, [debouncedSearch]);
 
   // ── Debounce search input ──────────────────────────────────────────────────
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-      setCurrentPage(1);
+      if (searchTerm !== debouncedSearch) actualizarUrl({ search: searchTerm, page: '' }, true);
     }, 400);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [searchTerm]);
+  }, [searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch students ─────────────────────────────────────────────────────────
   const fetchStudents = useCallback(async () => {
@@ -110,12 +136,14 @@ export default function StudentList() {
     if (debouncedSearch) params.append('search', debouncedSearch);
     if (semesterFilter) params.append('semester', semesterFilter);
     if (riskFilter)     params.append('risk', riskFilter);
+    if (sortCol) { params.append('sort', sortCol); params.append('dir', sortDir); }
 
     try {
       const res = await apiFetch(`${API_BASE}/students/?${params.toString()}`);
       if (!res.ok) throw new Error(`Error ${res.status}`);
       const data: ApiResponse = await res.json();
       setStudents(data.results);
+      if (data.resumen) setResumen(data.resumen);
       setTotal(data.total);
       setPages(data.pages);
     } catch (err) {
@@ -124,16 +152,18 @@ export default function StudentList() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, debouncedSearch, semesterFilter, riskFilter]);
+  }, [currentPage, debouncedSearch, semesterFilter, riskFilter, sortCol, sortDir]);
 
   useEffect(() => { fetchStudents(); }, [fetchStudents]);
 
   // Reset page when filters change
-  const handleSemesterChange = (v: string) => { setSemesterFilter(v); setCurrentPage(1); };
-  const handleRiskChange     = (v: string) => { setRiskFilter(v);     setCurrentPage(1); };
+  const handleSemesterChange = (v: string) => actualizarUrl({ semester: v, page: '' });
+  const handleRiskChange     = (v: string) => actualizarUrl({ risk: v, page: '' });
+  const ordenarPor = (columna: string) =>
+    actualizarUrl({ sort: columna, dir: sortCol === columna && sortDir === 'asc' ? 'desc' : 'asc', page: '' });
 
-  const hayFiltros = Boolean(searchTerm || semesterFilter || riskFilter);
-  const limpiarFiltros = () => { setSearchTerm(''); setSemesterFilter(''); setRiskFilter(''); setCurrentPage(1); };
+  const hayFiltros = Boolean(searchTerm || debouncedSearch || semesterFilter || riskFilter);
+  const limpiarFiltros = () => { setSearchTerm(''); actualizarUrl({ search: '', semester: '', risk: '', page: '' }); };
   const alternarRiesgo = (nivel: string) => handleRiskChange(riskFilter === nivel ? '' : nivel);
 
   const campo = 'h-10 px-3.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink';
@@ -170,7 +200,7 @@ export default function StudentList() {
             className={`flex-1 min-w-[8rem] text-left px-4 py-3 ${riskFilter === '' ? 'bg-primary-tint' : 'bg-white hover:bg-paper'}`}
           >
             <span className="block text-sm font-medium text-ink-muted">Todos</span>
-            <span className="block mt-1 text-xl font-semibold text-ink leading-none">{loading ? '—' : students.length}</span>
+            <span className="block mt-1 text-xl font-semibold text-ink leading-none">{loading ? '—' : resumen.total}</span>
           </button>
           {tarjetasRiesgo.map(({ nivel, etiqueta, valor }) => (
             <button
@@ -228,9 +258,9 @@ export default function StudentList() {
             className={`${campo} flex-1 sm:flex-none min-w-[220px] lg:hidden`}
           >
             <option value="">Todos los Niveles de Riesgo</option>
-            <option value="high">Riesgo Alto   (Promedio &lt; 3.0)</option>
-            <option value="medium">Riesgo Medio  (3.0 – 3.4)</option>
-            <option value="low">Riesgo Bajo   (Promedio ≥ 3.5)</option>
+            <option value="high">Riesgo Alto</option>
+            <option value="medium">Riesgo Medio</option>
+            <option value="low">Riesgo Bajo</option>
           </select>
 
           {hayFiltros && (
@@ -305,12 +335,26 @@ export default function StudentList() {
             <table className="w-full min-w-[720px]">
               <thead className="bg-paper text-ink-soft border-b border-line">
                 <tr>
-                  <th className="px-5 py-3 text-left text-xs font-semibold">Código</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold">Nombre</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold">Semestre</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold">Promedio</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold">Nivel de Riesgo</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold">Alertas Activas</th>
+                  {COLUMNAS.map(({ clave, etiqueta }) => (
+                    <th
+                      key={clave}
+                      scope="col"
+                      aria-sort={sortCol === clave ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      className="px-5 py-3 text-left text-xs font-semibold"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => ordenarPor(clave)}
+                        title={`Ordenar por ${etiqueta.toLowerCase()}${sortCol === clave ? (sortDir === 'asc' ? ' (ascendente)' : ' (descendente)') : ''}`}
+                        className="inline-flex items-center gap-1 font-semibold hover:text-ink"
+                      >
+                        {etiqueta}
+                        {sortCol === clave && (sortDir === 'asc'
+                          ? <ArrowUp className="w-3 h-3" aria-hidden="true" />
+                          : <ArrowDown className="w-3 h-3" aria-hidden="true" />)}
+                      </button>
+                    </th>
+                  ))}
                   <th className="px-5 py-3 text-left text-xs font-semibold">Acciones</th>
                 </tr>
               </thead>

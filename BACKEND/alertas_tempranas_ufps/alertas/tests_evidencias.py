@@ -2,6 +2,7 @@
 INC-03 (subida de evidencias sin conexión al almacenamiento) y alcance del
 docente sobre las alertas de sus estudiantes.
 """
+import json
 import os
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -15,7 +16,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from academico.models import Curso, Docente, Estudiante, Materia, Nota, Periodo
-from alertas.models import Alerta, Evidencia, Intervencion, Regla
+from alertas.models import Alerta, AnotacionIntervencion, Evidencia, Intervencion, Regla
 from alertas.views import evidence_views
 from usuarios.models import Usuario
 
@@ -173,3 +174,73 @@ class AlcanceDocenteTests(BaseAlertas):
     def test_director_accede_a_todas(self):
         url = reverse('listar-intervenciones', kwargs={'alerta_id': self.alerta_ajena.id})
         self.assertEqual(self.client.get(url, **_auth(self.director)).status_code, 200)
+
+
+class FechasBogotaTests(BaseAlertas):
+    """SDAT-335: el instante se guarda en UTC y se presenta en America/Bogota."""
+
+    def setUp(self):
+        super().setUp()
+        self.utc = datetime(2026, 11, 16, 7, 47, tzinfo=timezone.utc)
+        Intervencion.objects.filter(id=self.interv_propia.id).update(fecha=self.utc)
+        self.anot = AnotacionIntervencion.objects.create(intervencion=self.interv_propia, usuario=self.director,
+                                                         texto='n')
+        AnotacionIntervencion.objects.filter(id=self.anot.id).update(fecha=self.utc)
+
+    def test_historial_muestra_hora_local(self):
+        url = reverse('listar-intervenciones', kwargs={'alerta_id': self.alerta_propia.id})
+        fecha = self.client.get(url, **_auth(self.director)).json()['intervenciones'][0]['fecha']
+        self.assertEqual(fecha, '2026-11-16 02:47')
+
+    def test_anotaciones_muestran_hora_local(self):
+        url = reverse('gestionar-anotaciones', kwargs={'intervencion_id': self.interv_propia.id})
+        fecha = self.client.get(url, **_auth(self.director)).json()['anotaciones'][0]['fecha']
+        self.assertEqual(fecha, '2026-11-16 02:47')
+
+    def test_instante_almacenado_se_conserva(self):
+        self.interv_propia.refresh_from_db()
+        self.assertEqual(self.interv_propia.fecha, self.utc)
+
+    def test_ficha_del_estudiante_muestra_hora_local(self):
+        url = reverse('student-interventions', kwargs={'codigo': self.propio.codigo})
+        fecha = self.client.get(url, **_auth(self.director)).json()['intervenciones'][0]['fecha']
+        self.assertEqual(fecha, '2026-11-16 02:47')
+
+
+class AnotacionesYResultadoTests(BaseAlertas):
+    """SDAT-332: anotaciones con tipos inválidos y longitud del resumen final."""
+
+    def _post(self, nombre_url, kwargs, cuerpo):
+        return self.client.post(reverse(nombre_url, kwargs=kwargs), data=json.dumps(cuerpo),
+                                content_type='application/json', **_auth(self.director))
+
+    def test_anotacion_valida_se_guarda(self):
+        resp = self._post('gestionar-anotaciones', {'intervencion_id': self.interv_propia.id},
+                          {'texto': 'Se llamó al estudiante'})
+        self.assertEqual(resp.status_code, 201)
+
+    def test_anotacion_con_tipo_invalido_devuelve_400(self):
+        for valor in (5, None, ['x'], {'a': 1}):
+            with self.subTest(valor=valor):
+                resp = self._post('gestionar-anotaciones', {'intervencion_id': self.interv_propia.id},
+                                  {'texto': valor})
+                self.assertEqual(resp.status_code, 400)
+
+    def test_concluir_con_tipo_invalido_devuelve_400(self):
+        resp = self._post('concluir-intervencion', {'intervencion_id': self.interv_propia.id}, {'resultado': 7})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_concluir_acepta_100_y_rechaza_101_caracteres(self):
+        url = {'intervencion_id': self.interv_propia.id}
+        resp = self._post('concluir-intervencion', url, {'resultado': 'x' * 101})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('100', resp.json()['error'])
+        self.interv_propia.refresh_from_db()
+        self.assertFalse(self.interv_propia.concluida)
+        resp = self._post('concluir-intervencion', url, {'resultado': 'x' * 100})
+        self.assertEqual(resp.status_code, 200)
+
+    def test_registrar_intervencion_resultado_largo_devuelve_400(self):
+        resp = self._post('registrar-intervencion', {'alerta_id': self.alerta_propia.id},
+                          {'tipo': 'TUTORIA', 'observaciones': 'obs', 'resultado': 'x' * 101})
+        self.assertEqual(resp.status_code, 400)

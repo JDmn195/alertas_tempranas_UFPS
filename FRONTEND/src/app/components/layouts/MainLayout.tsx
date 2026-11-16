@@ -36,7 +36,7 @@ export function MainLayout() {
       <a href="#contenido" className={enlaceSalto}>Saltar al contenido</a>
       <Sidebar abierto={menuAbierto} onCerrar={() => setMenuAbierto(false)} />
       <div className="flex-1 flex flex-col min-w-0 bg-[#FBF3F1] lg:my-2 lg:mr-2 lg:rounded-[14px] lg:border lg:border-line overflow-hidden">
-        <TopNav onMenu={() => setMenuAbierto(true)} />
+        <TopNav onMenu={() => setMenuAbierto(true)} menuAbierto={menuAbierto} />
         <main id="contenido" ref={contenido} className="flex-1 overflow-auto px-3 py-5 sm:px-5 lg:px-7 lg:py-6">
           <div key={location.pathname} className="page-enter">
             <Outlet />

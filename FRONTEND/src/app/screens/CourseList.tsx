@@ -1,9 +1,10 @@
 import { API_BASE_URL } from '@/services/config';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router';
 import {
   Search, RefreshCw, ChevronLeft, ChevronRight,
   AlertTriangle, TrendingUp, TrendingDown, Minus,
-  BookOpen, Users, BarChart2, X, Pencil,
+  BookOpen, Users, BarChart2, X, Pencil, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -88,21 +89,70 @@ function CustomBarTooltip({ active, payload }: any) {
   return null;
 }
 
+function EncabezadoOrdenable({ clave, etiqueta, align, sortCol, sortDir, onOrdenar }: {
+  clave: string; etiqueta: string; align: 'left' | 'center'; sortCol: string; sortDir: 'asc' | 'desc'; onOrdenar: (c: string) => void;
+}) {
+  const activa = sortCol === clave;
+  return (
+    <th
+      scope="col"
+      aria-sort={activa ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className={`px-5 py-3 text-${align} text-xs font-medium uppercase tracking-wider`}
+    >
+      <button
+        type="button"
+        onClick={() => onOrdenar(clave)}
+        title={`Ordenar por ${etiqueta.toLowerCase()}${activa ? (sortDir === 'asc' ? ' (ascendente)' : ' (descendente)') : ''}`}
+        className="inline-flex items-center gap-1 uppercase tracking-wider hover:text-ink"
+      >
+        {etiqueta}
+        {activa && (sortDir === 'asc'
+          ? <ArrowUp className="w-3 h-3" aria-hidden="true" />
+          : <ArrowDown className="w-3 h-3" aria-hidden="true" />)}
+      </button>
+    </th>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function CourseList() {
   const [courses, setCourses] = useState<CourseIndicator[]>([]);
   const [allCourses, setAllCourses] = useState<CourseIndicator[]>([]);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
-  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [estadoFilter, setEstadoFilter] = useState('');
-  const [periodoAnio, setPeriodoAnio] = useState('todos');
-  const [periodoSemestre, setPeriodoSemestre] = useState('1');
+  // Filtros, página y orden viven en la URL: sobreviven a recargar y al botón Atrás (SDAT-340)
+  const [urlParams, setUrlParams] = useSearchParams();
+  const debouncedSearch = urlParams.get('search') ?? '';
+  const estadoFilter = urlParams.get('estado') ?? '';
+  const periodoAnio = urlParams.get('anio') ?? 'todos';
+  const periodoSemestre = urlParams.get('semestre') ?? '1';
+  const sortCol = urlParams.get('sort') ?? '';
+  const sortDir = urlParams.get('dir') === 'desc' ? 'desc' : 'asc';
+  const currentPage = Math.max(1, parseInt(urlParams.get('page') ?? '1', 10) || 1);
+
+  const actualizarUrl = useCallback((cambios: Record<string, string>, reemplazar = false) => {
+    setUrlParams((previos) => {
+      const siguientes = new URLSearchParams(previos);
+      Object.entries(cambios).forEach(([clave, valor]) => {
+        if (valor) siguientes.set(clave, valor); else siguientes.delete(clave);
+      });
+      return siguientes;
+    }, { replace: reemplazar });
+  }, [setUrlParams]);
+  const setCurrentPage = (actualizar: number | ((p: number) => number)) => {
+    const nueva = typeof actualizar === 'function' ? actualizar(currentPage) : actualizar;
+    actualizarUrl({ page: nueva > 1 ? String(nueva) : '' });
+  };
+  const setEstadoFilter = (v: string) => actualizarUrl({ estado: v, page: '' });
+  const setPeriodoAnio = (v: string) => actualizarUrl({ anio: v === 'todos' ? '' : v, page: '' });
+  const setPeriodoSemestre = (v: string) => actualizarUrl({ semestre: v === '1' ? '' : v, page: '' });
+  const ordenarPor = (columna: string) =>
+    actualizarUrl({ sort: columna, dir: sortCol === columna && sortDir === 'asc' ? 'desc' : 'asc', page: '' });
+
+  const [searchTerm, setSearchTerm] = useState(debouncedSearch);
   const [advertencia, setAdvertencia] = useState<string | null>(null);
 
   // HU-35: edición del umbral de inasistencia por curso (solo ADMINISTRADOR)
@@ -135,7 +185,9 @@ export default function CourseList() {
     setDetailError(null);
     setCourseDetailData(null);
     try {
-      const res = await apiFetch(`${API_BASE}/courses/${cursoId}/detail/`);
+      // SDAT-334: el detalle respeta el periodo elegido; sin periodo concreto muestra el más reciente
+      const filtroPeriodo = periodoAnio !== 'todos' ? `?periodo_anio=${periodoAnio}&periodo_semestre=${periodoSemestre}` : '';
+      const res = await apiFetch(`${API_BASE}/courses/${cursoId}/detail/${filtroPeriodo}`);
       if (!res.ok) throw new Error('No se pudo cargar el detalle del curso');
       const data = await res.json();
       setCourseDetailData(data);
@@ -144,7 +196,7 @@ export default function CourseList() {
     } finally {
       setDetailLoading(false);
     }
-  }, []);
+  }, [periodoAnio, periodoSemestre]);
 
   useEffect(() => {
     if (selectedCourseDetail !== null) {
@@ -178,11 +230,13 @@ export default function CourseList() {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-      setCurrentPage(1);
+      if (searchTerm !== debouncedSearch) actualizarUrl({ search: searchTerm, page: '' }, true);
     }, 400);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [searchTerm]);
+  }, [searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Atrás/Adelante cambian la URL: el campo de búsqueda debe reflejarla
+  useEffect(() => { setSearchTerm(debouncedSearch); }, [debouncedSearch]);
 
   const fetchCourses = useCallback(async () => {
     setLoading(true);
@@ -195,6 +249,7 @@ export default function CourseList() {
     });
     if (debouncedSearch) params.append('search', debouncedSearch);
     if (estadoFilter) params.append('estado', estadoFilter);
+    if (sortCol) { params.append('sort', sortCol); params.append('dir', sortDir); }
     try {
       const res = await apiFetch(`${API_BASE}/courses/indicators/?${params.toString()}`);
       if (!res.ok) throw new Error(`Error ${res.status}`);
@@ -209,7 +264,7 @@ export default function CourseList() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, debouncedSearch, estadoFilter, periodoAnio, periodoSemestre]);
+  }, [currentPage, debouncedSearch, estadoFilter, periodoAnio, periodoSemestre, sortCol, sortDir]);
 
   const fetchAllForCharts = useCallback(async () => {
     try {
@@ -328,7 +383,7 @@ export default function CourseList() {
               className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-[10px] focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
             />
           </div>
-          <select value={periodoAnio} onChange={(e) => { setPeriodoAnio(e.target.value); setCurrentPage(1); }}
+          <select value={periodoAnio} onChange={(e) => setPeriodoAnio(e.target.value)}
             className="px-4 py-2.5 border border-gray-300 rounded-[10px] focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm">
             <option value="todos">Todos los periodos</option>
             <option value="2024">2024</option>
@@ -336,13 +391,13 @@ export default function CourseList() {
             <option value="2026">2026</option>
           </select>
           {periodoAnio !== 'todos' && (
-            <select value={periodoSemestre} onChange={(e) => { setPeriodoSemestre(e.target.value); setCurrentPage(1); }}
+            <select value={periodoSemestre} onChange={(e) => setPeriodoSemestre(e.target.value)}
               className="px-4 py-2.5 border border-gray-300 rounded-[10px] focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm">
               <option value="1">Semestre 1</option>
               <option value="2">Semestre 2</option>
             </select>
           )}
-          <select value={estadoFilter} onChange={(e) => { setEstadoFilter(e.target.value); setCurrentPage(1); }}
+          <select value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}
             className="px-4 py-2.5 border border-gray-300 rounded-[10px] focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm">
             <option value="">Todos los cursos</option>
             <option value="CRÍTICO">Solo críticos</option>
@@ -386,19 +441,18 @@ export default function CourseList() {
             <table className="tabular-nums w-full">
               <thead className="bg-paper text-ink-soft border-b border-line">
                 <tr>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider">Código</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider">Materia</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider">Grupo</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider">Docente</th>
-                  <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">
-                    <span className="flex items-center justify-center gap-1"><Users className="w-3.5 h-3.5" />Matrícula</span>
-                  </th>
-                  <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">Reprobados</th>
-                  <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">Tasa Rep.</th>
-                  <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">Promedio</th>
+                  <EncabezadoOrdenable clave="codigo_materia" etiqueta="Código" align="left" sortCol={sortCol} sortDir={sortDir} onOrdenar={ordenarPor} />
+                  <EncabezadoOrdenable clave="materia" etiqueta="Materia" align="left" sortCol={sortCol} sortDir={sortDir} onOrdenar={ordenarPor} />
+                  <EncabezadoOrdenable clave="grupo" etiqueta="Grupo" align="left" sortCol={sortCol} sortDir={sortDir} onOrdenar={ordenarPor} />
+                  <EncabezadoOrdenable clave="docente" etiqueta="Docente" align="left" sortCol={sortCol} sortDir={sortDir} onOrdenar={ordenarPor} />
+                  <EncabezadoOrdenable clave="matriculados" etiqueta="Matrícula" align="center" sortCol={sortCol} sortDir={sortDir} onOrdenar={ordenarPor} />
+                  <EncabezadoOrdenable clave="reprobados" etiqueta="Reprobados" align="center" sortCol={sortCol} sortDir={sortDir} onOrdenar={ordenarPor} />
+                  <EncabezadoOrdenable clave="tasa_reprobacion" etiqueta="Tasa Rep." align="center" sortCol={sortCol} sortDir={sortDir} onOrdenar={ordenarPor} />
+                  <EncabezadoOrdenable clave="promedio_curso" etiqueta="Promedio" align="center" sortCol={sortCol} sortDir={sortDir} onOrdenar={ordenarPor} />
                   <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">Zona Riesgo</th>
                   <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">No Present.</th>
-                  <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">Tendencia</th>
+                  <EncabezadoOrdenable clave="tendencia_puntos" etiqueta="Tendencia" align="center" sortCol={sortCol} sortDir={sortDir} onOrdenar={ordenarPor} />
+
                   <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">Estado</th>
                   <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider">Umbral Inasist.</th>
                 </tr>

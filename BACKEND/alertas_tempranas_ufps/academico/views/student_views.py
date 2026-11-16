@@ -5,13 +5,14 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import csrf_exempt
 
+from academico.busqueda import filtrar_sin_tildes, normalizar_texto
 from academico.models import Estudiante, Nota
 from academico.services.historial_promedios import serie_promedios_por_periodo, tendencia_promedio
 from academico.services.notas_corte import ESTADO_EN_CURSO, alertas_corte_abiertas, desglose_cortes, estado_nota
 from alertas.evaluacion import calcular_indicadores, calcular_ppa, nivel_de_riesgo
 from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, Alerta, Regla
 from usuarios.decorators import requiere_rol
-from usuarios.utils import registrar_auditoria
+from usuarios.utils import fecha_local, registrar_auditoria
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,17 @@ def _calcular_historial_promedios(estudiante):
     }
 
 
+_ORDEN_RIESGO = {'low': 1, 'medium': 2, 'high': 3}
+ORDEN_ESTUDIANTES = {
+    'codigo': lambda v: normalizar_texto(v),
+    'nombre': lambda v: normalizar_texto(v),
+    'semestre': lambda v: v,
+    'promedio': lambda v: v,
+    'nivel_riesgo': lambda v: _ORDEN_RIESGO.get(v, 0),
+    'alertas_activas': lambda v: v,
+}
+
+
 @csrf_exempt
 @require_GET
 @requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
@@ -81,6 +93,8 @@ def listar_estudiantes(request):
         search   – filtra por nombre o código (icontains)
         semester – filtra por semestre exacto (número)
         risk     – filtra por nivel de riesgo: high | medium | low
+        sort     – columna de ordenación (codigo, nombre, semestre, promedio, nivel_riesgo, alertas_activas)
+        dir      – asc | desc
         page     – número de página (default 1)
         page_size – tamaño de página (default 20, max 100)
     """
@@ -89,6 +103,8 @@ def listar_estudiantes(request):
     search    = request.GET.get('search', '').strip()
     semester  = request.GET.get('semester', '').strip()
     risk      = request.GET.get('risk', '').strip().lower()
+    sort      = request.GET.get('sort', '').strip()
+    direccion = 'desc' if request.GET.get('dir', '').strip().lower() == 'desc' else 'asc'
     try:
         page      = max(1, int(request.GET.get('page', 1)))
         page_size = min(100, max(1, int(request.GET.get('page_size', 20))))
@@ -106,9 +122,7 @@ def listar_estudiantes(request):
 
     # Búsqueda por nombre o código
     if search:
-        qs = qs.filter(
-            Q(nombre__icontains=search) | Q(codigo__icontains=search)
-        )
+        qs = filtrar_sin_tildes(qs, search, ['nombre', 'codigo'])
 
     # Filtro por semestre
     if semester.isdigit():
@@ -208,6 +222,9 @@ def listar_estudiantes(request):
         return nivel_actual
 
     results = []
+    # SDAT-333: totales de toda la población filtrada por búsqueda y semestre, independientes
+    # de la página y del filtro de riesgo. Alerta activa = cualquier estado distinto de cerrada.
+    resumen = {'total': 0, 'high': 0, 'medium': 0, 'low': 0, 'sin_dato': 0, 'alertas_activas': 0, 'inactivos': 0}
     for e in estudiantes_raw:
         codigo = e['codigo']
 
@@ -220,6 +237,13 @@ def listar_estudiantes(request):
             or nivel_snap_map.get(codigo)
             or _nivel_por_promedio(ppa_real if ppa_real is not None else e['promedio'])
         )
+
+        resumen['total'] += 1
+        resumen[nivel if nivel in ('high', 'medium', 'low') else 'sin_dato'] += 1
+        resumen['alertas_activas'] += e['total_alertas']
+        matricula = (e['estado_matricula'] or '').lower()
+        if any(t in matricula for t in ('retirado', 'graduado', 'cancelado')):
+            resumen['inactivos'] += 1
 
         if risk and risk != nivel:
             continue
@@ -234,6 +258,15 @@ def listar_estudiantes(request):
             'estado_matricula': e['estado_matricula'],
         })
 
+    # ── Ordenación (SDAT-340, B40): sort=<columna>, dir=asc|desc ──────────────
+    if sort in ORDEN_ESTUDIANTES:
+        clave = ORDEN_ESTUDIANTES[sort]
+        # Los valores vacíos van siempre al final, sea cual sea el sentido
+        con_valor = [r for r in results if r[sort] is not None]
+        sin_valor = [r for r in results if r[sort] is None]
+        con_valor.sort(key=lambda r: clave(r[sort]), reverse=(direccion == 'desc'))
+        results = con_valor + sin_valor
+
     # ── Paginación ────────────────────────────────────────────────────────────
     total = len(results)
     start = (page - 1) * page_size
@@ -246,6 +279,7 @@ def listar_estudiantes(request):
         'page_size': page_size,
         'pages':     max(1, -(-total // page_size)),  # ceil division
         'results':   page_results,
+        'resumen':   resumen,
     })
 
 
@@ -520,7 +554,7 @@ def obtener_intervenciones_estudiante(request, codigo):
             'observaciones': i.observaciones,
             'evidencia':     i.evidencia,
             'resultado':     i.resultado,
-            'fecha':         i.fecha.strftime('%Y-%m-%d %H:%M'),
+            'fecha':         fecha_local(i.fecha),
             'usuario':       i.usuario.nombre,
             'usuario_rol':   i.usuario.rol,
             'alerta_id':     i.alerta.id,

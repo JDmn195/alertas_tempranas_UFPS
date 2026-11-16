@@ -1,7 +1,16 @@
 import logging
+
+from django.utils import timezone
+
 from .models import Auditoria
 
 logger = logging.getLogger(__name__)
+
+
+def fecha_local(fecha, formato='%Y-%m-%d %H:%M'):
+    """Presenta un datetime almacenado en UTC en la zona del proyecto (America/Bogota)."""
+    return timezone.localtime(fecha).strftime(formato) if fecha else None
+
 
 def registrar_auditoria(usuario, tipo_accion, detalle=""):
     """

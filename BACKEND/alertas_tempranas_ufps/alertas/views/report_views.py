@@ -10,8 +10,30 @@ from django.db.models import Count, Avg, Q
 from alertas.models import Alerta, Intervencion, RiesgoEstudiante, RiesgoEstudiantePeriodo
 from academico.models import Estudiante, Curso, Nota
 from alertas_tempranas_ufps.paginacion import paginar_si_se_pide, metadatos_pagina
+from usuarios.utils import fecha_local
 
 logger = logging.getLogger(__name__)
+
+_NIVELES_ES = {'HIGH': 'ALTO', 'MEDIUM': 'MEDIO', 'LOW': 'BAJO'}
+
+
+def _traducir_niveles(data):
+    """Muestra los niveles de riesgo en español (ALTO, MEDIO, BAJO, DESCONOCIDO)."""
+    for fila in data:
+        if 'risk' in fila:
+            valor = str(fila['risk'] or '').upper()
+            fila['risk'] = _NIVELES_ES.get(valor, valor if valor in _NIVELES_ES.values() else 'DESCONOCIDO')
+    return data
+
+
+def _anchos_columnas(headers, keys, filas, ancho_total):
+    """Anchos proporcionales con tope y mínimo, para que ninguna columna quede ilegible."""
+    largos = []
+    for h, k in zip(headers, keys):
+        mayor = max((len(_texto_celda(f.get(k))) for f in filas), default=0)
+        largos.append(min(max(len(str(h)), mayor, 12), 40))
+    total = sum(largos)
+    return [ancho_total * (n / total) for n in largos]
 
 
 def _get_docente_filter(request):
@@ -259,7 +281,7 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
                 result_friendly = 'En Proceso'
             evidence_count = i.evidencias.count() if hasattr(i, 'evidencias') else 0
             data.append({
-                'date': i.fecha.strftime('%Y-%m-%d'),
+                'date': fecha_local(i.fecha, '%Y-%m-%d'),
                 'student': i.alerta.estudiante.nombre,
                 'type': tipo_friendly,
                 'counselor': i.usuario.nombre,
@@ -313,7 +335,8 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
             semestre = row['periodo__semestre']
             cohort   = f'Periodo {anio}-{semestre}'
             total    = row['total_estudiantes'] or 0
-            avg_gpa  = round(float(row['promedio_cohorte']), 2) if row['promedio_cohorte'] else 0.0
+            # SDAT-334: un periodo sin definitivas no tiene promedio (None), no un promedio 0
+            avg_gpa  = round(float(row['promedio_cohorte']), 2) if row['promedio_cohorte'] is not None else None
 
             # Estudiantes con nota en este periodo
             est_en_periodo = list(
@@ -333,9 +356,11 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
             medium = riesgo_periodo_qs.filter(nivel_riesgo='medium').count()
             low    = riesgo_periodo_qs.filter(nivel_riesgo='low').count()
 
-            # Alertas generadas en este periodo (aproximado por año)
+            # Alertas generadas en este periodo (semestre 1: ene-jun, semestre 2: jul-dic)
             total_alertas = alertas_base.filter(
                 fecha_generacion__year=anio,
+                fecha_generacion__month__lte=6 if semestre == 1 else 12,
+                fecha_generacion__month__gte=1 if semestre == 1 else 7,
             ).count()
 
             # Nivel de riesgo dominante del cohorte
@@ -366,6 +391,11 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
 
 from usuarios.decorators import requiere_rol
 
+
+def _texto_celda(valor):
+    """SDAT-334: el cero es un dato; solo None y la cadena vacía salen como celda vacía."""
+    return '' if valor is None else str(valor)
+
 # ─── Vista: datos JSON para vista previa ──────────────────────────────────────
 
 @csrf_exempt
@@ -380,7 +410,7 @@ def export_report_data(request):
     estudiantes_ids = _get_docente_filter(request)
     cursos_ids = _get_docente_cursos(request)
     try:
-        data = _get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids)
+        data = _traducir_niveles(_get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids))
         pagina = paginar_si_se_pide(request, data)
         return JsonResponse({'data': list(pagina) if pagina is not None else data, **metadatos_pagina(pagina)})
     except ValueError as e:
@@ -415,13 +445,23 @@ def exportar_reporte(request):
     cursos_ids = _get_docente_cursos(request)
 
     try:
-        data_list = _get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids)
+        data_list = _traducir_niveles(
+            _get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids)
+        )
     except ValueError as e:
         logger.warning("Solicitud de exportación inválida: %s", e)
         return JsonResponse({'error': 'Tipo de reporte no válido.'}, status=400)
     except Exception:
         logger.exception("Error al obtener los datos para exportar el reporte %s", tipo)
         return JsonResponse({'error': 'Error al obtener los datos del reporte.'}, status=500)
+
+    try:
+        desde = datetime.date.fromisoformat(fecha_desde)
+        hasta = datetime.date.fromisoformat(fecha_hasta)
+    except ValueError:
+        return JsonResponse({'error': 'Indique fecha desde y fecha hasta válidas (AAAA-MM-DD).'}, status=400)
+    if desde > hasta:
+        return JsonResponse({'error': 'La fecha desde no puede ser posterior a la fecha hasta.'}, status=400)
 
     # ── Filtros opcionales ────────────────────────────────────────────────────
     if fecha_desde:
@@ -439,7 +479,7 @@ def exportar_reporte(request):
         data_list = [r for r in data_list if r.get('program', '') == programa]
 
     fecha_str = datetime.date.today().isoformat()
-    filename_base = f"reporte-{tipo}-{fecha_str}"
+    filename_base = f"reporte-{tipo}-{fecha_desde}_{fecha_hasta}"
 
     titulos = {
         'riesgo-estudiantil':         'Reporte de Riesgo Estudiantil',
@@ -510,8 +550,8 @@ def exportar_reporte(request):
     col_defs = COLUMNAS.get(tipo, [(k, k) for k in (data_list[0].keys() if data_list else [])])
     keys    = [c[0] for c in col_defs]
     headers = [c[1] for c in col_defs]
-    filtros_txt = f'Período: {fecha_desde or "—"} al {fecha_hasta or "—"}'
-    if riesgo:    filtros_txt += f' | Riesgo: {riesgo}'
+    filtros_txt = f'Período: {fecha_desde} al {fecha_hasta}'
+    if riesgo:    filtros_txt += f' | Riesgo: {_NIVELES_ES.get(riesgo.upper(), riesgo).lower()}'
     if programa:  filtros_txt += f' | Programa: {programa}'
     filtros_txt += f' | Generado: {fecha_str}'
 
@@ -555,21 +595,11 @@ def exportar_reporte(request):
             table_data = [[Paragraph(str(h), hdr_style) for h in headers]]
             for row in data_list:
                 table_data.append([
-                    Paragraph(str(row.get(k, '') or ''), cell_style)
+                    Paragraph(_texto_celda(row.get(k)), cell_style)
                     for k in keys
                 ])
 
-            # Anchos proporcionales al contenido máximo de cada columna
-            col_max_lens = []
-            for i, h in enumerate(headers):
-                k = keys[i]
-                max_len = max(
-                    len(str(h)),
-                    max((len(str(row.get(k, '') or '')) for row in data_list), default=0)
-                )
-                col_max_lens.append(max(max_len, 6))
-            total_len = sum(col_max_lens)
-            col_widths = [doc.width * (l / total_len) for l in col_max_lens]
+            col_widths = _anchos_columnas(headers, keys, data_list, doc.width)
 
             t = Table(table_data, colWidths=col_widths, repeatRows=1)
             t.setStyle(TableStyle([

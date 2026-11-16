@@ -59,10 +59,16 @@ def teacher_dashboard(request):
         .distinct()
     )
 
+    # SDAT-334: matrícula, reprobación y promedio del panel son del periodo más reciente,
+    # no la suma de todos los periodos históricos.
+    periodo_vigente = periodo_actual()
+    notas_vigentes = Nota.objects.filter(curso__in=ids_cursos)
+    if periodo_vigente:
+        notas_vigentes = notas_vigentes.filter(periodo=periodo_vigente)
+
     # ── Fix 6.2: Stats por curso en UNA sola query SQL ────────────────────────
     stats_curso = (
-        Nota.objects
-        .filter(curso__in=ids_cursos)
+        notas_vigentes
         .values('curso_id')
         .annotate(
             total_notas=Count('id'),
@@ -107,7 +113,7 @@ def teacher_dashboard(request):
             promedio_c = round(float(s['promedio_curso']), 2) if s['promedio_curso'] else None
             # Estudiantes de este curso que están en riesgo
             est_ids_curso = set(
-                Nota.objects.filter(curso=curso)
+                notas_vigentes.filter(curso=curso)
                 .values_list('estudiante_id', flat=True)
             )
             en_riesgo = len(est_ids_curso & en_riesgo_ids)

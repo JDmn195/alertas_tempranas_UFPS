@@ -5,6 +5,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.shortcuts import get_object_or_404
 
+from academico.busqueda import filtrar_sin_tildes
 from academico.models import Estudiante, Nota, Curso, Periodo
 from alertas.alertas_inasistencia import factor_inasistencia, obtener_regla_inasistencia, periodos_con_asistencia
 from alertas.evaluacion import ORDEN_NIVELES, actualizar_promedio, calcular_indicadores, evaluar_regla, nivel_de_riesgo
@@ -428,7 +429,7 @@ def listar_alertas(request):
 
     # Fix 3.1: filtrar por nombre del estudiante
     if search:
-        qs = qs.filter(estudiante__nombre__icontains=search)
+        qs = filtrar_sin_tildes(qs, search, ['estudiante__nombre', 'estudiante__codigo'])
         
     conteos = {
         'activa': total_qs.filter(estado__in=['activa', 'active']).count(),
