@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { normalizarNombreMateria, normalizarCodigo } from '@/utils/formato';
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 import {
@@ -818,9 +819,9 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
             ) : activePeriodData ? (
               activePeriodData.materias.map((mat, i) => (
                 <tr key={mat.codigo} className="bg-white hover:bg-paper transition-colors duration-150">
-                  <td className="px-5 py-3.5 text-xs tabular-nums text-gray-500">{mat.codigo}</td>
+                  <td className="px-5 py-3.5 text-xs tabular-nums text-gray-500">{normalizarCodigo(mat.codigo)}</td>
                   <td className="px-5 py-3.5 text-sm font-medium text-gray-900">
-                    {mat.materia}
+                    {normalizarNombreMateria(mat.materia)}
                     {mat.alertas_corte && mat.alertas_corte.length > 0 && (
                       <div className="mt-1 flex flex-wrap gap-1">
                         {mat.alertas_corte.map(a => (
@@ -1331,7 +1332,7 @@ function AsistenciaEstudiante({ codigo }: { codigo: string }) {
                       </td>
                       <td className="px-5 py-3.5 text-sm font-medium text-gray-900">
                         {c.materia}
-                        <span className="block text-xs tabular-nums text-gray-400">{c.codigo}</span>
+                        <span className="block text-xs tabular-nums text-gray-400">{normalizarCodigo(c.codigo)}</span>
                       </td>
                       <td className="px-5 py-3.5 text-sm text-gray-500">{c.grupo}</td>
                       <td className="px-5 py-3.5 text-sm text-gray-700">{c.total_clases}</td>
@@ -1569,7 +1570,7 @@ export default function StudentProfile() {
           <div className="min-w-0 flex-1">
             <h1 className="text-[1.65rem] font-semibold text-ink leading-tight tracking-[-0.02em]">{student.nombre}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-muted">
-              <span>Código: <span className="font-semibold text-ink">{student.codigo}</span></span>
+              <span>Código: <span className="font-semibold text-ink">{normalizarCodigo(student.codigo)}</span></span>
               <span className="inline-flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5" aria-hidden="true" />
                 {student.semestre}° Semestre
