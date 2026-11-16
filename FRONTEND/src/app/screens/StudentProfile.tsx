@@ -43,6 +43,7 @@ import { Button } from '../components/ui/Button';
 import { NivelRiesgoChip } from '../components/Riesgo';
 import { apiFetch } from '../../services/apiFetch';
 import { rolGuardado } from '../../services/session';
+import { etiquetaAlertaCorte, etiquetaEstadoAlerta } from '../../services/etiquetas';
 
 interface StudentDetail {
   codigo: string;
@@ -455,7 +456,7 @@ function IndicadoresSection({
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-sm font-semibold text-gray-700">Evolución del Promedio Acumulado</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Historial del PPA periodo a periodo</p>
+              <p className="text-xs text-gray-400 mt-0.5">Historial del promedio acumulado (PPA) periodo a periodo</p>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1.5">
@@ -830,7 +831,7 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
                             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200"
                           >
                             <AlertTriangle className="w-3 h-3" />
-                            {a.corte ? `Alerta corte ${a.corte}` : 'Alerta examen'} ({a.clave})
+                            {etiquetaAlertaCorte(a.corte, a.clave)}
                           </span>
                         ))}
                       </div>
@@ -980,7 +981,7 @@ function HistorialIntervenciones({ data, loading }: { data: Intervencion[] | nul
                     ? 'bg-gray-100 text-gray-600'
                     : 'bg-amber-100 text-amber-700'
                 }`}>
-                  {selected.alerta_estado}
+                  {etiquetaEstadoAlerta(selected.alerta_estado)}
                 </span>
               </div>
 

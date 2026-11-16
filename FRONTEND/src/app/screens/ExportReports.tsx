@@ -153,7 +153,7 @@ export default function ExportReports() {
         { header: 'Código', key: 'code' },
         { header: 'Estudiante', key: 'name' },
         { header: 'Semestre', key: 'semester', render: (val) => `Semestre ${val}` },
-        { header: 'Promedio PPA', key: 'gpa', render: (val) => <span className="font-semibold text-ink">{val != null ? Number(val).toFixed(2) : '—'}</span> },
+        { header: 'Promedio acumulado', key: 'gpa', render: (val) => <span className="font-semibold text-ink">{val != null ? Number(val).toFixed(2) : '—'}</span> },
         { header: 'Aprobadas', key: 'passed', render: (val) => <span className="text-green-600 font-medium">{val}</span> },
         { header: 'Reprobadas', key: 'failed', render: (val) => <span className="text-red-600 font-medium">{val}</span> },
         { header: 'Créditos Aprobados', key: 'credits', render: (val) => `${val} / 165` }

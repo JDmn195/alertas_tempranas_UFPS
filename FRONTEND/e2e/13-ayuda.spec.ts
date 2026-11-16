@@ -6,7 +6,7 @@ test('administración consulta reglas, procesos y revisión de la interfaz', asy
   const pagina = await contexto.newPage();
   await pagina.goto('/dashboard/ayuda');
   await expect(pagina.getByRole('heading', { name: '¿Cómo funciona?' })).toBeVisible();
-  await expect(pagina.getByText('C4: con tres cortes', { exact: false })).toBeVisible();
+  await expect(pagina.getByText('Materia perdida: con tres cortes', { exact: false })).toBeVisible();
   await expect(pagina.getByRole('status')).toContainText(/Última revaluación|Todavía no hay revaluaciones/);
   await expect(pagina.getByText(/Revisión de esta interfaz: [0-9a-f]{7,}/)).toBeVisible();
   await contexto.close();

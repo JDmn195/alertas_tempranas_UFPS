@@ -210,7 +210,7 @@ export default function TeacherDashboard() {
       value: data?.promedio_general != null ? data.promedio_general.toFixed(2) : '—',
       icon: BarChart2,
       color: 'green',
-      sublabel: 'PPA de mis estudiantes',
+      sublabel: 'Promedio acumulado de mis estudiantes',
       onClick: undefined,
     },
     {

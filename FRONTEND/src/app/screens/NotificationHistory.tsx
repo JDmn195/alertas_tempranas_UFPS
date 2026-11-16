@@ -177,8 +177,13 @@ export default function NotificationHistory() {
                         </Badge>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 text-xs text-ink-muted max-w-xs truncate" title={record.detalle_error}>
-                      {record.detalle_error || '-'}
+                    <td className="px-5 py-3.5 text-xs text-ink-muted max-w-xs">
+                      {record.detalle_error ? (
+                        <details>
+                          <summary className="cursor-pointer text-ink-soft">No se pudo enviar el correo</summary>
+                          <p className="mt-1 break-words text-[11px] text-ink-faint">Detalle técnico: {record.detalle_error}</p>
+                        </details>
+                      ) : '-'}
                     </td>
                   </tr>
                 ))

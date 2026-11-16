@@ -173,7 +173,7 @@ function ReevaluacionPeriodica({ puedeEjecutar }: { puedeEjecutar: boolean }) {
   return (
     <Seccion
       titulo="Re-evaluación periódica del riesgo"
-      detalle="Recalcula indicadores, riesgo y alertas sin una nueva importación (HU-29)"
+      detalle="Recalcula indicadores, riesgo y alertas sin una nueva importación"
       accion={
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" onClick={cargar}>
@@ -382,7 +382,7 @@ function RecordatoriosSeguimiento() {
   return (
     <Seccion
       titulo="Recordatorios de casos sin seguimiento"
-      detalle="Avisa sobre alertas e intervenciones inactivas; se cancelan al registrar seguimiento (HU-30)"
+      detalle="Avisa sobre alertas e intervenciones inactivas; se cancelan al registrar seguimiento"
       accion={
         <Button size="sm" onClick={enviarAhora}>
           <Play className="w-4 h-4 inline mr-1" />

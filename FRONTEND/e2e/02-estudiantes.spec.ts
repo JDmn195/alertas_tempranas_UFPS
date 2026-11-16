@@ -26,7 +26,7 @@ test.describe('Directorio y ficha del estudiante', () => {
     await expect(calculo.getByRole('cell')).toContainText([
       '1150101', /Cálculo I/, '3', 'A', 'Docente Curso', '1.5', '2.0', '2.5',
     ]);
-    await expect(calculo).toContainText('Alerta corte 1 (C1)');
+    await expect(calculo).toContainText('Alerta corte 1');
     await expect(calculo).toContainText('Necesita 5.3');
     await expect(calculo).toContainText('En curso');
   });
