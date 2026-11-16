@@ -194,6 +194,11 @@ def listar_indicadores_cursos(request):
     if search:
         cursos_qs = filtrar_sin_tildes(cursos_qs, search, ['materia__nombre', 'materia__codigo'])
 
+    # SDAT-334: con un periodo concreto solo se listan los cursos con matrícula en él,
+    # de modo que el filtro cambie el conjunto y el total.
+    if not usar_global:
+        cursos_qs = cursos_qs.filter(id__in=Nota.objects.filter(periodo=periodo).values('curso_id'))
+
     curso_ids = list(cursos_qs.values_list('id', flat=True))
 
     # ── Aggregations SQL: una sola query para todos los indicadores ───────────
@@ -373,7 +378,16 @@ def detalle_curso(request, curso_id):
             return JsonResponse({'error': 'El usuario no tiene perfil de docente.'}, status=404)
 
     # Estudiantes matriculados a través de Notas, ordenados por periodo más reciente
-    notas = Nota.objects.filter(curso=curso).select_related('estudiante', 'periodo').order_by(
+    # SDAT-334: sin filtro explícito se muestra solo el periodo más reciente del curso
+    # (matrícula vigente); con periodo_anio/periodo_semestre, ese periodo.
+    notas = Nota.objects.filter(curso=curso)
+    anio, semestre = request.GET.get('periodo_anio'), request.GET.get('periodo_semestre')
+    if anio and semestre:
+        notas = notas.filter(periodo__anio=anio, periodo__semestre=semestre)
+    else:
+        ultimo = notas.order_by('-periodo__anio', '-periodo__semestre').values_list('periodo_id', flat=True).first()
+        notas = notas.filter(periodo_id=ultimo)
+    notas = notas.select_related('estudiante', 'periodo').order_by(
         '-periodo__anio', '-periodo__semestre', 'estudiante__nombre'
     )
 

@@ -30,7 +30,7 @@ def _anchos_columnas(headers, keys, filas, ancho_total):
     """Anchos proporcionales con tope y mínimo, para que ninguna columna quede ilegible."""
     largos = []
     for h, k in zip(headers, keys):
-        mayor = max((len(str(f.get(k, '') or '')) for f in filas), default=0)
+        mayor = max((len(_texto_celda(f.get(k))) for f in filas), default=0)
         largos.append(min(max(len(str(h)), mayor, 12), 40))
     total = sum(largos)
     return [ancho_total * (n / total) for n in largos]
@@ -335,7 +335,8 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
             semestre = row['periodo__semestre']
             cohort   = f'Periodo {anio}-{semestre}'
             total    = row['total_estudiantes'] or 0
-            avg_gpa  = round(float(row['promedio_cohorte']), 2) if row['promedio_cohorte'] else 0.0
+            # SDAT-334: un periodo sin definitivas no tiene promedio (None), no un promedio 0
+            avg_gpa  = round(float(row['promedio_cohorte']), 2) if row['promedio_cohorte'] is not None else None
 
             # Estudiantes con nota en este periodo
             est_en_periodo = list(
@@ -355,9 +356,11 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
             medium = riesgo_periodo_qs.filter(nivel_riesgo='medium').count()
             low    = riesgo_periodo_qs.filter(nivel_riesgo='low').count()
 
-            # Alertas generadas en este periodo (aproximado por año)
+            # Alertas generadas en este periodo (semestre 1: ene-jun, semestre 2: jul-dic)
             total_alertas = alertas_base.filter(
                 fecha_generacion__year=anio,
+                fecha_generacion__month__lte=6 if semestre == 1 else 12,
+                fecha_generacion__month__gte=1 if semestre == 1 else 7,
             ).count()
 
             # Nivel de riesgo dominante del cohorte
@@ -387,6 +390,11 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
 
 
 from usuarios.decorators import requiere_rol
+
+
+def _texto_celda(valor):
+    """SDAT-334: el cero es un dato; solo None y la cadena vacía salen como celda vacía."""
+    return '' if valor is None else str(valor)
 
 # ─── Vista: datos JSON para vista previa ──────────────────────────────────────
 
@@ -587,7 +595,7 @@ def exportar_reporte(request):
             table_data = [[Paragraph(str(h), hdr_style) for h in headers]]
             for row in data_list:
                 table_data.append([
-                    Paragraph(str(row.get(k, '') or ''), cell_style)
+                    Paragraph(_texto_celda(row.get(k)), cell_style)
                     for k in keys
                 ])
 
