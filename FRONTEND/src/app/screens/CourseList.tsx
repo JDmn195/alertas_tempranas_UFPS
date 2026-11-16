@@ -135,7 +135,9 @@ export default function CourseList() {
     setDetailError(null);
     setCourseDetailData(null);
     try {
-      const res = await apiFetch(`${API_BASE}/courses/${cursoId}/detail/`);
+      // SDAT-334: el detalle respeta el periodo elegido; sin periodo concreto muestra el más reciente
+      const filtroPeriodo = periodoAnio !== 'todos' ? `?periodo_anio=${periodoAnio}&periodo_semestre=${periodoSemestre}` : '';
+      const res = await apiFetch(`${API_BASE}/courses/${cursoId}/detail/${filtroPeriodo}`);
       if (!res.ok) throw new Error('No se pudo cargar el detalle del curso');
       const data = await res.json();
       setCourseDetailData(data);
@@ -144,7 +146,7 @@ export default function CourseList() {
     } finally {
       setDetailLoading(false);
     }
-  }, []);
+  }, [periodoAnio, periodoSemestre]);
 
   useEffect(() => {
     if (selectedCourseDetail !== null) {
