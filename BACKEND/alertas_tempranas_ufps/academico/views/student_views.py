@@ -222,6 +222,9 @@ def listar_estudiantes(request):
         return nivel_actual
 
     results = []
+    # SDAT-333: totales de toda la población filtrada por búsqueda y semestre, independientes
+    # de la página y del filtro de riesgo. Alerta activa = cualquier estado distinto de cerrada.
+    resumen = {'total': 0, 'high': 0, 'medium': 0, 'low': 0, 'sin_dato': 0, 'alertas_activas': 0, 'inactivos': 0}
     for e in estudiantes_raw:
         codigo = e['codigo']
 
@@ -234,6 +237,13 @@ def listar_estudiantes(request):
             or nivel_snap_map.get(codigo)
             or _nivel_por_promedio(ppa_real if ppa_real is not None else e['promedio'])
         )
+
+        resumen['total'] += 1
+        resumen[nivel if nivel in ('high', 'medium', 'low') else 'sin_dato'] += 1
+        resumen['alertas_activas'] += e['total_alertas']
+        matricula = (e['estado_matricula'] or '').lower()
+        if any(t in matricula for t in ('retirado', 'graduado', 'cancelado')):
+            resumen['inactivos'] += 1
 
         if risk and risk != nivel:
             continue
@@ -269,6 +279,7 @@ def listar_estudiantes(request):
         'page_size': page_size,
         'pages':     max(1, -(-total // page_size)),  # ceil division
         'results':   page_results,
+        'resumen':   resumen,
     })
 
 
