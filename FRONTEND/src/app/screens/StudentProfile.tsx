@@ -42,6 +42,7 @@ import {
 import { Button } from '../components/ui/Button';
 import { NivelRiesgoChip } from '../components/Riesgo';
 import { apiFetch } from '../../services/apiFetch';
+import { rolGuardado } from '../../services/session';
 
 interface StudentDetail {
   codigo: string;
@@ -287,6 +288,7 @@ function IndicadoresSection({
   studentName?: string;
   historial?: HistorialPeriodo[] | null;
 }) {
+  const esDirector = rolGuardado() === 'DIRECTOR';
   const navigate = useNavigate();
   const [showReprobadas, setShowReprobadas] = useState(false); // 4.3
   const indicadores = [
@@ -314,11 +316,12 @@ function IndicadoresSection({
     {
       icon: AlertTriangle,
       label: 'Alertas Activas',
-      sublabel: 'Ver en gestión de alertas',    // 4.2
+      sublabel: esDirector ? 'Alertas abiertas del estudiante' : 'Ver en gestión de alertas',    // 4.2
       color: 'red',
       value: data?.alertas_activas ?? 0,
       // 4.2: navegar a alertas buscando por nombre
-      onClick: studentName
+      // SDAT-338: el director no tiene acceso a Gestión de Alertas
+      onClick: studentName && !esDirector
         ? () => navigate(`/dashboard/alerts?search=${encodeURIComponent(studentName)}`)
         : undefined,
     },

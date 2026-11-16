@@ -31,6 +31,15 @@ function tokenGuardado(): string | null {
   }
 }
 
+/** Rol guardado en el navegador; solo sirve para ocultar controles, el backend decide el acceso. */
+export function rolGuardado(): string | null {
+  try {
+    return JSON.parse(localStorage.getItem('user') || 'null')?.rol ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Pantalla de inicio de cada rol (HU-37: el estudiante entra directo a su portal). */
 export function rutaInicio(rol?: string | null): string {
   if (rol === 'ESTUDIANTE') return '/dashboard/portal';

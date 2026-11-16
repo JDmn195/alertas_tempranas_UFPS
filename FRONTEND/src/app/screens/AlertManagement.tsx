@@ -9,6 +9,7 @@ import { colorDeRiesgo } from '../components/Riesgo';
 import { Badge } from '../components/ui/Badge';
 import { X, ClipboardList, CheckCircle2, AlertTriangle, Filter, ExternalLink, RefreshCw, ChevronRight, Search, SearchX, ShieldCheck } from 'lucide-react';
 import { apiFetch } from '../../services/apiFetch';
+import { rolGuardado } from '../../services/session';
 
 import { AvisoError, CargandoBloque, CargandoLista, EstadoVacio } from '../components/Estados';
 const API_BASE = `${API_BASE_URL}/api/alertas`;
@@ -314,6 +315,7 @@ export default function AlertManagement() {
   const [conteos, setConteos] = useState<Conteos>({ activa: 0, en_seguimiento: 0, atendida: 0, cerrada: 0 });
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const puedeReevaluar = rolGuardado() === 'ADMINISTRADOR';
   const [reevaluating, setReevaluating] = useState(false);     // 3.6
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [expandedStudents, setExpandedStudents] = useState<Record<string, boolean>>({});
@@ -441,7 +443,8 @@ export default function AlertManagement() {
 
       {/* Encabezado y acciones generales */}
       <EncabezadoPagina titulo="Gestión de Alertas" detalle="Monitoreo y seguimiento del riesgo académico estudiantil.">
-        {/* Fix 3.6: botón Reevaluar alertas */}
+        {/* Fix 3.6: botón Reevaluar alertas (SDAT-338: acción global, solo administrador) */}
+        {puedeReevaluar && (
         <Button
           variant="outline"
           onClick={handleReevaluarAlertas}
@@ -452,6 +455,7 @@ export default function AlertManagement() {
           <ShieldCheck className={`w-4 h-4 ${reevaluating ? 'animate-pulse' : ''}`} aria-hidden="true" />
           {reevaluating ? 'Reevaluando...' : 'Reevaluar alertas'}
         </Button>
+        )}
         <Button onClick={handleGenerateAlerts} disabled={generating || reevaluating} className="gap-2">
           <RefreshCw className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} aria-hidden="true" />
           {generating ? 'Procesando...' : 'Actualizar'}
@@ -546,9 +550,11 @@ export default function AlertManagement() {
                 titulo="No hay alertas activas"
                 detalle="Todo está bajo control. Si acabas de importar notas o cambiar reglas, reevalúa para recalcular las alertas."
               >
+                {puedeReevaluar && (
                 <Button variant="outline" size="sm" onClick={handleReevaluarAlertas} disabled={reevaluating}>
                   {reevaluating ? 'Reevaluando…' : 'Reevaluar alertas'}
                 </Button>
+                )}
               </EstadoVacio>
             ) : (
               <EstadoVacio
