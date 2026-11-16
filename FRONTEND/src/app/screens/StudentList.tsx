@@ -51,7 +51,7 @@ const SEMESTRES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 // Chip de riesgo local: punto de color + texto, mismo lenguaje en toda la lista
 const CHIP_RIESGO: Record<'high' | 'medium' | 'low', { texto: string; clase: string; punto: string }> = {
-  high:   { texto: 'ALTO',  clase: 'bg-primary-tint text-[#9B0B22] ring-primary-tint', punto: 'bg-primary' },
+  high:   { texto: 'ALTO',  clase: 'bg-red-50 text-red-800 ring-red-200', punto: 'bg-red-600' },
   medium: { texto: 'MEDIO', clase: 'bg-amber-50 text-amber-800 ring-amber-200',   punto: 'bg-amber-500' },
   low:    { texto: 'BAJO',  clase: 'bg-green-50 text-green-800 ring-green-200', punto: 'bg-green-500' },
 };
@@ -332,7 +332,7 @@ export default function StudentList() {
         {/* Table */}
         {!error && students.length > 0 && (
           <div className="overflow-x-auto animate-in fade-in duration-200">
-            <table className="w-full min-w-[720px]">
+            <table className="tabla-tarjetas w-full min-w-[720px]">
               <thead className="bg-paper text-ink-soft border-b border-line">
                 <tr>
                   {COLUMNAS.map(({ clave, etiqueta }) => (

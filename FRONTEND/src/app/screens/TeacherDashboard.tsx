@@ -91,7 +91,7 @@ const estadoBadgeClass = (estado: string) => {
 };
 
 const colorEstado = (estado: string) =>
-  estado === 'CRÍTICO' ? '#B02A2B' : estado === 'EN OBSERVACIÓN' ? '#C98A12' : estado === 'ESTABLE' ? '#2F8F6B' : '#D5BFBA';
+  estado === 'CRÍTICO' ? 'var(--riesgo-critico)' : estado === 'EN OBSERVACIÓN' ? 'var(--riesgo-medio)' : estado === 'ESTABLE' ? 'var(--riesgo-bajo)' : 'var(--line-strong)';
 
 const entrada = (i: number) => ({ animationDelay: `${i * 60}ms`, animationFillMode: 'backwards' as const });
 
@@ -245,9 +245,9 @@ export default function TeacherDashboard() {
   // Datos para la gráfica de distribución de riesgo
   const distData = data
     ? [
-        { nivel: 'Alto', value: data.distribucion_riesgo.high, fill: '#B02A2B' },
-        { nivel: 'Medio', value: data.distribucion_riesgo.medium, fill: '#C98A12' },
-        { nivel: 'Bajo', value: data.distribucion_riesgo.low, fill: '#2F8F6B' },
+        { nivel: 'Alto', value: data.distribucion_riesgo.high, fill: 'var(--riesgo-critico)' },
+        { nivel: 'Medio', value: data.distribucion_riesgo.medium, fill: 'var(--riesgo-medio)' },
+        { nivel: 'Bajo', value: data.distribucion_riesgo.low, fill: 'var(--riesgo-bajo)' },
       ]
     : [];
 

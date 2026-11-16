@@ -182,7 +182,7 @@ export default function AuditLog() {
           </h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="tabular-nums w-full min-w-[720px]">
+          <table className="tabla-tarjetas tabular-nums w-full min-w-[720px]">
             <thead className="bg-paper text-ink-soft border-b border-line">
               <tr>
                 <th className="px-5 py-3 text-left text-xs font-semibold">Fecha y hora</th>

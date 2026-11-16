@@ -3,6 +3,8 @@ import { Outlet, Navigate, Link, useLocation } from 'react-router';
 import { LogOut } from 'lucide-react';
 import { Sidebar, cerrarSesion, estaActivo, iniciales, itemsDelRol } from './Sidebar';
 import { TopNav } from './TopNav';
+import { ToggleTema } from '../ToggleTema';
+import { etiquetarTablas } from './etiquetarTablas';
 
 const enlaceSalto =
   'sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:bg-white focus:text-primary focus:px-4 focus:py-2 focus:rounded-[10px] focus:shadow-lg';
@@ -18,6 +20,16 @@ export function MainLayout() {
     setMenuAbierto(false);
     contenido.current?.scrollTo({ top: 0 });
   }, [location.pathname]);
+
+  // Las tablas `.tabla-tarjetas` se ven como tarjetas bajo `md`: cada celda toma su etiqueta del encabezado
+  useEffect(() => {
+    const raiz = contenido.current;
+    if (!raiz) return;
+    etiquetarTablas(raiz);
+    const observador = new MutationObserver(() => etiquetarTablas(raiz));
+    observador.observe(raiz, { childList: true, subtree: true });
+    return () => observador.disconnect();
+  }, []);
 
   if (!userJson) {
     return <Navigate to="/login" replace />;
@@ -35,7 +47,7 @@ export function MainLayout() {
     <div className="flex h-dvh bg-desk">
       <a href="#contenido" className={enlaceSalto}>Saltar al contenido</a>
       <Sidebar abierto={menuAbierto} onCerrar={() => setMenuAbierto(false)} />
-      <div className="flex-1 flex flex-col min-w-0 bg-[#FBF3F1] lg:my-2 lg:mr-2 lg:rounded-[14px] lg:border lg:border-line overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 bg-paper lg:my-2 lg:mr-2 lg:rounded-[14px] lg:border lg:border-line overflow-hidden">
         <TopNav onMenu={() => setMenuAbierto(true)} menuAbierto={menuAbierto} />
         <main id="contenido" ref={contenido} className="flex-1 overflow-auto px-3 py-5 sm:px-5 lg:px-7 lg:py-6">
           <div key={location.pathname} className="page-enter">
@@ -55,7 +67,7 @@ function EstructuraPortal({ nombre, contenido, pathname }: { nombre?: string; co
   const items = itemsDelRol('ESTUDIANTE');
 
   return (
-    <div className="flex flex-col h-dvh bg-[#F8ECE9]">
+    <div className="flex flex-col h-dvh bg-desk">
       <a href="#contenido" className={enlaceSalto}>Saltar al contenido</a>
       <header className="shrink-0 bg-white border-b border-line">
         <div className="mx-auto max-w-6xl h-16 px-4 sm:px-6 flex items-center justify-between gap-4">
@@ -64,7 +76,7 @@ function EstructuraPortal({ nombre, contenido, pathname }: { nombre?: string; co
             <span className="hidden 2xl:block border-l border-line-strong pl-3 text-sm font-semibold text-ink leading-tight whitespace-nowrap">Mi seguimiento académico</span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-1" aria-label="Secciones del portal">
+          <nav className="hidden lg:flex items-center gap-1" aria-label="Secciones del portal">
             {items.map((item) => {
               const activo = estaActivo(item, pathname);
               return (
@@ -83,14 +95,16 @@ function EstructuraPortal({ nombre, contenido, pathname }: { nombre?: string; co
           </nav>
 
           <div className="flex items-center gap-2 shrink-0">
-            <div className="hidden sm:flex items-center gap-2 pr-1">
-              <span className="w-8 h-8 rounded-full bg-primary-tint text-primary-strong text-xs font-semibold flex items-center justify-center" aria-hidden="true">
+            <div className="flex items-center gap-2 pr-1 min-w-0">
+              <span className="hidden sm:flex w-8 h-8 rounded-full bg-primary-tint text-primary-strong text-xs font-semibold flex items-center justify-center" aria-hidden="true">
                 {iniciales(nombre)}
               </span>
-              <span className="hidden lg:block text-sm font-medium text-ink max-w-40 truncate">{nombre}</span>
+              <span className="text-sm font-medium text-ink max-w-[22vw] sm:max-w-40 truncate">{nombre}</span>
             </div>
+            <ToggleTema />
             <button
               onClick={cerrarSesion}
+              aria-label="Cerrar Sesión"
               className="flex items-center gap-2 rounded-full border border-line px-3 py-2 text-sm font-medium text-ink-soft hover:border-line-strong hover:text-ink"
             >
               <LogOut className="w-4 h-4" aria-hidden="true" />
@@ -101,13 +115,13 @@ function EstructuraPortal({ nombre, contenido, pathname }: { nombre?: string; co
       </header>
 
       <main id="contenido" ref={contenido} className="portal flex-1 overflow-auto">
-        <div key={pathname} className="page-enter mx-auto max-w-5xl px-4 sm:px-6 py-6 sm:py-8 pb-24 md:pb-10">
+        <div key={pathname} className="page-enter mx-auto max-w-5xl px-4 sm:px-6 py-6 sm:py-8 pb-24 lg:pb-10">
           <Outlet />
         </div>
       </main>
 
       {/* Teléfono: las cuatro secciones quedan al alcance del pulgar */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-white border-t border-line grid grid-cols-5 pb-[env(safe-area-inset-bottom)]" aria-label="Secciones del portal">
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-20 bg-white border-t border-line grid grid-cols-5 pb-[env(safe-area-inset-bottom)]" aria-label="Secciones del portal">
         {items.map((item) => {
           const Icon = item.icon;
           const activo = estaActivo(item, pathname);
