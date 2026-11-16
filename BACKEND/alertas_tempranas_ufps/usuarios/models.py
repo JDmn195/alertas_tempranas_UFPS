@@ -85,6 +85,8 @@ class Auditoria(models.Model):
         ('SOLICITAR_ACOMPANAMIENTO', 'Solicitar Acompañamiento'),  # HU-41
         ('CANCELAR_SOLICITUD', 'Cancelar Solicitud de Acompañamiento'),  # HU-41
         ('GESTIONAR_SOLICITUD', 'Gestionar Solicitud de Acompañamiento'),  # HU-41
+        ('CONSULTA_ALERTAS', 'Consulta de Alertas'),  # SDAT-349
+        ('EXPORTAR_REPORTE', 'Exportación de Reporte'),  # SDAT-349
     ]
 
     usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True)

@@ -14,6 +14,7 @@ from alertas.models import TIPOS_FUERA_DEL_MOTOR_GENERAL, Regla, Alerta, RiesgoE
 
 from usuarios.decorators import requiere_rol
 from usuarios.utils import registrar_auditoria
+from alertas_tempranas_ufps.paginacion import paginar_si_se_pide, metadatos_pagina
 
 logger = logging.getLogger(__name__)
 
@@ -263,7 +264,7 @@ def recalcular_riesgo_estudiante(request, codigo):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR'])  # SDAT-349: el DIRECTOR solo consulta
 def generar_alertas(request):
     """
     POST /api/alertas/generar/
@@ -282,7 +283,7 @@ def generar_alertas(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR'])  # SDAT-349: el DIRECTOR solo consulta
 def reevaluar_alertas(request):
     """
     POST /api/alertas/reevaluar/
@@ -398,6 +399,7 @@ def listar_alertas(request):
     usuario = request.usuario
     estado = request.GET.get('estado', 'activa')
     tipo_regla = request.GET.get('tipo_regla')
+    nivel = request.GET.get('nivel')  # SDAT-349: nivel de la alerta (high, medium, low)
     search = request.GET.get('search', '').strip()  # 3.1
     
     qs = Alerta.objects.select_related('estudiante', 'regla').order_by('-fecha_generacion')
@@ -414,7 +416,7 @@ def listar_alertas(request):
             qs = qs.none()
             total_qs = total_qs.none()
             
-    if estado:
+    if estado and estado.lower() != 'todas':  # SDAT-349: 'todas' no filtra por estado
         mapping = {
             'activa': ['activa', 'active'],
             'en_seguimiento': ['en_seguimiento'],
@@ -426,11 +428,19 @@ def listar_alertas(request):
         
     if tipo_regla and tipo_regla != 'all':
         qs = qs.filter(regla__tipo=tipo_regla)
+    if nivel and nivel != 'all':
+        qs = qs.filter(regla__nivel=nivel)
+    codigo_estudiante = request.GET.get('estudiante', '').strip()  # SDAT-349: ficha del estudiante
+    if codigo_estudiante:
+        qs = qs.filter(estudiante_id=codigo_estudiante)
 
     # Fix 3.1: filtrar por nombre del estudiante
     if search:
         qs = filtrar_sin_tildes(qs, search, ['estudiante__nombre', 'estudiante__codigo'])
         
+    if usuario.rol == 'DIRECTOR':
+        registrar_auditoria(usuario, 'CONSULTA_ALERTAS', f"El director consultó el listado de alertas (estado={estado}).")
+
     conteos = {
         'activa': total_qs.filter(estado__in=['activa', 'active']).count(),
         'en_seguimiento': total_qs.filter(estado='en_seguimiento').count(),
@@ -474,14 +484,16 @@ def listar_alertas(request):
         del item['_ord_est']
         del item['_ord_regla']
         
+    pagina = paginar_si_se_pide(request, data)
     return JsonResponse({
-        'alertas': data,
-        'conteos': conteos
+        'alertas': list(pagina) if pagina is not None else data,
+        'conteos': conteos,
+        **metadatos_pagina(pagina),
     }, safe=False)
 
 @csrf_exempt
 @require_http_methods(["POST"])
-@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
+@requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR'])  # SDAT-349: el DIRECTOR solo consulta
 def cerrar_alerta(request, alerta_id):
     """
     POST /api/alertas/<id>/cerrar/
