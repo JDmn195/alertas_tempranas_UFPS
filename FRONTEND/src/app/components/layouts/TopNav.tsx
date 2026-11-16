@@ -24,7 +24,7 @@ function useAvisosSinLeer(pathname: string): number {
 }
 
 /** Barra superior del personal: dónde estoy, fecha y avisos. */
-export function TopNav({ onMenu }: { onMenu?: () => void }) {
+export function TopNav({ onMenu, menuAbierto = false }: { onMenu?: () => void; menuAbierto?: boolean }) {
   const location = useLocation();
   const { section, label } = ubicacionDePagina(location.pathname);
   const sinLeer = useAvisosSinLeer(location.pathname);
@@ -34,7 +34,7 @@ export function TopNav({ onMenu }: { onMenu?: () => void }) {
   return (
     <header className="h-14 shrink-0 flex items-center justify-between gap-3 px-3 sm:px-5 lg:px-7 border-b border-line">
       <div className="flex items-center gap-2 min-w-0">
-        <button onClick={onMenu} aria-label="Abrir menú" className="lg:hidden p-2 -ml-1 rounded-[10px] text-ink-soft hover:bg-wash">
+        <button onClick={onMenu} aria-label="Abrir menú" aria-expanded={menuAbierto} aria-haspopup="true" className="lg:hidden p-2 -ml-1 rounded-[10px] text-ink-soft hover:bg-wash">
           <Menu className="w-5 h-5" />
         </button>
         <img src="/logo-ufps.svg" alt="" className="h-7 w-auto lg:hidden" aria-hidden="true" />
