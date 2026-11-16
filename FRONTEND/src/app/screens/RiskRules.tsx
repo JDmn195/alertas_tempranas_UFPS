@@ -1,7 +1,7 @@
 import { toast } from 'sonner';
 import { confirmarAccion } from '../components/Confirmacion';
 import { Link } from 'react-router';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Settings, X, Trash2, AlertTriangle, Play, CheckCircle, CalendarX } from 'lucide-react';
 import { CintaIndicadores, EncabezadoPagina, Seccion } from '../components/Panel';
 import { Button } from '../components/ui/Button';
@@ -28,6 +28,8 @@ export default function RiskRules() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [errorModal, setErrorModal] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
+  const [guardando, setGuardando] = useState(false);
+  const guardandoRef = useRef(false);
   const [evaluandoCortes, setEvaluandoCortes] = useState(false);
   const [evaluacionOk, setEvaluacionOk] = useState(false);
   const [errorInasistencia, setErrorInasistencia] = useState<string | null>(null);
@@ -145,10 +147,13 @@ export default function RiskRules() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (guardandoRef.current) return;
     if (!usuarioId) {
       toast.error('Debes iniciar sesión para realizar esta acción');
       return;
     }
+    guardandoRef.current = true;
+    setGuardando(true);
     try {
       if (editingId) {
         await ruleService.updateRule(editingId, formData);
@@ -160,6 +165,9 @@ export default function RiskRules() {
       loadRules();
     } catch (error: any) {
       toast.error(error.message || 'Error al guardar la regla');
+    } finally {
+      guardandoRef.current = false;
+      setGuardando(false);
     }
   };
 
@@ -587,7 +595,7 @@ export default function RiskRules() {
                 <Button variant="secondary" type="button" onClick={() => setShowModal(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit">
+                <Button type="submit" disabled={guardando}>
                   {editingId ? 'Actualizar Regla' : 'Guardar Regla'}
                 </Button>
               </div>
