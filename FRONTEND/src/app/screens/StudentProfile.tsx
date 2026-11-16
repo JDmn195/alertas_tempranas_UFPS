@@ -790,7 +790,7 @@ function HistorialAcademico({ data, loading }: { data: HistorialPeriodo[] | null
 
       {/* Tabla */}
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="tabla-tarjetas w-full">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
               {['Código', 'Materia', 'Créditos', 'Grupo', 'Docente', 'Corte 1', 'Corte 2', 'Corte 3', 'Examen', 'Nota Final', 'Estado'].map(col => (

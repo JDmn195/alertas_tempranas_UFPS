@@ -122,7 +122,7 @@ export default function NotificationHistory() {
           <h2 className="text-base font-semibold text-ink">{isLoading && history.length === 0 ? 'Cargando...' : `${total} envío${total !== 1 ? 's' : ''}`}</h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="tabular-nums w-full min-w-[760px]">
+          <table className="tabla-tarjetas tabular-nums w-full min-w-[760px]">
             <thead className="bg-paper text-ink-soft border-b border-line">
               <tr>
                 <th className="px-5 py-3 text-left text-xs font-semibold">Fecha</th>

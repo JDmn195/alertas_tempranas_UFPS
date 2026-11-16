@@ -499,7 +499,7 @@ export default function ExportReports() {
 
             {/* Tabla Dinámica — preview de 5 filas */}
             <div className="overflow-x-auto flex-1 border border-line rounded-[10px]">
-              <table className="tabular-nums w-full border-collapse text-left">
+              <table className="tabla-tarjetas tabular-nums w-full border-collapse text-left">
                 <thead>
                   <tr className="bg-paper text-ink-soft border-b border-line">
                     {activeReport?.columns.map((col, idx) => (
@@ -618,7 +618,7 @@ export default function ExportReports() {
 
             {/* Tabla completa scrollable */}
             <div className="flex-1 overflow-auto">
-              <table className="tabular-nums w-full border-collapse text-left">
+              <table className="tabla-tarjetas tabular-nums w-full border-collapse text-left">
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-paper text-ink-soft border-b border-line">
                     <th className="px-4 py-3 text-xs font-semibold">#</th>
