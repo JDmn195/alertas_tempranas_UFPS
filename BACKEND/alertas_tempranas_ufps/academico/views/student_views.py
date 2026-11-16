@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import csrf_exempt
 
+from academico.busqueda import filtrar_sin_tildes, normalizar_texto
 from academico.models import Estudiante, Nota
 from academico.services.historial_promedios import serie_promedios_por_periodo, tendencia_promedio
 from academico.services.notas_corte import ESTADO_EN_CURSO, alertas_corte_abiertas, desglose_cortes, estado_nota
@@ -70,6 +71,17 @@ def _calcular_historial_promedios(estudiante):
     }
 
 
+_ORDEN_RIESGO = {'low': 1, 'medium': 2, 'high': 3}
+ORDEN_ESTUDIANTES = {
+    'codigo': lambda v: normalizar_texto(v),
+    'nombre': lambda v: normalizar_texto(v),
+    'semestre': lambda v: v,
+    'promedio': lambda v: v,
+    'nivel_riesgo': lambda v: _ORDEN_RIESGO.get(v, 0),
+    'alertas_activas': lambda v: v,
+}
+
+
 @csrf_exempt
 @require_GET
 @requiere_rol(['ADMINISTRADOR', 'DOCENTE', 'BIENESTAR', 'DIRECTOR'])
@@ -81,6 +93,8 @@ def listar_estudiantes(request):
         search   – filtra por nombre o código (icontains)
         semester – filtra por semestre exacto (número)
         risk     – filtra por nivel de riesgo: high | medium | low
+        sort     – columna de ordenación (codigo, nombre, semestre, promedio, nivel_riesgo, alertas_activas)
+        dir      – asc | desc
         page     – número de página (default 1)
         page_size – tamaño de página (default 20, max 100)
     """
@@ -89,6 +103,8 @@ def listar_estudiantes(request):
     search    = request.GET.get('search', '').strip()
     semester  = request.GET.get('semester', '').strip()
     risk      = request.GET.get('risk', '').strip().lower()
+    sort      = request.GET.get('sort', '').strip()
+    direccion = 'desc' if request.GET.get('dir', '').strip().lower() == 'desc' else 'asc'
     try:
         page      = max(1, int(request.GET.get('page', 1)))
         page_size = min(100, max(1, int(request.GET.get('page_size', 20))))
@@ -106,9 +122,7 @@ def listar_estudiantes(request):
 
     # Búsqueda por nombre o código
     if search:
-        qs = qs.filter(
-            Q(nombre__icontains=search) | Q(codigo__icontains=search)
-        )
+        qs = filtrar_sin_tildes(qs, search, ['nombre', 'codigo'])
 
     # Filtro por semestre
     if semester.isdigit():
@@ -233,6 +247,15 @@ def listar_estudiantes(request):
             'alertas_activas':  e['total_alertas'],
             'estado_matricula': e['estado_matricula'],
         })
+
+    # ── Ordenación (SDAT-340, B40): sort=<columna>, dir=asc|desc ──────────────
+    if sort in ORDEN_ESTUDIANTES:
+        clave = ORDEN_ESTUDIANTES[sort]
+        # Los valores vacíos van siempre al final, sea cual sea el sentido
+        con_valor = [r for r in results if r[sort] is not None]
+        sin_valor = [r for r in results if r[sort] is None]
+        con_valor.sort(key=lambda r: clave(r[sort]), reverse=(direccion == 'desc'))
+        results = con_valor + sin_valor
 
     # ── Paginación ────────────────────────────────────────────────────────────
     total = len(results)
