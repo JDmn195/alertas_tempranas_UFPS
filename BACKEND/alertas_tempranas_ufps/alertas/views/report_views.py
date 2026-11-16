@@ -7,10 +7,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db.models import Count, Avg, Q
 
-from alertas.models import Alerta, Intervencion, RiesgoEstudiante, RiesgoEstudiantePeriodo
+from alertas.models import alertas_abiertas, Alerta, Intervencion, RiesgoEstudiante, RiesgoEstudiantePeriodo
 from academico.models import Estudiante, Curso, Nota
 from alertas_tempranas_ufps.paginacion import paginar_si_se_pide, metadatos_pagina
-from usuarios.utils import fecha_local
+from usuarios.utils import fecha_local, registrar_auditoria
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ def _get_docente_cursos(request):
 
 # ─── Lógica de consulta desacoplada del request ───────────────────────────────
 
-def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
+def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None, usuario_docente=None):
     """
     Retorna la lista de registros para el tipo de reporte indicado.
     Fix 6.1: si estudiantes_ids no es None, filtra solo esos estudiantes.
@@ -84,24 +84,22 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
     if tipo == 'riesgo-estudiantil':
         # Combina RiesgoEstudiantePeriodo (más reciente) + RiesgoEstudiante (fallback)
         # igual que en el panel estratégico
-        from django.db.models import Subquery as _SQ, OuterRef as _OR
-
-        ultimo_id_sq = (
-            RiesgoEstudiantePeriodo.objects
-            .filter(estudiante_id=_OR('estudiante_id'))
-            .order_by('-periodo__anio', '-periodo__semestre')
-            .values('id')[:1]
-        )
-        riesgos_qs = (
-            RiesgoEstudiantePeriodo.objects
-            .filter(id=_SQ(ultimo_id_sq))
-            .select_related('estudiante')
-        )
+        # SDAT-303: una sola lectura ordenada, con las columnas necesarias, y la primera fila de
+        # cada estudiante es la del periodo más reciente (antes: subconsulta correlacionada, 2 veces)
+        riesgos_qs = RiesgoEstudiantePeriodo.objects.all()
         if estudiantes_ids is not None:
             riesgos_qs = riesgos_qs.filter(estudiante_id__in=estudiantes_ids)
+        ultimos = {}
+        for fila in (
+            riesgos_qs
+            .order_by('estudiante_id', '-periodo__anio', '-periodo__semestre', '-id')
+            .values_list('estudiante_id', 'nivel_riesgo', 'fecha_calculo', 'estudiante__nombre',
+                         'estudiante__semestre', 'estudiante__promedio')
+        ):
+            ultimos.setdefault(fila[0], fila)
 
         # Estudiantes ya cubiertos por RiesgoEstudiantePeriodo
-        ids_con_periodo = set(riesgos_qs.values_list('estudiante_id', flat=True))
+        ids_con_periodo = set(ultimos)
 
         # Complemento: RiesgoEstudiante para los que no tienen periodo
         riesgos_snap = RiesgoEstudiante.objects.exclude(
@@ -115,26 +113,24 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
             riesgos_snap.values_list('estudiante_id', flat=True)
         )
         alertas_map = dict(
-            Alerta.objects
-            .filter(estudiante_id__in=todos_ids)
-            .exclude(estado__in=['cerrada', 'closed'])
+            alertas_abiertas(Alerta.objects.filter(estudiante_id__in=todos_ids))
             .values('estudiante_id')
             .annotate(total=Count('id'))
             .values_list('estudiante_id', 'total')
         )
 
         data = []
-        for r in riesgos_qs:
-            gpa = float(r.estudiante.promedio) if r.estudiante.promedio else 0.0
+        for est_id, nivel, fecha_calculo, nombre, semestre, promedio in ultimos.values():
+            gpa = float(promedio) if promedio else 0.0
             data.append({
-                'code':     r.estudiante.codigo,
-                'name':     r.estudiante.nombre,
-                'semester': r.estudiante.semestre,
+                'code':     est_id,
+                'name':     nombre,
+                'semester': semestre,
                 'gpa':      gpa,
-                'alerts':   alertas_map.get(r.estudiante_id, 0),
-                'risk':     r.nivel_riesgo.upper(),
+                'alerts':   alertas_map.get(est_id, 0),
+                'risk':     nivel.upper(),
                 'program':  'systems',
-                'date':     r.fecha_calculo.strftime('%Y-%m-%d'),
+                'date':     fecha_calculo.strftime('%Y-%m-%d'),
             })
         for r in riesgos_snap:
             gpa = float(r.estudiante.promedio) if r.estudiante.promedio else 0.0
@@ -151,12 +147,16 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
         return data
 
     elif tipo == 'resumen-alertas':
-        qs = Alerta.objects.all().select_related('estudiante', 'regla')
+        qs = Alerta.objects.all()
         if estudiantes_ids is not None:
             qs = qs.filter(estudiante_id__in=estudiantes_ids)
         data = []
-        for a in qs:
-            est = a.estado.lower()
+        # SDAT-303: filas planas en lugar de instanciar Alerta, Estudiante y Regla por alerta
+        for (est_id, nombre_est, estado_a, nombre_regla, descripcion, nivel_regla, fecha) in qs.values_list(
+            'estudiante_id', 'estudiante__nombre', 'estado', 'regla__nombre', 'regla__descripcion',
+            'regla__nivel', 'fecha_generacion',
+        ):
+            est = estado_a.lower()
             if est in ['activa', 'active']:
                 estado_friendly = 'Activa'
             elif est in ['en_seguimiento', 'en_monitoreo', 'monitoring', 'en seguimiento']:
@@ -166,13 +166,13 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
             else:
                 estado_friendly = 'Cerrada'
             data.append({
-                'studentCode': a.estudiante.codigo,
-                'studentName': a.estudiante.nombre,
-                'alertType': a.regla.nombre,
-                'rule': a.regla.descripcion or a.regla.nombre,
-                'date': a.fecha_generacion.strftime('%Y-%m-%d'),
+                'studentCode': est_id,
+                'studentName': nombre_est,
+                'alertType': nombre_regla,
+                'rule': descripcion or nombre_regla,
+                'date': fecha.strftime('%Y-%m-%d'),
                 'status': estado_friendly,
-                'risk': a.regla.nivel.upper(),
+                'risk': nivel_regla.upper(),
                 'program': 'systems',
             })
         return data
@@ -271,6 +271,8 @@ def _get_report_data(tipo, estudiantes_ids=None, cursos_ids=None):
         qs = Intervencion.objects.all().select_related('alerta__estudiante', 'usuario').order_by('-fecha')
         if estudiantes_ids is not None:
             qs = qs.filter(alerta__estudiante_id__in=estudiantes_ids)
+        if usuario_docente is not None:  # SDAT-338: el docente solo ve las intervenciones que registró
+            qs = qs.filter(usuario=usuario_docente)
         data = []
         for i in qs:
             tipo_friendly = {'CITACION': 'Citación', 'REMISION': 'Remisión'}.get(i.tipo, 'Tutoría')
@@ -410,7 +412,8 @@ def export_report_data(request):
     estudiantes_ids = _get_docente_filter(request)
     cursos_ids = _get_docente_cursos(request)
     try:
-        data = _traducir_niveles(_get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids))
+        data = _traducir_niveles(_get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids,
+                         usuario_docente=request.usuario if request.usuario.rol == 'DOCENTE' else None))
         pagina = paginar_si_se_pide(request, data)
         return JsonResponse({'data': list(pagina) if pagina is not None else data, **metadatos_pagina(pagina)})
     except ValueError as e:
@@ -443,10 +446,13 @@ def exportar_reporte(request):
 
     estudiantes_ids = _get_docente_filter(request)
     cursos_ids = _get_docente_cursos(request)
+    if request.usuario.rol == 'DIRECTOR':  # SDAT-349
+        registrar_auditoria(request.usuario, 'EXPORTAR_REPORTE', f"El director exportó el reporte '{tipo}' en formato {formato}.")
 
     try:
         data_list = _traducir_niveles(
-            _get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids)
+            _get_report_data(tipo, estudiantes_ids=estudiantes_ids, cursos_ids=cursos_ids,
+                         usuario_docente=request.usuario if request.usuario.rol == 'DOCENTE' else None)
         )
     except ValueError as e:
         logger.warning("Solicitud de exportación inválida: %s", e)

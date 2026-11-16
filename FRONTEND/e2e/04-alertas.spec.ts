@@ -15,7 +15,7 @@ test.describe('Gestión de alertas', () => {
     await expect(page.getByText('Promedio Crítico')).toBeVisible();
     await expect(page.getByText(/Dos cortes perdidos/)).toBeVisible();
 
-    await page.getByRole('combobox').selectOption('CORTE');
+    await page.getByRole('combobox', { name: 'Filtrar por tipo de alerta' }).selectOption('CORTE');
     await expect(page.getByText(/Dos cortes perdidos/)).toBeVisible();
     await expect(page.getByText('Promedio Crítico')).toHaveCount(0);
   });

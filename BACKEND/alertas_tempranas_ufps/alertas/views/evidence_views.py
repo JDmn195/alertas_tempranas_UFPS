@@ -8,7 +8,9 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from alertas.models import Intervencion, Evidencia
-from alertas.permisos import denegar_acceso_alerta, puede_acceder_alerta
+from alertas.permisos import (
+    denegar_acceso_alerta, denegar_acceso_intervencion, puede_acceder_alerta, puede_ver_intervencion,
+)
 from usuarios.decorators import requiere_rol
 from usuarios.utils import fecha_local
 from alertas_tempranas_ufps.validacion_archivos import firma_valida
@@ -199,6 +201,9 @@ def list_evidence(request, intervencion_id):
         return JsonResponse({'error': 'Intervención no encontrada'}, status=404)
     if not puede_acceder_alerta(request.usuario, intervencion.alerta):
         return denegar_acceso_alerta()
+
+    if not puede_ver_intervencion(request.usuario, intervencion):
+        return denegar_acceso_intervencion(request.usuario, intervencion)
 
     evidencias = Evidencia.objects.filter(intervencion_id=intervencion_id).order_by('-fecha_subida')
     

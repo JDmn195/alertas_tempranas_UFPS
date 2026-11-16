@@ -41,11 +41,15 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
   // Conservamos JSON y descargas; un error HTML nunca llega a response.json().
   const tipo = response.headers.get('Content-Type') || '';
   if ((!response.ok || tipo.includes('text/html')) && !tipo.includes('json') && response.status !== 204) {
-    const esperando = response.status >= 500 || response.status === 429 || response.ok;
+    // SDAT-346: solo 429, 502, 503 y 504 indican que Render está despertando; un 500 es un error al procesar.
+    const esperando = [429, 502, 503, 504].includes(response.status) || response.ok;
+    const escritura = !['GET', 'HEAD'].includes((options.method || 'GET').toUpperCase());
     return new Response(JSON.stringify({
       error: esperando
         ? 'El servidor está iniciando o no está disponible. Espera un momento e inténtalo de nuevo.'
-        : 'No se pudo completar la solicitud. Inténtalo de nuevo.',
+        : response.status >= 500
+          ? (escritura ? 'No pudimos guardar. Inténtalo de nuevo.' : 'No pudimos completar la solicitud. Inténtalo de nuevo.')
+          : 'No se pudo completar la solicitud. Inténtalo de nuevo.',
     }), {
       status: response.ok ? 503 : response.status,
       headers: { 'Content-Type': 'application/json', ...(response.headers.has('Retry-After') ? { 'Retry-After': response.headers.get('Retry-After')! } : {}) },

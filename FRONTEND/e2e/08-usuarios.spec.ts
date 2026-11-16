@@ -7,7 +7,7 @@ test('el administrador crea un usuario y este debe cambiar la contraseña al ent
   const admin = await browser.newPage({ storageState: sesion('admin') });
   await admin.goto('/dashboard/admin/users');
   await admin.getByRole('button', { name: 'Nuevo Usuario' }).click();
-  await admin.getByPlaceholder('e.g., Juan Carlos Pérez').fill(NUEVO.nombre);
+  await admin.getByPlaceholder('Ej.: Juan Carlos Pérez').fill(NUEVO.nombre);
   await admin.getByPlaceholder('usuario@ufps.edu.co').fill(NUEVO.correo);
   await admin.getByRole('button', { name: 'Crear Usuario' }).click();
 

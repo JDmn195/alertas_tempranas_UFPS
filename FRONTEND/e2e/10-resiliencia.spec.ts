@@ -21,7 +21,7 @@ test('cancelar una confirmación no envía el borrado; confirmar lo envía una v
   await expect(dialogo).toHaveCount(0);
   expect(borrados).toBe(0);
   await eliminar.click();
-  await dialogo.getByRole('button', { name: 'Confirmar', exact: true }).click();
+  await dialogo.getByRole('button', { name: 'Eliminar regla', exact: true }).click();
   await expect.poll(() => borrados).toBe(1);
   await expect(dialogo).toHaveCount(0);
 });

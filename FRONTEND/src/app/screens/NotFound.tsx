@@ -8,7 +8,7 @@ export default function NotFound() {
         <p className="text-sm font-semibold text-primary">Error 404</p>
         <h1 className="mt-1 text-3xl font-semibold text-ink">Página no encontrada</h1>
         <p className="mt-3 text-ink-muted">
-          La dirección que escribió no existe o fue movida. Vuelva al inicio para continuar.
+          La dirección que escribiste no existe o fue movida. Vuelve al inicio para continuar.
         </p>
         <Link
           to="/"

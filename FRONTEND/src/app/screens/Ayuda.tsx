@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react';
+import { formatearFechaHora } from '@/utils/formato';
 import { Link } from 'react-router';
 import { API_BASE_URL } from '@/services/config';
 import { apiFetch } from '../../services/apiFetch';
 import { sesionVerificada } from '../../services/session';
+
+const ESTADO_EJECUCION_AYUDA: Record<string, string> = {
+  EN_CURSO: 'en curso', EXITOSA: 'exitosa', PARCIAL: 'parcial', FALLIDA: 'fallida',
+};
 
 type Ejecucion = { estado: string; fecha_inicio: string };
 
@@ -70,27 +75,26 @@ export default function Ayuda() {
         <h2 id="notas-ayuda" className="text-xl font-semibold">Notas y alertas de corte</h2>
         <p>Definitiva = promedio de los tres cortes × 0,7 + examen final × 0,3. Solo se calcula cuando existen las cuatro notas. Se aprueba desde 3,0.</p>
         <ul className="list-disc space-y-1 pl-5">
-          <li>C1: primer corte menor que 2,0.</li>
-          <li>C2A: segundo corte menor que 3,0 y primero menor que 3,0.</li>
-          <li>C2B: segundo corte menor que 3,0 y primero de 3,0 o más.</li>
-          <li>C3: con tres cortes, necesita más de 4,0 en el examen para aprobar.</li>
-          <li>C4: con tres cortes, necesitaría más de 5,0; tiene prioridad sobre C3.</li>
+          <li>Corte 1: primer corte menor que 2,0.</li>
+          <li>Corte 2, sostenido bajo: segundo corte menor que 3,0 y primero menor que 3,0.</li>
+          <li>Corte 2, caída de rendimiento: segundo corte menor que 3,0 y primero de 3,0 o más.</li>
+          <li>Nota necesaria alta: con tres cortes, necesita más de 4,0 en el examen para aprobar.</li>
+          <li>Materia perdida: con tres cortes, necesitaría más de 5,0; tiene prioridad sobre la nota necesaria alta.</li>
         </ul>
         <p>Nota necesaria en el examen = (3,0 − promedio de cortes × 0,7) ÷ 0,3.</p>
       </section>}
 
       {veProcesos && <section className="rounded-xl border border-gray-200 bg-white p-5 space-y-3" aria-labelledby="procesos-ayuda">
         <h2 id="procesos-ayuda" className="text-xl font-semibold">Procesos automáticos</h2>
-        <p>La revaluación programada se solicita cada día a las 2:00 a. m. de Colombia. Los recordatorios se solicitan cada 6 horas; su envío depende de la configuración y de los casos pendientes.</p>
+        <p>La revaluación programada se solicita cada día a las 2:00 a. m. de Colombia. Los recordatorios se solicitan cada 6 horas (1:00 a. m., 7:00 a. m., 1:00 p. m. y 7:00 p. m. de Colombia). GitHub puede demorar el inicio de cada ejecución; las horas del historial son las reales. Su envío depende de la configuración y de los casos pendientes.</p>
         <p role="status">
           {estadoConsulta === 'cargando' ? 'Consultando última revaluación…' : estadoConsulta === 'error'
             ? 'No se pudo consultar la última revaluación.'
-            : ultima ? `Última revaluación: ${new Date(ultima.fecha_inicio).toLocaleString('es-CO', { timeZone: 'America/Bogota' })} · ${ultima.estado}.`
+            : ultima ? `Última revaluación: ${formatearFechaHora(ultima.fecha_inicio)} · ${ESTADO_EJECUCION_AYUDA[ultima.estado] ?? ultima.estado}.`
               : 'Todavía no hay revaluaciones registradas.'}
         </p>
       </section>}
 
-      <footer className="pb-6 text-sm text-gray-600">Revisión de esta interfaz: {__REVISION_INTERFAZ__}. Esta revisión identifica la compilación actual; no certifica por sí sola el despliegue del backend.</footer>
     </div>
   );
 }

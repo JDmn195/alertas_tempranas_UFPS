@@ -2,6 +2,7 @@ from django.urls import path
 from .views import login_view, solicitar_recuperacion, cambiar_contrasena, sesion_actual
 from .views import listar_usuarios, crear_usuario, actualizar_usuario, desactivar_usuario, listar_auditoria
 from .views import cuenta_estudiante, cerrar_sesion
+from .resumen_admin import resumen_admin
 
 urlpatterns = [
     path('login/', login_view, name='login'),
@@ -9,6 +10,7 @@ urlpatterns = [
     path('recuperar-password/', solicitar_recuperacion, name='solicitar_recuperacion'),
     path('cambiar-password/', cambiar_contrasena, name='cambiar_contrasena'),
     path('me/', sesion_actual, name='sesion_actual'),
+    path('resumen/', resumen_admin, name='resumen_admin'),
     # CRUD de Usuarios
     path('', listar_usuarios, name='listar_usuarios'),
     path('crear/', crear_usuario, name='crear_usuario'),
