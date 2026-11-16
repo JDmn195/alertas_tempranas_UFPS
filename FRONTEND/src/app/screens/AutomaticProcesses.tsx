@@ -67,6 +67,7 @@ interface Recordatorio {
 interface CasoSinSeguimiento {
   tipo_caso: 'ALERTA' | 'INTERVENCION';
   alerta_id: number;
+  intervencion_id?: number | null;
   estudiante: { codigo: string; nombre: string };
   regla: string;
   nivel: string;
@@ -462,7 +463,7 @@ function RecordatoriosSeguimiento() {
                 {casos.length === 0 ? (
                   <tr><td colSpan={5} className="px-4 py-4 text-center text-sm text-ink-muted">No hay casos sin seguimiento.</td></tr>
                 ) : casos.slice(0, 20).map(c => (
-                  <tr key={`${c.tipo_caso}-${c.alerta_id}`}>
+                  <tr key={`${c.tipo_caso}-${c.intervencion_id ?? c.alerta_id}`}>
                     <td className="px-4 py-2 text-sm text-ink-muted">{c.tipo_caso === 'ALERTA' ? 'Alerta' : 'Intervención'}</td>
                     <td className="px-4 py-2 text-sm text-ink">{c.estudiante.nombre} <span className="text-xs text-ink-muted">{c.estudiante.codigo}</span></td>
                     <td className="px-4 py-2 text-sm text-ink-muted">{c.regla}</td>

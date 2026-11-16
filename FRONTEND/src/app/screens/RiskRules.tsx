@@ -512,7 +512,7 @@ export default function RiskRules() {
                     type="number"
                     step="0.01"
                     required
-                    value={formData.valor_umbral}
+                    value={Number.isNaN(formData.valor_umbral) ? '' : formData.valor_umbral}
                     onChange={(e) => setFormData({ ...formData, valor_umbral: parseFloat(e.target.value) })}
                     className="w-full px-3.5 py-2.5 border border-line-strong rounded-[10px] bg-white text-sm text-ink focus:outline-none focus:border-primary"
                     placeholder="e.g., 3.0"
@@ -533,7 +533,7 @@ export default function RiskRules() {
                       min="1"
                       max="50"
                       required
-                      value={formData.parametros?.min_clases ?? ''}
+                      value={Number.isNaN(formData.parametros?.min_clases) ? '' : (formData.parametros?.min_clases ?? '')}
                       onChange={(e) => setFormData({
                         ...formData,
                         parametros: { ...(formData.parametros || {}), min_clases: parseInt(e.target.value, 10) },
@@ -655,7 +655,7 @@ function UmbralInline({ rule, onSave }: { rule: Rule; onSave: (r: Rule) => void 
         step="0.1"
         min="0"
         max="5"
-        value={val}
+        value={Number.isNaN(val) ? '' : val}
         autoFocus
         onChange={(e) => setVal(parseFloat(e.target.value))}
         className="w-16 text-sm border border-amber-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-amber-400"
