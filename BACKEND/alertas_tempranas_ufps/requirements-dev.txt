@@ -1,0 +1,2 @@
+# Solo para desarrollo y para la integración continua; no se instala en Render.
+coverage==7.6.10
