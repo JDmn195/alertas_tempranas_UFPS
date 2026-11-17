@@ -1,0 +1,649 @@
+openapi: 3.0.3
+info:
+  title: API del Sistema de Alertas Tempranas Académicas (SAT-UFPS)
+  version: 1.3.3
+  description: |
+    Contrato de la autenticación y del portal del estudiante.
+
+    **Alcance.** Este documento cubre `/api/usuarios/` (sesión y contraseña) y
+    `/api/portal/` (HU-37 a HU-42). Las rutas del personal (`/api/academico/` y
+    `/api/alertas/`) todavía no están especificadas aquí; su control de acceso por
+    rol está verificado en `pruebas_integracion/test_matriz_roles.py`.
+
+    **Autenticación.** JWT propio (HS256) en el encabezado `Authorization: Bearer <token>`.
+    La sesión dura ocho horas y se revoca al cerrar sesión o al cambiar la contraseña.
+
+    **Identidad del estudiante.** Las rutas del portal nunca reciben el código del
+    estudiante: sale del token. Un parámetro con el código de otro estudiante se ignora.
+
+    **Errores.** Todas las respuestas de error tienen la forma `{"error": "mensaje"}`;
+    las de validación agregan `detalle` con un mensaje por campo.
+
+    La prueba `portal/tests_contrato.py` comprueba que las respuestas reales cumplen
+    los esquemas de este archivo.
+servers:
+  - url: https://alertas-tempranas-ufps.onrender.com
+    description: Producción
+  - url: http://localhost:8000
+    description: Desarrollo local
+tags:
+  - name: Sesión
+  - name: Portal del estudiante
+
+paths:
+  /api/usuarios/login/:
+    post:
+      tags: [Sesión]
+      summary: Iniciar sesión
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: {type: string, format: email}
+                password: {type: string, format: password}
+      responses:
+        '200':
+          description: Sesión iniciada
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Sesion'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401':
+          description: Credenciales incorrectas
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '403':
+          description: La cuenta está desactivada
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '429':
+          description: Demasiados intentos fallidos; el acceso queda bloqueado temporalmente
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/usuarios/logout/:
+    post:
+      tags: [Sesión]
+      summary: Cerrar sesión y revocar el token
+      responses:
+        '200': {$ref: '#/components/responses/Mensaje'}
+        '401': {$ref: '#/components/responses/SinSesion'}
+
+  /api/usuarios/me/:
+    get:
+      tags: [Sesión]
+      summary: Usuario de la sesión actual
+      responses:
+        '200':
+          description: Usuario autenticado
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Usuario'}
+        '401': {$ref: '#/components/responses/SinSesion'}
+
+  /api/usuarios/recuperar-password/:
+    post:
+      tags: [Sesión]
+      summary: Solicitar el enlace de recuperación de contraseña
+      description: Responde lo mismo exista o no el correo, para no revelar qué cuentas existen.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: {type: string, format: email}
+      responses:
+        '200': {$ref: '#/components/responses/Mensaje'}
+        '400': {$ref: '#/components/responses/Error'}
+
+  /api/usuarios/cambiar-password/:
+    post:
+      tags: [Sesión]
+      summary: Definir una contraseña nueva con el enlace de recuperación
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: {type: string, description: Token del enlace de recuperación (un solo uso)}
+                password: {type: string, format: password}
+      responses:
+        '200': {$ref: '#/components/responses/Mensaje'}
+        '400': {$ref: '#/components/responses/Error'}
+
+  /api/portal/riesgo/:
+    get:
+      tags: [Portal del estudiante]
+      summary: Nivel de riesgo propio y sus causas (HU-37)
+      responses:
+        '200':
+          description: Riesgo del estudiante de la sesión
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Riesgo'}
+        '401': {$ref: '#/components/responses/SinSesion'}
+        '403': {$ref: '#/components/responses/Prohibido'}
+
+  /api/portal/evolucion/:
+    get:
+      tags: [Portal del estudiante]
+      summary: Evolución del promedio por periodo (HU-38)
+      responses:
+        '200':
+          description: Serie de promedios
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Evolucion'}
+        '401': {$ref: '#/components/responses/SinSesion'}
+        '403': {$ref: '#/components/responses/Prohibido'}
+
+  /api/portal/alertas/:
+    get:
+      tags: [Portal del estudiante]
+      summary: Alertas propias (HU-39)
+      parameters:
+        - name: estado
+          in: query
+          schema: {type: string, enum: [activa, en_seguimiento, atendida, cerrada]}
+        - name: periodo
+          in: query
+          schema: {type: string, example: 2026-2}
+      responses:
+        '200':
+          description: Alertas del estudiante
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ListaAlertas'}
+        '400': {$ref: '#/components/responses/Validacion'}
+        '401': {$ref: '#/components/responses/SinSesion'}
+        '403': {$ref: '#/components/responses/Prohibido'}
+
+  /api/portal/alertas/{alerta_id}/:
+    get:
+      tags: [Portal del estudiante]
+      summary: Detalle de una alerta propia (HU-39)
+      parameters:
+        - {name: alerta_id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '200':
+          description: Alerta con su explicación y su acompañamiento
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AlertaDetalle'}
+        '401': {$ref: '#/components/responses/SinSesion'}
+        '403': {$ref: '#/components/responses/Prohibido'}
+        '404':
+          description: No existe o es de otro estudiante (misma respuesta; queda en auditoría)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/portal/intervenciones/:
+    get:
+      tags: [Portal del estudiante]
+      summary: Acompañamientos recibidos (HU-40)
+      parameters:
+        - name: estado
+          in: query
+          schema: {type: string, enum: [en_curso, concluida]}
+        - name: periodo
+          in: query
+          schema: {type: string, example: 2026-2}
+      responses:
+        '200':
+          description: Intervenciones sobre las alertas del estudiante
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ListaIntervenciones'}
+        '400': {$ref: '#/components/responses/Validacion'}
+        '401': {$ref: '#/components/responses/SinSesion'}
+        '403': {$ref: '#/components/responses/Prohibido'}
+
+  /api/portal/intervenciones/{intervencion_id}/:
+    get:
+      tags: [Portal del estudiante]
+      summary: Detalle de un acompañamiento (HU-40)
+      parameters:
+        - {name: intervencion_id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '200':
+          description: Intervención visible para el estudiante
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Intervencion'}
+        '401': {$ref: '#/components/responses/SinSesion'}
+        '403': {$ref: '#/components/responses/Prohibido'}
+        '404':
+          description: No existe o es de otro estudiante
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/portal/solicitudes/:
+    get:
+      tags: [Portal del estudiante]
+      summary: Solicitudes de acompañamiento propias (HU-41)
+      responses:
+        '200':
+          description: Solicitudes y datos para el formulario
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ListaSolicitudes'}
+        '401': {$ref: '#/components/responses/SinSesion'}
+        '403': {$ref: '#/components/responses/Prohibido'}
+    post:
+      tags: [Portal del estudiante]
+      summary: Solicitar acompañamiento (HU-41)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo, descripcion]
+              properties:
+                motivo: {type: string, enum: [ACADEMICO, PERSONAL, ECONOMICO, SALUD, OTRO]}
+                descripcion: {type: string, description: Tiene una longitud mínima; ver `descripcion_minima` en el GET}
+                alerta: {type: integer, nullable: true, description: Alerta propia a la que se asocia (opcional)}
+      responses:
+        '201':
+          description: Solicitud creada
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Solicitud'}
+        '400': {$ref: '#/components/responses/Validacion'}
+        '401': {$ref: '#/components/responses/SinSesion'}
+        '403': {$ref: '#/components/responses/Prohibido'}
+        '404':
+          description: La alerta indicada no existe o es de otro estudiante
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '409':
+          description: Ya hay una solicitud en curso; no se crea otra
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/portal/solicitudes/{solicitud_id}/cancelar/:
+    patch:
+      tags: [Portal del estudiante]
+      summary: Cancelar una solicitud propia pendiente (HU-41)
+      parameters:
+        - {name: solicitud_id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '200':
+          description: Solicitud cancelada
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Solicitud'}
+        '401': {$ref: '#/components/responses/SinSesion'}
+        '403': {$ref: '#/components/responses/Prohibido'}
+        '404':
+          description: No existe o es de otro estudiante
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '409':
+          description: La solicitud ya no está pendiente
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+
+  /api/portal/asistencia/:
+    get:
+      tags: [Portal del estudiante]
+      summary: Porcentaje de inasistencia por curso (HU-42)
+      parameters:
+        - name: periodo
+          in: query
+          description: Por defecto, el periodo más reciente con matrícula
+          schema: {type: string, example: 2026-2}
+      responses:
+        '200':
+          description: Asistencia por curso del periodo
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Asistencia'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/SinSesion'}
+        '403': {$ref: '#/components/responses/Prohibido'}
+
+security:
+  - tokenPortador: []
+
+components:
+  securitySchemes:
+    tokenPortador:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Mensaje:
+      description: Operación realizada
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [mensaje]
+            properties:
+              mensaje: {type: string}
+    Error:
+      description: Petición no válida
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Validacion:
+      description: Datos o filtros no válidos
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorValidacion'}
+    SinSesion:
+      description: Falta el token, venció o fue revocado
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Prohibido:
+      description: El rol no es ESTUDIANTE o la cuenta no tiene estudiante asociado. Queda en auditoría.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: {type: string}
+    ErrorValidacion:
+      type: object
+      required: [error, detalle]
+      properties:
+        error: {type: string}
+        detalle:
+          type: object
+          additionalProperties: {type: string}
+    Usuario:
+      type: object
+      required: [id, nombre, correo, rol]
+      properties:
+        id: {type: integer}
+        nombre: {type: string}
+        correo: {type: string}
+        rol: {type: string, enum: [DOCENTE, DIRECTOR, BIENESTAR, ADMINISTRADOR, ESTUDIANTE]}
+    Sesion:
+      type: object
+      required: [token, id, nombre, correo, rol, cambio_obligatorio]
+      properties:
+        token: {type: string}
+        id: {type: integer}
+        nombre: {type: string}
+        correo: {type: string}
+        rol: {type: string}
+        cambio_obligatorio: {type: boolean}
+        mensaje: {type: string}
+    Riesgo:
+      type: object
+      required: [estudiante, riesgo, causas, indicadores]
+      properties:
+        estudiante:
+          type: object
+          required: [codigo, nombre, semestre]
+          properties:
+            codigo: {type: string}
+            nombre: {type: string}
+            semestre: {type: integer, nullable: true}
+        riesgo:
+          type: object
+          required: [nivel, nivel_texto, periodo, fecha_calculo, mensaje]
+          properties:
+            nivel: {type: string, nullable: true, enum: [low, medium, high, unknown, null]}
+            nivel_texto: {type: string, nullable: true}
+            periodo: {type: string, nullable: true}
+            fecha_calculo: {type: string, nullable: true}
+            mensaje: {type: string, nullable: true, description: Texto cuando aún no hay cálculo}
+        causas:
+          type: array
+          items:
+            type: object
+            required: [regla, tipo, nivel, valor, operador, umbral]
+            properties:
+              regla: {type: string}
+              tipo: {type: string}
+              nivel: {type: string}
+              valor: {type: number, nullable: true}
+              operador: {type: string}
+              umbral: {type: number}
+        indicadores:
+          type: object
+          required: [pps, periodo_pps, ppa, materias_reprobadas, lista_materias_reprobadas, creditos_aprobados]
+          properties:
+            pps: {type: number, nullable: true}
+            periodo_pps: {type: string, nullable: true}
+            ppa: {type: number, nullable: true}
+            materias_reprobadas: {type: integer, nullable: true}
+            lista_materias_reprobadas: {type: array, items: {type: string}}
+            creditos_aprobados: {type: integer, nullable: true}
+    Evolucion:
+      type: object
+      required: [serie, promedio_actual, variacion, tendencia, historia_suficiente, mensaje]
+      properties:
+        serie:
+          type: array
+          items:
+            type: object
+            required: [periodo, pps, ppa, creditos_cursados, creditos_aprobados]
+            properties:
+              periodo: {type: string}
+              pps: {type: number, nullable: true}
+              ppa: {type: number, nullable: true}
+              creditos_cursados: {type: integer}
+              creditos_aprobados: {type: integer}
+        promedio_actual: {type: number, nullable: true}
+        variacion: {type: number, nullable: true}
+        tendencia: {type: string, nullable: true}
+        historia_suficiente: {type: boolean}
+        mensaje: {type: string, nullable: true}
+    Alerta:
+      type: object
+      required: [id, tipo, categoria, origen, severidad, severidad_texto, estado, estado_texto,
+                 fecha_generacion, fecha_cierre, cierre_automatico, periodo, materia, resumen]
+      properties:
+        id: {type: integer}
+        tipo: {type: string}
+        categoria: {type: string}
+        origen: {type: string}
+        severidad: {type: string}
+        severidad_texto: {type: string}
+        estado: {type: string}
+        estado_texto: {type: string}
+        fecha_generacion: {type: string}
+        fecha_cierre: {type: string, nullable: true}
+        cierre_automatico: {type: boolean}
+        periodo: {type: string, nullable: true}
+        materia: {type: string, nullable: true}
+        resumen: {type: string}
+    AlertaDetalle:
+      allOf:
+        - $ref: '#/components/schemas/Alerta'
+        - type: object
+          required: [explicacion, cierre, intervenciones]
+          properties:
+            explicacion:
+              type: object
+              required: [mensaje, recomendacion, datos]
+              properties:
+                mensaje: {type: string}
+                recomendacion: {type: string}
+                datos:
+                  type: array
+                  items:
+                    type: object
+                    required: [etiqueta, valor]
+                    properties:
+                      etiqueta: {type: string}
+                      valor: {type: string}
+                valores: {type: object}
+            cierre: {type: object, nullable: true}
+            intervenciones:
+              type: array
+              items: {type: object}
+    ListaAlertas:
+      type: object
+      required: [alertas, conteos, periodos, filtros, mensaje]
+      properties:
+        alertas:
+          type: array
+          items: {$ref: '#/components/schemas/Alerta'}
+        conteos:
+          type: object
+          required: [activa, en_seguimiento, atendida, cerrada, total]
+          properties:
+            activa: {type: integer}
+            en_seguimiento: {type: integer}
+            atendida: {type: integer}
+            cerrada: {type: integer}
+            total: {type: integer}
+        periodos: {type: array, items: {type: string}}
+        filtros: {type: object}
+        mensaje: {type: string, nullable: true}
+    ResumenAlerta:
+      type: object
+      required: [id, tipo, materia, periodo]
+      properties:
+        id: {type: integer}
+        tipo: {type: string}
+        materia: {type: string, nullable: true}
+        periodo: {type: string, nullable: true}
+    Intervencion:
+      type: object
+      description: |
+        Solo lo visible para el estudiante. Nunca incluye observaciones, anotaciones,
+        evidencias ni datos del responsable distintos de su nombre.
+      required: [id, tipo, tipo_texto, fecha, estado, estado_texto, resultado, responsable, alerta]
+      properties:
+        id: {type: integer}
+        tipo: {type: string}
+        tipo_texto: {type: string}
+        fecha: {type: string, nullable: true}
+        estado: {type: string, enum: [en_curso, concluida]}
+        estado_texto: {type: string}
+        resultado: {type: string, nullable: true}
+        responsable: {type: string, nullable: true}
+        alerta: {$ref: '#/components/schemas/ResumenAlerta'}
+    ListaIntervenciones:
+      type: object
+      required: [intervenciones, conteos, periodos, filtros, mensaje]
+      properties:
+        intervenciones:
+          type: array
+          items: {$ref: '#/components/schemas/Intervencion'}
+        conteos:
+          type: object
+          required: [en_curso, concluida, total]
+          properties:
+            en_curso: {type: integer}
+            concluida: {type: integer}
+            total: {type: integer}
+        periodos: {type: array, items: {type: string}}
+        filtros: {type: object}
+        mensaje: {type: string, nullable: true}
+    Solicitud:
+      type: object
+      required: [id, motivo, motivo_texto, descripcion, alerta, estado, estado_texto, respuesta,
+                 responsable, fecha_solicitud, fecha_atencion, fecha_actualizacion, puede_cancelar]
+      properties:
+        id: {type: integer}
+        motivo: {type: string}
+        motivo_texto: {type: string}
+        descripcion: {type: string}
+        alerta:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ResumenAlerta'
+        estado: {type: string}
+        estado_texto: {type: string}
+        respuesta: {type: string, nullable: true}
+        responsable: {type: string, nullable: true}
+        fecha_solicitud: {type: string}
+        fecha_atencion: {type: string, nullable: true}
+        fecha_actualizacion: {type: string}
+        puede_cancelar: {type: boolean}
+    ListaSolicitudes:
+      type: object
+      required: [solicitudes, en_curso, cantidad_en_curso, puede_solicitar, mensaje_bloqueo, motivos,
+                 descripcion_minima, mensaje]
+      properties:
+        solicitudes:
+          type: array
+          items: {$ref: '#/components/schemas/Solicitud'}
+        en_curso: {type: integer, nullable: true, description: Identificador de la solicitud en curso}
+        cantidad_en_curso: {type: integer}
+        puede_solicitar: {type: boolean}
+        mensaje_bloqueo: {type: string, nullable: true}
+        motivos:
+          type: array
+          items:
+            type: object
+            required: [valor, texto]
+            properties:
+              valor: {type: string}
+              texto: {type: string}
+        descripcion_minima: {type: integer}
+        mensaje: {type: string, nullable: true}
+    Asistencia:
+      type: object
+      required: [periodo, periodos, porcentaje_aviso, cursos, hay_registros, mensaje]
+      properties:
+        periodo: {type: string, nullable: true}
+        periodos: {type: array, items: {type: string}}
+        porcentaje_aviso: {type: number}
+        cursos:
+          type: array
+          items:
+            type: object
+            required: [curso_id, materia, codigo_materia, grupo, total_clases, asistencias, faltas,
+                       faltas_justificadas, porcentaje, umbral, umbral_aviso, cerca_del_limite,
+                       supera_umbral, detalle]
+            properties:
+              curso_id: {type: integer}
+              materia: {type: string}
+              codigo_materia: {type: string}
+              grupo: {type: string}
+              total_clases: {type: integer}
+              asistencias: {type: integer}
+              faltas: {type: integer}
+              faltas_justificadas: {type: integer}
+              porcentaje: {type: number, nullable: true, description: Nulo si no hay clases registradas}
+              umbral: {type: number, nullable: true}
+              umbral_aviso: {type: number, nullable: true}
+              cerca_del_limite: {type: boolean, nullable: true}
+              supera_umbral: {type: boolean, nullable: true}
+              detalle:
+                type: array
+                items:
+                  type: object
+                  required: [fecha, estado, estado_texto]
+                  properties:
+                    fecha: {type: string}
+                    estado: {type: string, enum: [ASISTIO, FALTA, FALTA_JUSTIFICADA]}
+                    estado_texto: {type: string}
+        hay_registros: {type: boolean}
+        mensaje: {type: string, nullable: true}
