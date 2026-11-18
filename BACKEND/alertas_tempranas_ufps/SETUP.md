@@ -240,6 +240,43 @@ URL tiene un error.
 
 ---
 
+## Respaldo y recuperación
+
+Los planes gratuitos de Neon y de Supabase no hacen respaldos programados, así que el
+respaldo es un procedimiento manual. Se ejecuta **antes de cada importación masiva y
+antes de cada liberación a `main`**.
+
+**Base de datos (Neon).** En el panel de Neon, proyecto SAT, rama `production`: crea una
+instantánea manual. Para probar la recuperación, restáurala en una rama nueva (nunca
+sobre `production`), revisa en esa rama que las tablas tengan datos y compara el número
+de filas de `estudiante`, `nota`, `alerta` e `intervencion` con producción. El plan
+gratuito conserva seis horas de historial y una sola instantánea manual.
+
+**Evidencias (Supabase Storage).** El panel no ofrece respaldo ni descarga masiva; se usa
+este comando, con `SUPABASE_URL` y `SUPABASE_KEY` definidas solo en la terminal de quien
+lo ejecuta:
+
+```bash
+python manage.py respaldar_almacenamiento --destino D:/respaldos/evidencias_AAAA-MM-DD
+```
+
+Descarga todo el bucket y escribe `manifiesto.json` con la ruta, el tamaño y el SHA-256
+de cada archivo. Para probar la recuperación sin tocar producción:
+
+```bash
+python manage.py respaldar_almacenamiento --destino D:/respaldos/evidencias_AAAA-MM-DD \
+    --restaurar-en evidencias-prueba-restauracion
+```
+
+Sube la copia a ese bucket de prueba (lo crea privado si no existe), la vuelve a
+descargar y compara los SHA-256. Si algún archivo no coincide, el comando termina con
+error y los nombra. Al terminar, elimina el bucket de prueba desde el panel.
+
+Las evidencias contienen datos personales: la carpeta de destino va fuera del
+repositorio y la copia se guarda cifrada o se elimina después de la prueba.
+
+---
+
 ## ❗ Errores comunes
 
 | Error | Causa probable | Solución |
