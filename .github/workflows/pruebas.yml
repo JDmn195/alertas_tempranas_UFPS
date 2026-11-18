@@ -1,4 +1,5 @@
 # SDAT-285 (AC-4): pruebas y build en cada pull request.
+# El backend mide además la cobertura y la publica como artefacto.
 #
 # Se ejecuta en los PR hacia main y develop y en los push a esas ramas.
 # No requiere secretos: el backend corre sus pruebas con SQLite (settings.py
@@ -38,9 +39,28 @@ jobs:
           cache: pip
           cache-dependency-path: BACKEND/alertas_tempranas_ufps/requirements.txt
       - name: Instalar dependencias
-        run: pip install -r requirements.txt
-      - name: Pruebas unitarias y de integración
-        run: python manage.py test
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Pruebas unitarias y de integración (con cobertura)
+        run: coverage run manage.py test
+      - name: Resumen de cobertura
+        if: always()
+        run: |
+          coverage report --skip-empty | tee cobertura.txt
+          {
+            echo '### Cobertura del backend'
+            echo '```'
+            tail -n 1 cobertura.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          coverage html
+      - name: Publicar reporte de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-backend
+          path: |
+            BACKEND/alertas_tempranas_ufps/htmlcov
+            BACKEND/alertas_tempranas_ufps/cobertura.txt
 
   frontend:
     name: Frontend (build)
