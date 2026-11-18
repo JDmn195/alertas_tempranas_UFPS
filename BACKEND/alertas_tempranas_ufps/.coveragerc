@@ -1,0 +1,18 @@
+# Cobertura de las pruebas del backend: coverage run manage.py test
+[run]
+source = .
+branch = True
+omit =
+    manage.py
+    */migrations/*
+    */tests*.py
+    */test_*.py
+    pruebas_integracion/*
+    pruebas_rendimiento/*
+    alertas_tempranas_ufps/asgi.py
+    alertas_tempranas_ufps/wsgi.py
+    env/*
+
+[report]
+skip_empty = True
+show_missing = False
